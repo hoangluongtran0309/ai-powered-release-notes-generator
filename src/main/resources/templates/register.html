@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create your organization · ReleaseFlow</title>
+    <link rel="stylesheet" th:href="@{/css/releaseflow.css}">
+</head>
+<body>
+<main class="form-shell">
+    <p class="eyebrow">ReleaseFlow</p>
+    <h1>Create your organization</h1>
+    <p>The first account becomes the organization owner.</p>
+
+    <form class="stack" th:action="@{/register}" th:object="${registration}" method="post">
+        <label>
+            Organization name
+            <input type="text" th:field="*{organizationName}" maxlength="120" autocomplete="organization" required>
+            <span class="field-error" th:if="${#fields.hasErrors('organizationName')}" th:errors="*{organizationName}"></span>
+        </label>
+        <label>
+            Your name
+            <input type="text" th:field="*{displayName}" maxlength="120" autocomplete="name" required>
+            <span class="field-error" th:if="${#fields.hasErrors('displayName')}" th:errors="*{displayName}"></span>
+        </label>
+        <label>
+            Email
+            <input type="email" th:field="*{email}" maxlength="254" autocomplete="email" required>
+            <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></span>
+        </label>
+        <label>
+            Password
+            <input type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
+            <span class="hint">Use at least 12 characters.</span>
+            <span class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
+        </label>
+        <button type="submit">Create organization</button>
+    </form>
+
+    <p>Already registered? <a th:href="@{/login}">Sign in</a>.</p>
+</main>
+</body>
+</html>

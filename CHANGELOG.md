@@ -13,3 +13,14 @@ version has been released.
 - Startup, REST, and Thymeleaf smoke tests.
 - Architecture and implementation-status documentation for the runnable
   baseline.
+- Atomic Organization owner registration through REST and Thymeleaf.
+- PostgreSQL persistence with Flyway migration `V1` for organizations and app
+  users.
+- Canonical unique email enforcement and BCrypt password hashing.
+- Session authentication, custom form login, CSRF-protected REST/UI writes,
+  and POST logout.
+- Authenticated `GET /api/session` and public `GET /api/csrf` endpoints.
+- Stable `application/problem+json` errors for registration and authentication
+  failures.
+- PostgreSQL Testcontainers coverage for migrations, constraints, registration,
+  authentication, CSRF, tenant identity, and UI paths.

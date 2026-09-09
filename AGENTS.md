@@ -2,8 +2,9 @@
 
 ## Current state
 
-ReleaseFlow currently implements only the bootstrap slice: one Spring Boot
-application, a JSON status endpoint, a Thymeleaf home page, and smoke tests.
+ReleaseFlow currently implements the bootstrap and Organization owner slices:
+one Spring Boot application, PostgreSQL/Flyway V1, owner registration, session
+authentication, tenant principal, REST/UI paths, and Testcontainers tests.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
 
@@ -29,12 +30,15 @@ Read `README.md`, `docs/architecture.md`, and
 - External and AI failures become explicit unknown/review states.
 - Network I/O does not run inside database transactions.
 - Credentials never appear in source, logs, examples, or later API responses.
-- Applied Flyway migrations are immutable.
+- Applied Flyway migrations are immutable; add `V2` or later for schema changes.
 - Published Release Notes are immutable snapshots.
+- Tenant-owned repository lookups include both resource ID and the current
+  principal's Organization ID.
 
 ## Commands
 
-Use JDK 21.
+Use JDK 21. Docker must be running because persistence tests use PostgreSQL
+Testcontainers; H2 is not permitted.
 
 ```bash
 ./mvnw test

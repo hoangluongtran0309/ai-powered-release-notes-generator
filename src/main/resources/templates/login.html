@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in · ReleaseFlow</title>
+    <link rel="stylesheet" th:href="@{/css/releaseflow.css}">
+</head>
+<body>
+<main class="form-shell">
+    <p class="eyebrow">ReleaseFlow</p>
+    <h1>Sign in</h1>
+    <p class="success" th:if="${param.registered}">Your organization is ready. Sign in to continue.</p>
+    <p class="success" th:if="${param.logout}">You have signed out.</p>
+    <p class="field-error" th:if="${param.error}">The email or password is incorrect.</p>
+
+    <form class="stack" th:action="@{/login}" method="post">
+        <label>
+            Email
+            <input type="email" name="email" maxlength="254" autocomplete="email" required autofocus>
+        </label>
+        <label>
+            Password
+            <input type="password" name="password" maxlength="72" autocomplete="current-password" required>
+        </label>
+        <button type="submit">Sign in</button>
+    </form>
+
+    <p>Need an account? <a th:href="@{/register}">Create an organization</a>.</p>
+</main>
+</body>
+</html>
