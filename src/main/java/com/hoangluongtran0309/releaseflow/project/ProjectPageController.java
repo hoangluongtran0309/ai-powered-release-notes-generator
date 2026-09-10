@@ -98,6 +98,5 @@ public class ProjectPageController {
             model.addAttribute("githubIntegrationRequest", new GitHubIntegrationRequest());
         }
         model.addAttribute("projects", projectService.list(principal.organizationId()));
-        model.addAttribute("currentUser", principal.displayName());
     }
 }

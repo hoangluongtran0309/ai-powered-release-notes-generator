@@ -19,11 +19,14 @@
   encrypted secret storage with tenant-bound authenticated data.
 - PostgreSQL Testcontainers coverage including migration, constraints,
   cross-tenant lookup, negative security paths, REST, and UI.
+- Workspace UI built with Tailwind CSS 4, DaisyUI 5, the Thymeleaf Layout
+  Dialect, and Alpine.js, with a light/dark theme and a Maven-managed Node.js
+  toolchain.
 
 ## In progress
 
-- Nothing. The Project and GitHub configuration slice is complete and awaiting
-  review.
+- Nothing. The Project and GitHub configuration slice and the workspace UI are
+  complete and awaiting review.
 
 ## Planned
 
@@ -45,6 +48,6 @@ In intended implementation order:
   replacement, and secret rotation.
 - Dynamic audiences, localization, translation, and template engines.
 - Automation, distribution integrations, and a public changelog.
-- Node.js frontend tooling, containers, production observability, release
-  automation, and an open-core/enterprise module split.
+- Client-rendered pages, JavaScript bundling and tests, containers, production
+  observability, release automation, and an open-core/enterprise module split.
 - Multi-repository aggregation.

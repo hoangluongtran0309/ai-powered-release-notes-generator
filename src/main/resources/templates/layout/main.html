@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title layout:title-pattern="$CONTENT_TITLE · $LAYOUT_TITLE">ReleaseFlow</title>
+    <link rel="icon" type="image/svg+xml" th:href="@{/svg/releaseflow-mark.svg}">
+    <link rel="icon" type="image/x-icon" th:href="@{/favicon.ico}">
+    <script>
+        (() => {
+            let saved = null;
+            try { saved = localStorage.getItem('releaseflow:theme'); } catch (ignored) { }
+            document.documentElement.dataset.theme = saved === 'dark' || saved === 'light'
+                ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        })();
+    </script>
+    <link rel="stylesheet" th:href="@{/css/application.css}">
+</head>
+<body class="theme-canvas min-h-screen">
+<a href="#page-content" class="skip-link">Skip to main content</a>
+
+<div class="drawer lg:drawer-open">
+    <input id="app-drawer" type="checkbox" class="drawer-toggle" aria-label="Open navigation">
+    <div class="drawer-content min-w-0">
+        <header class="app-header sticky top-0 z-30 flex h-16 items-center gap-3 border-b px-4 backdrop-blur lg:px-8">
+            <label for="app-drawer" class="icon-button lg:hidden" aria-label="Open navigation">
+                <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#menu}"></use></svg>
+            </label>
+            <div class="min-w-0 flex-1">
+                <p class="truncate text-xs font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
+                <p class="truncate text-sm font-semibold" layout:fragment="page-title">ReleaseFlow</p>
+            </div>
+            <button type="button" class="icon-button" x-data="themeToggle()" @click="toggle"
+                    :aria-label="label" :title="label" aria-label="Toggle theme">
+                <svg x-show="theme === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.6 6.6 0 0 0 21 12.8Z"/>
+                </svg>
+                <svg x-show="theme === 'dark'" x-cloak xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4" stroke-width="1.8"/><path stroke-linecap="round" stroke-width="1.8" d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>
+                </svg>
+            </button>
+            <div class="relative" th:if="${viewer != null}" x-data="userMenu()" @click.outside="close(false)"
+                 @focusout="closeOnFocusOut($event)" @keydown.escape.stop.prevent="close(true)">
+                <button x-ref="trigger" type="button" class="btn btn-ghost gap-2 px-2" @click="toggle"
+                        aria-controls="user-menu" :aria-expanded="open.toString()" aria-expanded="false"
+                        aria-label="Open user menu">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700"
+                          th:text="${viewer.initial}">A</span>
+                    <span class="hidden max-w-40 truncate text-sm md:block" th:text="${viewer.displayName}">Owner</span>
+                </button>
+                <div id="user-menu" x-show="open" x-transition.origin.top.right x-cloak
+                     class="theme-surface theme-border absolute right-0 top-full z-50 mt-2 w-64 rounded-box border p-2 shadow-xl">
+                    <div class="px-3 py-2">
+                        <p class="truncate text-sm font-medium" th:text="${viewer.email}">owner@example.com</p>
+                        <p class="text-xs text-slate-500" th:text="${viewer.role}">Owner</p>
+                    </div>
+                    <div class="divider my-1"></div>
+                    <form method="post" th:action="@{/logout}">
+                        <button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Sign out</button>
+                    </form>
+                </div>
+            </div>
+        </header>
+
+        <main id="page-content" class="mx-auto w-full max-w-[1600px] p-4 lg:p-8" tabindex="-1">
+            <div layout:fragment="content"></div>
+        </main>
+    </div>
+
+    <div class="drawer-side z-40">
+        <label for="app-drawer" class="drawer-overlay" aria-hidden="true"></label>
+        <aside id="app-sidebar" class="app-sidebar flex min-h-full w-72 flex-col border-r">
+            <a th:href="@{/}" class="app-sidebar-divider flex h-16 items-center gap-3 border-b px-6">
+                <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
+                     width="36" height="36" class="h-9 w-9 shrink-0">
+                <span><strong class="block tracking-tight">ReleaseFlow</strong><small class="app-sidebar-muted">Release notes workspace</small></span>
+            </a>
+            <nav class="flex-1 space-y-1 p-4" aria-label="Primary">
+                <p class="app-sidebar-muted px-3 pb-2 pt-3 text-xs font-semibold uppercase tracking-widest">Workspace</p>
+                <a th:href="@{/}" class="app-nav-link" th:classappend="${currentPath == '/'} ? 'is-active'"
+                   th:attr="aria-current=${currentPath == '/'} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#overview}"></use></svg><span>Overview</span></a>
+                <a th:href="@{/projects}" class="app-nav-link" th:classappend="${#strings.startsWith(currentPath, '/projects')} ? 'is-active'"
+                   th:attr="aria-current=${#strings.startsWith(currentPath, '/projects')} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#settings}"></use></svg><span>Projects</span></a>
+            </nav>
+            <div class="app-sidebar-divider border-t p-4">
+                <div class="subtle-panel flex items-start gap-3 p-3">
+                    <svg class="icon mt-0.5 text-indigo-600" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#sparkles}"></use></svg>
+                    <p class="app-sidebar-muted text-xs leading-5">AI drafts once. Your team decides what ships.</p>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}" defer></script>
+<script th:src="@{/webjars/alpinejs/dist/cdn.min.js}" defer></script>
+</body>
+</html>

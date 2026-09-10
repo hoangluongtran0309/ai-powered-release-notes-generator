@@ -23,7 +23,8 @@ The application currently provides:
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
-  slice.
+  slice;
+- a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
 
 Webhook intake, classification, review, and release publication are not
 implemented yet. See the
@@ -35,6 +36,8 @@ implemented yet. See the
 - PostgreSQL for running the application
 - Docker for the Testcontainers integration suite
 - No system Maven installation; use the Maven Wrapper
+- No system Node.js installation; the Maven build downloads a pinned Node.js
+  and npm into `node/` on first use, so that build needs network access
 
 ## Run
 
@@ -83,9 +86,16 @@ an in-memory substitute.
 ./mvnw verify
 ```
 
+While changing templates or styles, rebuild the stylesheet on every save in a
+second terminal:
+
+```bash
+PATH="$PWD/node:$PATH" ./node/npm run watch
+```
+
 The application does not call GitHub yet. The generated webhook path is reserved
 for the next slice and currently has no intake endpoint. There is also no AI
-service, Node.js toolchain, container image, CI workflow, or published artifact.
+service, container image, CI workflow, or published artifact.
 
 ## Contributing
 

@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 class AuthenticationIntegrationTest extends PostgreSqlIntegrationTest {
 
@@ -89,6 +90,25 @@ class AuthenticationIntegrationTest extends PostgreSqlIntegrationTest {
                         .param("password", "wrong-password"))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/login?error"));
+    }
+
+    @Test
+    void signedInOwnerSeesWorkspaceOverviewAtRoot() throws Exception {
+        registrationService.register(registration(
+                "Acme", "Owner", "owner@example.com", "correct-password"
+        ));
+        MvcResult login = mockMvc.perform(post("/login")
+                        .with(csrf())
+                        .param("email", "owner@example.com")
+                        .param("password", "correct-password"))
+                .andExpect(status().isFound())
+                .andReturn();
+
+        mockMvc.perform(get("/").session((MockHttpSession) login.getRequest().getSession(false)))
+                .andExpect(status().isOk())
+                .andExpect(view().name("overview"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Welcome, Owner")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("owner@example.com")));
     }
 
     private static RegistrationRequest registration(
