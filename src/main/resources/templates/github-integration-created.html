@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Save webhook credentials · ReleaseFlow</title>
+    <link rel="stylesheet" th:href="@{/css/releaseflow.css}">
+</head>
+<body>
+<main class="form-shell">
+    <p class="eyebrow">GitHub connected</p>
+    <h1>Save these webhook credentials now</h1>
+    <p class="warning">The secret will not be shown again. Store it in GitHub before leaving this page.</p>
+
+    <dl class="credential-list">
+        <dt>Repository</dt>
+        <dd th:text="|${integration.owner}/${integration.repository}|">owner/repository</dd>
+        <dt>Webhook path</dt>
+        <dd><code th:text="${integration.webhookPath}">/webhooks/github/id</code></dd>
+        <dt>Webhook secret</dt>
+        <dd><code class="secret" th:text="${integration.webhookSecret}">secret</code></dd>
+    </dl>
+
+    <p><a class="button" th:href="@{/projects}">I have saved the secret</a></p>
+</main>
+</body>
+</html>

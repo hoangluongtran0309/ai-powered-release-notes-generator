@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Projects · ReleaseFlow</title>
+    <link rel="stylesheet" th:href="@{/css/releaseflow.css}">
+</head>
+<body>
+<main class="wide-shell">
+    <nav class="topbar">
+        <a th:href="@{/}">ReleaseFlow</a>
+        <span th:text="${currentUser}">Owner</span>
+    </nav>
+
+    <p class="eyebrow">Projects</p>
+    <h1>Connect release sources</h1>
+    <p>Create a project, then configure the GitHub repository that will send its signed webhook deliveries.</p>
+
+    <section class="panel">
+        <h2>Create a project</h2>
+        <form class="inline-form" th:action="@{/projects}" th:object="${projectRequest}" method="post">
+            <label>
+                Project name
+                <input type="text" th:field="*{name}" maxlength="120" required>
+                <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></span>
+            </label>
+            <button type="submit">Create project</button>
+        </form>
+    </section>
+
+    <p class="field-error" th:if="${integrationError != null}" th:text="${integrationError}">Integration error</p>
+
+    <p class="empty-state" th:if="${#lists.isEmpty(projects)}">No projects have been created yet.</p>
+
+    <section class="project-card" th:each="project : ${projects}">
+        <div>
+            <h2 th:text="${project.name}">Project name</h2>
+            <p class="hint" th:text="|Created ${project.createdAt}|">Created now</p>
+        </div>
+
+        <div th:if="${project.githubIntegration != null}">
+            <p class="success">GitHub repository connected</p>
+            <dl>
+                <dt>Repository</dt>
+                <dd th:text="|${project.githubIntegration.owner}/${project.githubIntegration.repository}|">owner/repository</dd>
+                <dt>Webhook path</dt>
+                <dd><code th:text="${project.githubIntegration.webhookPath}">/webhooks/github/id</code></dd>
+            </dl>
+        </div>
+
+        <form class="stack compact"
+              th:if="${project.githubIntegration == null}"
+              th:action="@{/projects/{projectId}/github-integration(projectId=${project.id})}"
+              th:object="${githubIntegrationRequest}"
+              method="post">
+            <h3>Configure GitHub</h3>
+            <label>
+                Repository owner
+                <input type="text" name="owner" maxlength="39" required>
+                <span class="field-error"
+                      th:if="${integrationProjectId == project.id and #fields.hasErrors('owner')}"
+                      th:errors="*{owner}"></span>
+            </label>
+            <label>
+                Repository name
+                <input type="text" name="repository" maxlength="100" required>
+                <span class="field-error"
+                      th:if="${integrationProjectId == project.id and #fields.hasErrors('repository')}"
+                      th:errors="*{repository}"></span>
+            </label>
+            <button type="submit">Generate webhook credentials</button>
+        </form>
+    </section>
+</main>
+</body>
+</html>

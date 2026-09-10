@@ -24,3 +24,13 @@ version has been released.
   failures.
 - PostgreSQL Testcontainers coverage for migrations, constraints, registration,
   authentication, CSRF, tenant identity, and UI paths.
+- Tenant-scoped Project creation and listing through REST and Thymeleaf.
+- Flyway migration `V2` for Projects and one GitHub integration per Project.
+- Canonical repository uniqueness within each Organization and cross-tenant
+  database constraints.
+- Per-integration webhook IDs and 256-bit signing secrets revealed only when
+  created.
+- AES-256-GCM webhook-secret encryption with random nonces, tenant-bound
+  authenticated data, and fail-fast environment key validation.
+- Stable REST errors and negative-path coverage for Project ownership and
+  GitHub configuration conflicts.
