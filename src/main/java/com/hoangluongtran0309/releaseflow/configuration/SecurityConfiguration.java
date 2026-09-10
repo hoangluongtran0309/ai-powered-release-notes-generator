@@ -29,6 +29,10 @@ public class SecurityConfiguration {
                                 "/api/csrf",
                                 "/api/registrations",
                                 "/css/**",
+                                "/js/**",
+                                "/svg/**",
+                                "/webjars/**",
+                                "/favicon.ico",
                                 "/error"
                         ).permitAll()
                         .anyRequest().authenticated()

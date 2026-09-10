@@ -1,32 +1,53 @@
-<!doctype html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/auth}">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sign in · ReleaseFlow</title>
-    <link rel="stylesheet" th:href="@{/css/releaseflow.css}">
+    <title>Sign in</title>
 </head>
 <body>
-<main class="form-shell">
-    <p class="eyebrow">ReleaseFlow</p>
-    <h1>Sign in</h1>
-    <p class="success" th:if="${param.registered}">Your organization is ready. Sign in to continue.</p>
-    <p class="success" th:if="${param.logout}">You have signed out.</p>
-    <p class="field-error" th:if="${param.error}">The email or password is incorrect.</p>
-
-    <form class="stack" th:action="@{/login}" method="post">
-        <label>
-            Email
-            <input type="email" name="email" maxlength="254" autocomplete="email" required autofocus>
-        </label>
-        <label>
-            Password
-            <input type="password" name="password" maxlength="72" autocomplete="current-password" required>
-        </label>
-        <button type="submit">Sign in</button>
-    </form>
-
-    <p>Need an account? <a th:href="@{/register}">Create an organization</a>.</p>
+<main layout:fragment="content" class="grid min-h-screen lg:grid-cols-2">
+    <section class="auth-showcase hidden flex-col justify-between border-r theme-border p-12 lg:flex">
+        <a th:href="@{/}" class="flex items-center gap-3 text-lg font-bold">
+            <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
+                 width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
+        </a>
+        <div class="max-w-xl">
+            <p class="auth-showcase-accent mb-5 text-sm font-semibold uppercase tracking-[0.24em]">Release confidence, built in</p>
+            <h1 class="text-5xl font-bold leading-tight">Turn every change into release notes your audiences can trust.</h1>
+            <p class="auth-showcase-copy mt-6 text-lg leading-8">Connect a repository, review what changed, and publish notes that people approved.</p>
+        </div>
+        <p class="auth-showcase-copy text-sm">Breaking changes always require human review.</p>
+    </section>
+    <section class="theme-canvas flex items-center justify-center p-5 sm:p-10">
+        <div class="w-full max-w-md">
+            <a th:href="@{/}" class="mb-8 flex items-center gap-3 text-xl font-bold lg:hidden">
+                <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
+                     width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
+            </a>
+            <div class="auth-card">
+                <p class="text-sm font-semibold text-indigo-600">Welcome back</p>
+                <h2 class="mt-2 text-3xl font-bold tracking-tight">Sign in to your workspace</h2>
+                <p class="mt-2 text-sm text-slate-600">Manage projects and the repositories that feed your releases.</p>
+                <div th:if="${param.error}" class="alert alert-error mt-6" role="alert"><span>The email or password is incorrect.</span></div>
+                <div th:if="${param.logout}" class="alert alert-success mt-6" role="status"><span>You have signed out.</span></div>
+                <div th:if="${param.registered}" class="alert alert-success mt-6" role="status"><span>Your organization is ready. Sign in to continue.</span></div>
+                <form method="post" th:action="@{/login}" class="mt-7 flex flex-col gap-4">
+                    <label class="form-control"><span class="label-text font-medium">Email</span>
+                        <input type="email" name="email" maxlength="254" autocomplete="email" class="input input-bordered w-full" required autofocus>
+                    </label>
+                    <label class="form-control" x-data="passwordField()"><span class="label-text font-medium">Password</span>
+                        <span class="join w-full">
+                            <input :type="visible ? 'text' : 'password'" type="password" name="password" maxlength="72"
+                                   autocomplete="current-password" class="input input-bordered join-item w-full" required>
+                            <button type="button" class="btn btn-outline join-item" @click="toggle" x-text="label">Show</button>
+                        </span>
+                    </label>
+                    <button type="submit" class="btn btn-primary mt-2 min-h-12">Sign in</button>
+                </form>
+                <p class="mt-6 text-center text-sm text-slate-600">New to ReleaseFlow? <a th:href="@{/register}" class="link link-primary font-semibold">Create an organization</a></p>
+            </div>
+        </div>
+    </section>
 </main>
 </body>
 </html>

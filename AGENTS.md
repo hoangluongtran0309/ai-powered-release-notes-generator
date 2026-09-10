@@ -16,6 +16,9 @@ Read `README.md`, `docs/architecture.md`, and
 - Keep code in one Maven module and package it by product capability.
 - Add a dependency only when the current slice uses it.
 - Keep REST and Thymeleaf controllers on the same application behavior.
+- Build pages from the Layout Dialect layouts with Tailwind and DaisyUI classes.
+  Use Alpine.js only for presentation behavior; forms stay server-rendered.
+  Never interpolate server data into Alpine expressions.
 - Do not add an interface, event, worker, provider abstraction, or deployment
   component for a future use case.
 - Keep developer documentation in English and aligned with runnable code.
@@ -52,4 +55,9 @@ variables documented in `README.md`.
 ./mvnw test
 ./mvnw verify
 ./mvnw spring-boot:run
+PATH="$PWD/node:$PATH" ./node/npm run watch
 ```
+
+The Maven build installs Node.js and npm into `node/` and compiles
+`static/css/application.css` into `target/classes`; do not commit `node/` or
+`node_modules/`.

@@ -34,3 +34,7 @@ version has been released.
   authenticated data, and fail-fast environment key validation.
 - Stable REST errors and negative-path coverage for Project ownership and
   GitHub configuration conflicts.
+- A workspace UI with a split sign-in screen, sidebar shell, signed-in
+  overview, setup progress, copy buttons, and a persistent light/dark theme.
+- Tailwind CSS 4, DaisyUI 5, Thymeleaf Layout Dialect, and Alpine.js, with
+  Node.js installed by the Maven build.

@@ -7,7 +7,7 @@ packaged as one executable JAR. The implemented capabilities are `status`,
 `account`, `project`, and shared `configuration`:
 
 ```text
-GET  /                         -> Thymeleaf home
+GET  /                         -> Thymeleaf home, or overview when signed in
 GET  /register                -> owner registration form
 POST /register                -> RegistrationService
 POST /api/registrations       -> RegistrationService
@@ -96,6 +96,19 @@ Base64-encoded 32-byte key from `RELEASEFLOW_CREDENTIAL_MASTER_KEY`. Key and
 credential material are never logged. See
 [ADR-0002](adr/0002-per-integration-webhook-credentials.md).
 
+## User interface
+
+Pages are server-rendered Thymeleaf templates composed with the Layout Dialect:
+`layout/auth` frames the home, sign-in, and registration screens, and
+`layout/main` provides the signed-in sidebar shell. `PageModelAdvice` supplies
+the signed-in viewer and current path to every page controller.
+
+The stylesheet is compiled from Tailwind CSS 4 and DaisyUI 5 during the Maven
+build, which installs a pinned Node.js through `frontend-maven-plugin`.
+Alpine.js, served from a WebJar, handles only presentation behavior; forms post
+to the same controllers and application services as before. See
+[ADR-0003](adr/0003-frontend-toolchain.md).
+
 ## HTTP security and errors
 
 Spring Security uses server-side sessions. CSRF remains enabled for REST and UI
@@ -114,4 +127,5 @@ New code is grouped by product capability. A capability starts with direct,
 readable classes and gains internal layers only when implemented behavior needs
 them. GitHub configuration performs no provider call, access-token validation,
 historical import, or webhook processing. There is no background worker or
-separately deployed frontend in the current system.
+separately deployed frontend in the current system; the compiled stylesheet
+ships inside the application JAR.
