@@ -38,3 +38,12 @@ version has been released.
   overview, setup progress, copy buttons, and a persistent light/dark theme.
 - Tailwind CSS 4, DaisyUI 5, Thymeleaf Layout Dialect, and Alpine.js, with
   Node.js installed by the Maven build.
+
+### Fixed
+
+- A blank registration password reports one required-field error instead of
+  two.
+- A rejected GitHub configuration keeps the submitted owner and repository.
+- GitHub conflicts appear inside the submitted Project card; an unknown
+  Project is reported at the top of the page.
+- Project creation times display as a readable UTC date.
