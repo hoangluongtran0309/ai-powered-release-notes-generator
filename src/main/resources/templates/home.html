@@ -17,6 +17,7 @@
     </div>
     <div th:if="${currentUser != null}">
         <p class="success" th:text="|Signed in as ${currentUser}.|">Signed in.</p>
+        <p><a class="button" th:href="@{/projects}">Manage projects</a></p>
         <form th:action="@{/logout}" method="post">
             <button class="link-button" type="submit">Sign out</button>
         </form>

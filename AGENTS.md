@@ -2,9 +2,11 @@
 
 ## Current state
 
-ReleaseFlow currently implements the bootstrap and Organization owner slices:
-one Spring Boot application, PostgreSQL/Flyway V1, owner registration, session
-authentication, tenant principal, REST/UI paths, and Testcontainers tests.
+ReleaseFlow currently implements the bootstrap, Organization owner, and Project
+plus GitHub configuration slices: one Spring Boot application,
+PostgreSQL/Flyway V1-V2, owner registration, session authentication,
+tenant-scoped Projects, per-integration encrypted webhook secrets, REST/UI
+paths, and Testcontainers tests.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
 
@@ -30,6 +32,8 @@ Read `README.md`, `docs/architecture.md`, and
 - External and AI failures become explicit unknown/review states.
 - Network I/O does not run inside database transactions.
 - Credentials never appear in source, logs, examples, or later API responses.
+- `RELEASEFLOW_CREDENTIAL_MASTER_KEY` is required at startup and must decode to
+  exactly 32 bytes; webhook secrets are reveal-once values.
 - Applied Flyway migrations are immutable; add `V2` or later for schema changes.
 - Published Release Notes are immutable snapshots.
 - Tenant-owned repository lookups include both resource ID and the current
@@ -39,6 +43,10 @@ Read `README.md`, `docs/architecture.md`, and
 
 Use JDK 21. Docker must be running because persistence tests use PostgreSQL
 Testcontainers; H2 is not permitted.
+
+Running the application also requires a Base64-encoded 32-byte value in
+`RELEASEFLOW_CREDENTIAL_MASTER_KEY` in addition to the database environment
+variables documented in `README.md`.
 
 ```bash
 ./mvnw test

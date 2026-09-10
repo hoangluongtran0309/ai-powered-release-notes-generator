@@ -3,6 +3,10 @@ package com.hoangluongtran0309.releaseflow.configuration;
 import com.hoangluongtran0309.releaseflow.account.DuplicateEmailException;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
+import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationAlreadyConfiguredException;
+import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAlreadyConnectedException;
+import com.hoangluongtran0309.releaseflow.project.ProjectApiController;
+import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -17,7 +21,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-@RestControllerAdvice(assignableTypes = {RegistrationApiController.class, SessionApiController.class})
+@RestControllerAdvice(assignableTypes = {
+        RegistrationApiController.class,
+        SessionApiController.class,
+        ProjectApiController.class
+})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
 
@@ -55,6 +63,40 @@ public class ApiExceptionHandler {
                 "Email already registered",
                 exception.getMessage(),
                 "email_already_registered"
+        ));
+    }
+
+    @ExceptionHandler(ProjectNotFoundException.class)
+    ResponseEntity<ProblemDetail> projectNotFound(ProjectNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Project not found",
+                exception.getMessage(),
+                "project_not_found"
+        ));
+    }
+
+    @ExceptionHandler(GitHubIntegrationAlreadyConfiguredException.class)
+    ResponseEntity<ProblemDetail> integrationAlreadyConfigured(
+            GitHubIntegrationAlreadyConfiguredException exception
+    ) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "GitHub integration already configured",
+                exception.getMessage(),
+                "github_integration_already_configured"
+        ));
+    }
+
+    @ExceptionHandler(GitHubRepositoryAlreadyConnectedException.class)
+    ResponseEntity<ProblemDetail> repositoryAlreadyConnected(
+            GitHubRepositoryAlreadyConnectedException exception
+    ) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "GitHub repository already connected",
+                exception.getMessage(),
+                "github_repository_already_connected"
         ));
     }
 
