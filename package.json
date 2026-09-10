@@ -1,0 +1,18 @@
+{
+  "name": "releaseflow",
+  "private": true,
+  "devDependencies": {
+    "@tailwindcss/forms": "0.5.11",
+    "@tailwindcss/postcss": "4.3.3",
+    "cssnano": "8.0.6",
+    "daisyui": "5.7.19",
+    "postcss": "8.5.26",
+    "postcss-cli": "11.0.1",
+    "tailwindcss": "4.3.3"
+  },
+  "scripts": {
+    "build": "postcss src/main/resources/static/css/application.css -o target/classes/static/css/application.css",
+    "build-prod": "NODE_ENV=production npm run build",
+    "watch": "npm run build -- --watch"
+  }
+}
