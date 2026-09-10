@@ -76,7 +76,39 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .isEqualTo("ReleaseFlow");
         mockMvc.perform(get("/projects").session(session))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("ReleaseFlow")));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("ReleaseFlow")))
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*>\\d{1,2} [A-Z][a-z]{2} \\d{4}, \\d{2}:\\d{2} UTC</time>.*"
+                )));
+    }
+
+    @Test
+    void rendersRepositoryConflictInsideTheSubmittedProjectCardAndKeepsInput() throws Exception {
+        MockHttpSession session = registerAndLogin("owner@example.com", "owner-password");
+        UUID connected = createProject(session, "Connected");
+        UUID duplicate = createProject(session, "Duplicate");
+        mockMvc.perform(post("/projects/{projectId}/github-integration", connected)
+                        .session(session)
+                        .with(csrf())
+                        .param("owner", "acme")
+                        .param("repository", "releaseflow"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/projects/{projectId}/github-integration", duplicate)
+                        .session(session)
+                        .with(csrf())
+                        .param("owner", " Acme ")
+                        .param("repository", "ReleaseFlow"))
+                .andExpect(status().isConflict())
+                .andExpect(view().name("projects"))
+                .andExpect(model().attributeDoesNotExist("pageError"))
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*id=\"project-" + duplicate + "\".*"
+                                + "This GitHub repository is already connected to another project\\..*"
+                                + "value=\"Acme\".*value=\"ReleaseFlow\".*"
+                )));
+
+        assertThat(integrationRepository.count()).isOne();
     }
 
     @Test
@@ -117,7 +149,9 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
                         .param("repository", "releaseflow"))
                 .andExpect(status().isNotFound())
                 .andExpect(view().name("projects"))
-                .andExpect(model().attributeHasErrors("githubIntegrationRequest"));
+                .andExpect(model().attributeHasErrors("githubIntegrationRequest"))
+                .andExpect(model().attribute("pageError", "Project was not found."))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Project was not found.")));
 
         UUID secondProject = createProject(second, "Second");
         mockMvc.perform(post("/projects/{projectId}/github-integration", secondProject)
@@ -129,7 +163,8 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(view().name("projects"))
                 .andExpect(model().attributeHasFieldErrors(
                         "githubIntegrationRequest", "owner", "repository"
-                ));
+                ))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("value=\"bad/owner\"")));
 
         assertThat(integrationRepository.count()).isZero();
     }

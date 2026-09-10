@@ -76,9 +76,10 @@ public class ProjectPageController {
             model.addAttribute("integration", created);
             return "github-integration-created";
         } catch (ProjectNotFoundException exception) {
+            // The project is not in this tenant's list, so there is no card to attach the error to.
             response.setStatus(HttpStatus.NOT_FOUND.value());
             bindingResult.reject("project.notFound", exception.getMessage());
-            model.addAttribute("integrationError", exception.getMessage());
+            model.addAttribute("pageError", exception.getMessage());
         } catch (GitHubIntegrationAlreadyConfiguredException | GitHubRepositoryAlreadyConnectedException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
             bindingResult.reject("githubIntegration.conflict", exception.getMessage());

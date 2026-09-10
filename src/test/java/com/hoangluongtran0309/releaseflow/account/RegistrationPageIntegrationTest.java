@@ -5,6 +5,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.validation.BindingResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -77,6 +79,24 @@ class RegistrationPageIntegrationTest extends PostgreSqlIntegrationTest {
 
         assertThat(organizationRepository.count()).isZero();
         assertThat(appUserRepository.count()).isZero();
+    }
+
+    @Test
+    void blankPasswordReportsASingleRequiredError() throws Exception {
+        MvcResult result = mockMvc.perform(post("/register")
+                        .with(csrf())
+                        .param("organizationName", "Acme")
+                        .param("displayName", "Owner")
+                        .param("email", "owner@example.com")
+                        .param("password", ""))
+                .andExpect(status().isOk())
+                .andExpect(view().name("register"))
+                .andExpect(model().attributeHasFieldErrorCode("registration", "password", "NotBlank"))
+                .andReturn();
+
+        BindingResult bindingResult = (BindingResult) result.getModelAndView().getModel()
+                .get(BindingResult.MODEL_KEY_PREFIX + "registration");
+        assertThat(bindingResult.getFieldErrors("password")).hasSize(1);
     }
 
     @Test

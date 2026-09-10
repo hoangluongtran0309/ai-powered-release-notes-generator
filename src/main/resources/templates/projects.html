@@ -17,7 +17,7 @@
         </div>
     </header>
 
-    <div class="alert alert-error mb-6" role="alert" th:if="${integrationError != null}"><span th:text="${integrationError}">Integration error</span></div>
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
 
     <ol class="grid gap-3 md:grid-cols-3" aria-label="Setup progress">
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasProjects} ? 'border-emerald-200' : 'border-indigo-300'">
@@ -68,7 +68,10 @@
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
                     <h2 class="truncate text-xl font-bold" th:text="${project.name}">Project name</h2>
-                    <p class="mt-1 text-xs text-slate-500" th:text="|Created ${project.createdAt}|">Created now</p>
+                    <p class="mt-1 text-xs text-slate-500">Created
+                        <time th:datetime="${project.createdAt}"
+                              th:text="|${#temporals.format(project.createdAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">10 Sep 2026, 14:44 UTC</time>
+                    </p>
                 </div>
                 <span class="badge gap-1.5 font-semibold"
                       th:classappend="${integration != null} ? 'badge-success badge-soft' : 'badge-ghost'">
@@ -103,15 +106,20 @@
                     <h3 class="font-bold">Configure GitHub</h3>
                     <p class="mt-1 text-sm text-slate-600">The webhook secret is encrypted with AES-256-GCM and shown only once.</p>
                 </div>
+                <div class="alert alert-error" role="alert" th:if="${failing and integrationError != null}">
+                    <span th:text="${integrationError}">This GitHub repository is already connected to another project.</span>
+                </div>
                 <label class="form-control"><span class="label-text font-medium">Repository owner</span>
                     <input type="text" name="owner" maxlength="39" required placeholder="octo-org"
                            class="input input-bordered w-full"
+                           th:value="${failing} ? ${githubIntegrationRequest.owner} : ''"
                            th:classappend="${failing and #fields.hasErrors('owner')} ? 'input-error'">
                     <span class="field-error" th:if="${failing and #fields.hasErrors('owner')}" th:errors="*{owner}"></span>
                 </label>
                 <label class="form-control"><span class="label-text font-medium">Repository name</span>
                     <input type="text" name="repository" maxlength="100" required placeholder="hello-world"
                            class="input input-bordered w-full"
+                           th:value="${failing} ? ${githubIntegrationRequest.repository} : ''"
                            th:classappend="${failing and #fields.hasErrors('repository')} ? 'input-error'">
                     <span class="field-error" th:if="${failing and #fields.hasErrors('repository')}" th:errors="*{repository}"></span>
                 </label>

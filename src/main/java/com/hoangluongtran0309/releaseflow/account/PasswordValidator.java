@@ -9,7 +9,8 @@ public class PasswordValidator implements ConstraintValidator<ValidPassword, Str
 
     @Override
     public boolean isValid(String password, ConstraintValidatorContext context) {
-        if (password == null) {
+        // A missing value is reported once, by @NotBlank.
+        if (password == null || password.isBlank()) {
             return true;
         }
         return password.length() >= 12
