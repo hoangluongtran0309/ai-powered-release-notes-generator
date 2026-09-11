@@ -61,6 +61,15 @@ version has been released.
   become Unknown and need review.
 - A Change Inbox page and `GET /api/projects/{projectId}/changes`, with
   category and review-status filters and tenant-scoped Project lookups.
+- Optional OpenAI suggestions for Unknown changes, started per change from the
+  Change Inbox or `POST /api/projects/{projectId}/changes/{changeId}/ai-classification`.
+- Strict JSON Schema requests with `store: false` and a minimal pull request
+  payload, through Spring's `RestClient` with no new dependency.
+- Flyway migration `V5` for the classification source and explicit AI
+  status, model, failure, and attempt time, with constraints that keep every
+  AI suggestion in review.
+- Stable AI error codes, safe stored failure messages, and a guard against
+  calling OpenAI inside a database transaction.
 
 ### Fixed
 

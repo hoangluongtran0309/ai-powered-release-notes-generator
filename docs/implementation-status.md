@@ -35,25 +35,28 @@
   database constraint; Flyway `V4` marks earlier changes Unknown.
 - A per-Project Change Inbox through Thymeleaf and REST with category and
   review-status filters.
+- One OpenAI structured-classification integration: person-initiated
+  suggestions for Unknown changes, strict JSON Schema output, explicit
+  FAILED states, no network call inside a transaction, and Flyway `V5`.
 
 ## In progress
 
-- Nothing. The deterministic classification and Change Inbox slice is
-  complete and awaiting review.
+- Nothing. The OpenAI structured-classification slice is complete and
+  awaiting review.
 
 ## Planned
 
 In intended implementation order:
 
-1. One OpenAI structured-classification integration.
-2. Human review.
-3. Draft Release management.
-4. Immutable Release Note publication.
+1. Human review.
+2. Draft Release management.
+3. Immutable Release Note publication.
 
 ## Deliberately deferred
 
 - Invitation and organization member management.
-- Additional source and AI providers.
+- Additional source and AI providers, automatic AI classification, and AI
+  retries.
 - Historical imports, polling, schedulers, queues, and automatic retries.
 - GitHub access tokens, provider-side repository validation, integration
   replacement, and secret rotation.

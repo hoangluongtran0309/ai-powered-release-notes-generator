@@ -4,6 +4,7 @@ import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -14,9 +15,11 @@ import java.util.UUID;
 public class ChangeApiController {
 
     private final ChangeInboxService inboxService;
+    private final ChangeAiClassificationService aiClassificationService;
 
-    ChangeApiController(ChangeInboxService inboxService) {
+    ChangeApiController(ChangeInboxService inboxService, ChangeAiClassificationService aiClassificationService) {
         this.inboxService = inboxService;
+        this.aiClassificationService = aiClassificationService;
     }
 
     @GetMapping("/api/projects/{projectId}/changes")
@@ -27,5 +30,14 @@ public class ChangeApiController {
             @RequestParam(required = false) String status
     ) {
         return inboxService.list(principal.organizationId(), projectId, ChangeFilter.parse(category, status));
+    }
+
+    @PostMapping("/api/projects/{projectId}/changes/{changeId}/ai-classification")
+    ChangeView classifyWithAi(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID changeId
+    ) {
+        return aiClassificationService.classify(principal.organizationId(), projectId, changeId);
     }
 }

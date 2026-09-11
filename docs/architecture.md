@@ -25,6 +25,8 @@ POST /api/projects/{id}/github-integration -> GitHubIntegrationService
 POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
 GET  /changes                 -> ChangeInboxService (Change Inbox UI)
 GET  /api/projects/{id}/changes -> ChangeInboxService
+POST /projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
+POST /api/projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -81,6 +83,8 @@ changes
   delivery_id (X-GitHub-Delivery that recorded the change)
   received_at
   category, breaking, needs_review, classification_reasons (text[])
+  classification_source (RULES | AI), ai_status (NOT_REQUESTED | SUCCEEDED | FAILED)
+  ai_model, ai_failure, ai_attempted_at
 ```
 
 Authenticated `ReleaseFlowPrincipal` contains both user ID and Organization ID.
@@ -177,6 +181,40 @@ and Project ID, optionally filtered by category and review status, newest
 merge first. Unsupported filter values return `400 invalid_change_filter`. The
 page defaults to the first Project and uses a plain GET form for filters.
 
+## AI classification
+
+OpenAI is the only AI provider, and it is optional: `OpenAiChangeClassifier`
+is enabled only when both `RELEASEFLOW_OPENAI_API_KEY` and
+`RELEASEFLOW_OPENAI_MODEL` are set, and startup fails if only one is. A person
+requests a suggestion for one change at a time. Only a change with
+`category = UNKNOWN` and `classification_source = RULES` is eligible. See
+[ADR-0004](adr/0004-openai-classification-as-reviewed-suggestion.md).
+
+`ChangeAiClassificationService` is not transactional. It uses a
+`TransactionTemplate` for two short transactions, with the network call
+between them:
+
+1. Load the change by ID, Organization ID, and Project ID, and check that it
+   is eligible.
+2. With no transaction open, call `POST {base-url}/chat/completions` through
+   `RestClient`. The request has `store: false`, a strict JSON Schema for the
+   category, breaking flag, and rationale, and only the title, labels, target
+   branch, and a truncated description. The client refuses to run inside an
+   active transaction.
+3. Reload the change and record the outcome only if it is still eligible, so
+   a concurrent request's result is kept.
+
+A suggestion sets the category, adds the rationale as a reason, can only set
+the breaking flag (never clear it), and keeps `needs_review = true`. A
+timeout, connection error, non-2xx status, refusal, incomplete answer, or
+invalid JSON becomes `ai_status = FAILED` with a fixed message that never
+contains the API key or a response body; the change stays Unknown. The
+`changes_ai_state_consistent` constraint keeps source, status, model, failure,
+and attempt time consistent, and requires review for every AI suggestion. The
+REST endpoint reports a stored failure as `502 ai_classification_failed`; the
+UI redirects back to the inbox card, which shows the failure and a retry
+button.
+
 ## User interface
 
 Pages are server-rendered Thymeleaf templates composed with the Layout Dialect:
@@ -207,6 +245,7 @@ the secure-cookie environment switch.
 New code is grouped by product capability. A capability starts with direct,
 readable classes and gains internal layers only when implemented behavior needs
 them. GitHub configuration and webhook intake perform no provider call,
-access-token validation, or historical import. There is no background worker or
+access-token validation, or historical import. The only outbound call is a
+person-initiated OpenAI request. There is no background worker or
 separately deployed frontend in the current system; the compiled stylesheet
 ships inside the application JAR.

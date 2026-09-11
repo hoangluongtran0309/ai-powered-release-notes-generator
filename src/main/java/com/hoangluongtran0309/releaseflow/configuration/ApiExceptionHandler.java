@@ -3,7 +3,11 @@ package com.hoangluongtran0309.releaseflow.configuration;
 import com.hoangluongtran0309.releaseflow.account.DuplicateEmailException;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
+import com.hoangluongtran0309.releaseflow.change.AiClassificationFailedException;
+import com.hoangluongtran0309.releaseflow.change.AiClassificationUnavailableException;
 import com.hoangluongtran0309.releaseflow.change.ChangeApiController;
+import com.hoangluongtran0309.releaseflow.change.ChangeNotEligibleForAiException;
+import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
 import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadException;
@@ -105,6 +109,46 @@ public class ApiExceptionHandler {
                 "GitHub repository already connected",
                 exception.getMessage(),
                 "github_repository_already_connected"
+        ));
+    }
+
+    @ExceptionHandler(ChangeNotFoundException.class)
+    ResponseEntity<ProblemDetail> changeNotFound(ChangeNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Change not found",
+                exception.getMessage(),
+                "change_not_found"
+        ));
+    }
+
+    @ExceptionHandler(ChangeNotEligibleForAiException.class)
+    ResponseEntity<ProblemDetail> changeNotEligibleForAi(ChangeNotEligibleForAiException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Change not eligible for AI classification",
+                exception.getMessage(),
+                "change_not_eligible_for_ai"
+        ));
+    }
+
+    @ExceptionHandler(AiClassificationFailedException.class)
+    ResponseEntity<ProblemDetail> aiClassificationFailed(AiClassificationFailedException exception) {
+        return response(problem(
+                HttpStatus.BAD_GATEWAY,
+                "AI classification failed",
+                exception.getMessage(),
+                "ai_classification_failed"
+        ));
+    }
+
+    @ExceptionHandler(AiClassificationUnavailableException.class)
+    ResponseEntity<ProblemDetail> aiClassificationUnavailable(AiClassificationUnavailableException exception) {
+        return response(problem(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "AI classification unavailable",
+                exception.getMessage(),
+                "ai_classification_unavailable"
         ));
     }
 

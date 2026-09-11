@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 interface ChangeRepository extends JpaRepository<Change, UUID> {
@@ -14,6 +15,8 @@ interface ChangeRepository extends JpaRepository<Change, UUID> {
             UUID organizationId,
             int pullRequestNumber
     );
+
+    Optional<Change> findByIdAndOrganizationIdAndProjectId(UUID id, UUID organizationId, UUID projectId);
 
     @Query("""
             select change from Change change
