@@ -3,6 +3,10 @@ package com.hoangluongtran0309.releaseflow.configuration;
 import com.hoangluongtran0309.releaseflow.account.DuplicateEmailException;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
+import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
+import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadException;
+import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchException;
+import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
 import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationAlreadyConfiguredException;
 import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAlreadyConnectedException;
 import com.hoangluongtran0309.releaseflow.project.ProjectApiController;
@@ -24,7 +28,8 @@ import java.util.Map;
 @RestControllerAdvice(assignableTypes = {
         RegistrationApiController.class,
         SessionApiController.class,
-        ProjectApiController.class
+        ProjectApiController.class,
+        GitHubWebhookController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -97,6 +102,36 @@ public class ApiExceptionHandler {
                 "GitHub repository already connected",
                 exception.getMessage(),
                 "github_repository_already_connected"
+        ));
+    }
+
+    @ExceptionHandler(WebhookSignatureInvalidException.class)
+    ResponseEntity<ProblemDetail> webhookSignatureInvalid(WebhookSignatureInvalidException exception) {
+        return response(problem(
+                HttpStatus.UNAUTHORIZED,
+                "Webhook signature invalid",
+                exception.getMessage(),
+                "webhook_signature_invalid"
+        ));
+    }
+
+    @ExceptionHandler(WebhookRepositoryMismatchException.class)
+    ResponseEntity<ProblemDetail> webhookRepositoryMismatch(WebhookRepositoryMismatchException exception) {
+        return response(problem(
+                HttpStatus.UNPROCESSABLE_CONTENT,
+                "Webhook repository mismatch",
+                exception.getMessage(),
+                "webhook_repository_mismatch"
+        ));
+    }
+
+    @ExceptionHandler(MalformedWebhookPayloadException.class)
+    ResponseEntity<ProblemDetail> malformedWebhookPayload(MalformedWebhookPayloadException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Webhook payload malformed",
+                exception.getMessage(),
+                "webhook_payload_malformed"
         ));
     }
 

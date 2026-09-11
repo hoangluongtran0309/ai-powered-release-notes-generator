@@ -8,7 +8,8 @@
 <p layout:fragment="page-title">Projects</p>
 <div layout:fragment="content"
      th:with="hasProjects=${!#lists.isEmpty(projects)},
-              hasIntegration=${!#lists.isEmpty(projects.?[githubIntegration != null])}">
+              hasIntegration=${!#lists.isEmpty(projects.?[githubIntegration != null])},
+              hasDelivery=${!#lists.isEmpty(projects.?[githubIntegration != null and githubIntegration.lastDeliveryAt != null])}">
     <header class="page-header">
         <div>
             <p class="page-eyebrow">Project configuration</p>
@@ -32,9 +33,13 @@
                   th:text="${hasIntegration} ? '✓' : '2'">2</span>
             <div><p class="font-semibold">Connect GitHub</p><p class="text-xs text-slate-500">Generate webhook credentials</p></div>
         </li>
-        <li class="surface-card flex items-center gap-4 p-4">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 font-bold text-slate-600">3</span>
-            <div><p class="font-semibold">Receive webhooks</p><p class="text-xs text-slate-500">Coming in the next release</p></div>
+        <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasDelivery} ? 'border-emerald-200' : (${hasIntegration} ? 'border-indigo-300' : '')">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full font-bold"
+                  th:classappend="${hasDelivery} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+                  th:text="${hasDelivery} ? '✓' : '3'">3</span>
+            <div><p class="font-semibold">Receive webhooks</p>
+                <p class="text-xs text-slate-500"
+                   th:text="${hasDelivery} ? 'Signed deliveries arriving' : (${hasIntegration} ? 'Waiting for the first signed delivery' : 'Add the webhook in GitHub')">Add the webhook in GitHub</p></div>
         </li>
     </ol>
 
@@ -96,7 +101,20 @@
                             <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
                         </dd>
                     </div>
+                    <div>
+                        <dt class="text-slate-500">Last delivery</dt>
+                        <dd class="mt-1 font-semibold" th:if="${integration.lastDeliveryAt != null}">
+                            <time th:datetime="${integration.lastDeliveryAt}"
+                                  th:text="|${#temporals.format(integration.lastDeliveryAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
+                        </dd>
+                        <dd class="mt-1 text-slate-600" th:unless="${integration.lastDeliveryAt != null}">No verified delivery yet</dd>
+                    </div>
                 </dl>
+                <p class="mt-4 text-xs text-slate-500">
+                    In the repository's GitHub webhook settings, use your ReleaseFlow address followed by this path
+                    as the payload URL, content type <code>application/json</code>, the saved secret, and the
+                    <strong>Pull requests</strong> event. Merged pull requests are recorded once each.
+                </p>
             </div>
 
             <form class="grid gap-4" th:if="${integration == null}"

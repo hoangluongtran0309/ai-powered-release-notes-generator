@@ -4,7 +4,7 @@
 
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
-`account`, `project`, and shared `configuration`:
+`account`, `project`, `change`, and shared `configuration`:
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
@@ -22,6 +22,7 @@ POST /projects/{id}/github-integration -> GitHubIntegrationService
 GET  /api/projects            -> tenant-scoped Project list
 POST /api/projects            -> ProjectService
 POST /api/projects/{id}/github-integration -> GitHubIntegrationService
+POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -66,6 +67,17 @@ github_integrations
   webhook_id (globally unique)
   secret_nonce + secret_ciphertext
   created_at
+  last_delivery_at (nullable, last accepted webhook delivery)
+
+changes
+  id (UUID PK)
+  organization_id
+  project_id (composite FK with organization_id -> projects)
+  pull_request_number (unique per Project)
+  title, description, author_login, labels (text[])
+  target_branch, merge_commit_sha, merged_at, url
+  delivery_id (X-GitHub-Delivery that recorded the change)
+  received_at
 ```
 
 Authenticated `ReleaseFlowPrincipal` contains both user ID and Organization ID.
@@ -96,6 +108,40 @@ Base64-encoded 32-byte key from `RELEASEFLOW_CREDENTIAL_MASTER_KEY`. Key and
 credential material are never logged. See
 [ADR-0002](adr/0002-per-integration-webhook-credentials.md).
 
+## GitHub webhook intake
+
+`POST /webhooks/github/{webhookId}` is served by its own Spring Security filter
+chain: it permits anonymous requests, disables CSRF, creates no session, and
+saves no request. Trust comes only from the signature, verified in this order:
+
+1. `GitHubWebhookVerifier` in the `project` capability looks the integration up
+   by the untrusted webhook ID. This is the one lookup without an Organization
+   ID, as anticipated by ADR-0002.
+2. It decrypts that integration's secret with its tenant-bound authenticated
+   data, computes HMAC-SHA256 over the raw request bytes, and compares it with
+   `X-Hub-Signature-256` in constant time. An unknown or malformed webhook ID,
+   a missing or malformed header, a wrong signature, and an undecryptable
+   secret all produce the same `401 webhook_signature_invalid` response.
+3. Only then does `GitHubWebhookService` in the `change` capability parse the
+   JSON. The Organization and Project come from the verified integration; any
+   tenant field in the payload is ignored. A `repository.full_name` that does
+   not match the configured repository case-insensitively, or a pull request
+   without one, is rejected with `422 webhook_repository_mismatch`.
+
+`ping` is acknowledged. A `pull_request` delivery with action `closed` and
+`merged: true` is normalized into a `changes` row; other events and actions are
+acknowledged and ignored. Signed but malformed deliveries receive
+`400 webhook_payload_malformed`, and nothing is written for any rejected
+delivery.
+
+Idempotency relies on the `changes_project_pull_request_unique` constraint. The
+service checks for an existing row first and treats a concurrent unique
+violation as a duplicate, so redeliveries return `200 duplicate`. The first
+delivery ID is retained on the row. Every accepted delivery advances the
+integration's `last_delivery_at`, which the Projects page shows as setup step
+three. Intake is synchronous and short-lived: there is no queue, retry, GitHub
+API call, or network I/O inside a database transaction.
+
 ## User interface
 
 Pages are server-rendered Thymeleaf templates composed with the Layout Dialect:
@@ -125,7 +171,7 @@ the secure-cookie environment switch.
 
 New code is grouped by product capability. A capability starts with direct,
 readable classes and gains internal layers only when implemented behavior needs
-them. GitHub configuration performs no provider call, access-token validation,
-historical import, or webhook processing. There is no background worker or
+them. GitHub configuration and webhook intake perform no provider call,
+access-token validation, or historical import. There is no background worker or
 separately deployed frontend in the current system; the compiled stylesheet
 ships inside the application JAR.

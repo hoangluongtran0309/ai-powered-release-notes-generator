@@ -15,18 +15,20 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` and `V2`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V3`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
 - AES-256-GCM encryption at rest with one-time secret reveal;
+- a signed GitHub webhook endpoint that records each merged pull request once
+  as a normalized change, and shows the last verified delivery per repository;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
 
-Webhook intake, classification, review, and release publication are not
+Classification, the Change Inbox, review, and release publication are not
 implemented yet. See the
 [implementation status](docs/implementation-status.md).
 
@@ -76,6 +78,50 @@ same repository.
 
 `GET /api/status` remains public.
 
+## Receive GitHub webhooks
+
+In the GitHub repository, open **Settings → Webhooks → Add webhook** and enter:
+
+- **Payload URL**: the public ReleaseFlow address followed by the webhook path
+  shown for the Project, for example
+  `https://releaseflow.example.com/webhooks/github/<webhook-id>`;
+- **Content type**: `application/json`;
+- **Secret**: the signing secret saved when the repository was connected;
+- **Events**: *Let me select individual events* → *Pull requests*.
+
+`POST /webhooks/github/{webhookId}` needs no session or CSRF token. ReleaseFlow
+verifies `X-Hub-Signature-256` with that integration's own secret before it
+reads the payload, and takes the Organization and Project from the integration,
+never from the payload. It answers:
+
+| Delivery | Response |
+| --- | --- |
+| Unknown webhook ID, missing or wrong signature | `401` `webhook_signature_invalid` |
+| `repository.full_name` is not the configured repository | `422` `webhook_repository_mismatch` |
+| Verified delivery with invalid JSON, no `X-GitHub-Event`, or a merged pull request missing fields or `X-GitHub-Delivery` | `400` `webhook_payload_malformed` |
+| `ping` | `200` `{"outcome":"pong"}` |
+| Merged pull request (`closed` with `merged: true`) | `200` `recorded`, or `duplicate` when already recorded |
+| Any other event or action | `200` `ignored` |
+
+Each merged pull request is stored once per Project, so GitHub redeliveries are
+harmless. The Projects page shows the time of the last accepted delivery,
+which appears as soon as GitHub sends its initial `ping`.
+
+To exercise the endpoint locally without GitHub, sign the exact bytes you send:
+
+```bash
+WEBHOOK_PATH=/webhooks/github/replace-with-the-webhook-id
+WEBHOOK_SECRET='replace-with-the-saved-secret'
+BODY='{"zen":"Keep it logically awesome.","repository":{"full_name":"owner/repository"}}'
+SIGNATURE="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $NF}')"
+curl -sS -X POST "http://localhost:8080$WEBHOOK_PATH" \
+  -H 'Content-Type: application/json' \
+  -H 'X-GitHub-Event: ping' \
+  -H "X-GitHub-Delivery: $(uuidgen)" \
+  -H "X-Hub-Signature-256: $SIGNATURE" \
+  --data-binary "$BODY"
+```
+
 ## Verify
 
 Docker must be available because persistence tests use PostgreSQL rather than
@@ -93,9 +139,9 @@ second terminal:
 PATH="$PWD/node:$PATH" ./node/npm run watch
 ```
 
-The application does not call GitHub yet. The generated webhook path is reserved
-for the next slice and currently has no intake endpoint. There is also no AI
-service, container image, CI workflow, or published artifact.
+The application receives GitHub webhooks but never calls the GitHub API, so it
+does not import history or validate repositories with GitHub. There is also no
+AI service, container image, CI workflow, or published artifact.
 
 ## Contributing
 

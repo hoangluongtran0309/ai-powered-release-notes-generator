@@ -22,22 +22,28 @@
 - Workspace UI built with Tailwind CSS 4, DaisyUI 5, the Thymeleaf Layout
   Dialect, and Alpine.js, with a light/dark theme and a Maven-managed Node.js
   toolchain.
+- Signed GitHub webhook intake: a sessionless endpoint per integration,
+  constant-time HMAC-SHA256 verification before payload parsing, tenant
+  identity from the verified integration, and repository identity checks.
+- Flyway `V3` for normalized merged-pull-request changes, idempotent per
+  Project and pull request number, and the last accepted delivery time.
+- `ping` acknowledgement, ignored unrelated events, and a Projects page setup
+  step showing the last verified delivery.
 
 ## In progress
 
-- Nothing. The Project and GitHub configuration slice and the workspace UI are
-  complete and awaiting review.
+- Nothing. The signed GitHub merged-pull-request intake slice is complete and
+  awaiting review.
 
 ## Planned
 
 In intended implementation order:
 
-1. Signed GitHub merged-pull-request intake and normalization.
-2. Deterministic classification and the Change Inbox.
-3. One OpenAI structured-classification integration.
-4. Human review.
-5. Draft Release management.
-6. Immutable Release Note publication.
+1. Deterministic classification and the Change Inbox.
+2. One OpenAI structured-classification integration.
+3. Human review.
+4. Draft Release management.
+5. Immutable Release Note publication.
 
 ## Deliberately deferred
 
