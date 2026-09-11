@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Release note</title>
+</head>
+<body>
+<p layout:fragment="page-title">Releases</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">
+                <a class="link-hover" th:href="@{/releases(project=${projectId})}">Releases</a> / Published release
+            </p>
+            <h1 class="page-heading" th:text="${release.version}">1.4.0</h1>
+            <p class="page-subtitle">
+                Published by <span class="font-semibold" th:text="${release.publisherName}">Mai Tran</span> on
+                <time th:datetime="${release.publishedAt}"
+                      th:text="|${#temporals.format(release.publishedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>.
+                This release note is an immutable snapshot.
+            </p>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">This release is published.</span></div>
+
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <article class="surface-card p-6" aria-label="Release note">
+            <span class="badge badge-success badge-soft font-semibold">Published</span>
+            <h2 class="mt-3 text-2xl font-bold" th:text="${release.version}">1.4.0</h2>
+            <p class="mt-2 whitespace-pre-line text-slate-700" th:if="${release.summary != null}" th:text="${release.summary}">Summary</p>
+            <section class="mt-5" th:each="section : ${release.preview}">
+                <h3 class="font-bold" th:text="${section.title}">Features</h3>
+                <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    <li th:each="item : ${section.items}">
+                        <span th:text="${item.title}">Add CSV export</span>
+                        <a class="link text-slate-500" th:href="${item.url}" target="_blank" rel="noopener noreferrer"
+                           th:text="|#${item.pullRequestNumber}|">#101</a>
+                        <span class="text-slate-500" th:if="${section.title == 'Breaking changes'}"
+                              th:text="|(${item.category.label})|">(Fix)</span>
+                    </li>
+                </ul>
+            </section>
+        </article>
+
+        <section class="surface-card content-start p-6 xl:self-start" x-data="copyText()">
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="section-heading">Markdown</h2>
+                <button type="button" class="btn btn-outline btn-sm" @click="copy" x-text="label">Copy</button>
+            </div>
+            <p class="section-copy">Paste it into GitHub Releases, a changelog, or an announcement.</p>
+            <textarea x-ref="source" class="textarea textarea-bordered mt-4 h-80 w-full font-mono text-xs" readonly
+                      spellcheck="false" aria-label="Release note Markdown" th:text="${release.markdown}"># 1.4.0</textarea>
+        </section>
+    </div>
+</div>
+</body>
+</html>

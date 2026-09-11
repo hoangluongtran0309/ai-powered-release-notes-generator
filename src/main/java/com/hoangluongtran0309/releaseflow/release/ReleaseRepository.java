@@ -12,5 +12,14 @@ interface ReleaseRepository extends JpaRepository<Release, UUID> {
 
     boolean existsByOrganizationIdAndProjectIdAndStatus(UUID organizationId, UUID projectId, ReleaseStatus status);
 
+    boolean existsByOrganizationIdAndProjectIdAndVersionIgnoreCase(UUID organizationId, UUID projectId, String version);
+
+    boolean existsByOrganizationIdAndProjectIdAndVersionIgnoreCaseAndIdNot(
+            UUID organizationId,
+            UUID projectId,
+            String version,
+            UUID releaseId
+    );
+
     List<Release> findAllByOrganizationIdAndProjectIdOrderByCreatedAtDescIdDesc(UUID organizationId, UUID projectId);
 }

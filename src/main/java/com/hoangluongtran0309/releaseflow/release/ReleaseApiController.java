@@ -91,6 +91,15 @@ public class ReleaseApiController {
         return releaseService.addChanges(principal.organizationId(), projectId, releaseId, request);
     }
 
+    @PostMapping("/{releaseId}/publish")
+    ReleaseView publish(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId
+    ) {
+        return releaseService.publish(principal, projectId, releaseId);
+    }
+
     @DeleteMapping("/{releaseId}/changes/{changeId}")
     ReleaseView removeChange(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,

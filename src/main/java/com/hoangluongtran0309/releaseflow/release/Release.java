@@ -39,6 +39,15 @@ class Release {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
+    @Column(name = "published_by")
+    private UUID publishedBy;
+
+    @Column(name = "publisher_name", length = 120)
+    private String publisherName;
+
     protected Release() {
     }
 
@@ -61,6 +70,26 @@ class Release {
 
     void touch(Instant at) {
         this.updatedAt = at;
+    }
+
+    void publish(UUID publisher, String name, Instant at) {
+        this.status = ReleaseStatus.PUBLISHED;
+        this.publishedBy = publisher;
+        this.publisherName = name;
+        this.publishedAt = at;
+        this.updatedAt = at;
+    }
+
+    boolean isDraft() {
+        return status == ReleaseStatus.DRAFT;
+    }
+
+    Instant getPublishedAt() {
+        return publishedAt;
+    }
+
+    String getPublisherName() {
+        return publisherName;
     }
 
     UUID getId() {

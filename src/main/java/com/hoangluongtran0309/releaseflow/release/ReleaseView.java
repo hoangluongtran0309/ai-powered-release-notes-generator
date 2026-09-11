@@ -6,6 +6,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * A release as shown to users. For a published release, {@code preview} and
+ * {@code markdown} come from the immutable snapshot rather than from live changes.
+ */
 public record ReleaseView(
         UUID id,
         UUID projectId,
@@ -15,7 +19,10 @@ public record ReleaseView(
         Instant createdAt,
         Instant updatedAt,
         List<ChangeView> changes,
-        List<ReleaseNoteSection> preview
+        List<ReleaseNoteSection> preview,
+        Instant publishedAt,
+        String publisherName,
+        String markdown
 ) {
 
     public ReleaseView {

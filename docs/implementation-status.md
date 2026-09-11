@@ -48,16 +48,20 @@
   discard, and a grouped release note preview. Flyway `V7` enforces one draft
   per Project, one release per change, and same-Project, same-tenant
   membership.
+- Immutable Release Note publication: a snapshot of sections and Markdown,
+  the publisher and time, a read-only page with copyable Markdown, unique
+  versions per Project, and Flyway `V8` triggers that reject any change to
+  published releases, their changes, and their notes.
 
 ## In progress
 
-- Nothing. The Draft Release slice is complete and awaiting review.
+- Nothing. The Release Note publication slice is complete and awaiting
+  review.
 
 ## Planned
 
-In intended implementation order:
-
-1. Immutable Release Note publication.
+Nothing is planned beyond the slices above. New work starts from the
+deliberately deferred list below, one reviewed slice at a time.
 
 ## Deliberately deferred
 
@@ -76,3 +80,4 @@ In intended implementation order:
 - Review history, comments, reviewer roles, and bulk review.
 - Several concurrent drafts per Project, item reordering, and editing release
   note text.
+- Unpublishing or correcting published release notes.

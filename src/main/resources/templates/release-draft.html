@@ -98,6 +98,22 @@
                 </form>
             </section>
 
+            <details class="surface-card p-6" id="publish-release">
+                <summary class="cursor-pointer font-semibold text-indigo-700">Publish release</summary>
+                <p class="mt-3 text-sm text-slate-600">
+                    Publishing freezes this release note exactly as previewed. It cannot be edited, unpublished, or deleted,
+                    and later changes to classifications do not alter it.
+                </p>
+                <p class="mt-3 text-sm font-medium text-amber-700" th:if="${#lists.isEmpty(release.changes)}">
+                    Add at least one change before publishing.
+                </p>
+                <form class="mt-3" method="post"
+                      th:action="@{/projects/{projectId}/releases/{releaseId}/publish(projectId=${projectId},releaseId=${release.id})}">
+                    <button type="submit" class="btn btn-primary btn-sm" th:disabled="${#lists.isEmpty(release.changes)}"
+                            th:text="|Publish ${release.version}|">Publish 1.4.0</button>
+                </form>
+            </details>
+
             <details class="surface-card p-6">
                 <summary class="cursor-pointer font-semibold text-slate-600">Discard draft</summary>
                 <p class="mt-3 text-sm text-slate-600">The draft is deleted and its changes become available again. The changes themselves are kept.</p>
