@@ -73,8 +73,8 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.outcome").value("recorded"));
 
-        Change change = changeRepository.findAll().getFirst();
         assertThat(changeRepository.count()).isOne();
+        Change change = changeRepository.findAll().getFirst();
         assertThat(change.getOrganizationId()).isEqualTo(repository.organizationId());
         assertThat(change.getProjectId()).isEqualTo(repository.projectId());
         assertThat(change.getPullRequestNumber()).isEqualTo(42);
@@ -88,6 +88,23 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(change.getUrl()).isEqualTo("https://github.com/acme/releaseflow/pull/42");
         assertThat(change.getDeliveryId()).isEqualTo(deliveryId);
         assertThat(change.getReceivedAt()).isNotNull();
+        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(change.isBreaking()).isFalse();
+        assertThat(change.isNeedsReview()).isFalse();
+        assertThat(change.getClassificationReasons()).containsExactly("Label \"feature\"");
+
+        String breaking = pullRequest("acme/releaseflow", 43, "closed", true)
+                .replace("Thêm xuất CSV cho bảng điều khiển", "feat(api)!: remove v1 export");
+        deliver(repository, "pull_request", breaking, UUID.randomUUID())
+                .andExpect(jsonPath("$.outcome").value("recorded"));
+        assertThat(changeRepository.findAll())
+                .filteredOn(recorded -> recorded.getPullRequestNumber() == 43)
+                .singleElement()
+                .satisfies(recorded -> {
+                    assertThat(recorded.getCategory()).isEqualTo(ChangeCategory.FEATURE);
+                    assertThat(recorded.isBreaking()).isTrue();
+                    assertThat(recorded.isNeedsReview()).isTrue();
+                });
 
         mockMvc.perform(get("/api/projects").session(repository.session()))
                 .andExpect(status().isOk())

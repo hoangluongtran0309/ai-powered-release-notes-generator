@@ -52,6 +52,15 @@ version has been released.
   unrelated events.
 - A "Receive webhooks" setup step and per-repository last-delivery status on
   the Projects page.
+- Deterministic change classification from Conventional Commit title types,
+  familiar labels, and `BREAKING CHANGE` footers, with the matched rules kept
+  as reasons.
+- Mandatory review for breaking and Unknown changes, enforced by the
+  application and by a database constraint.
+- Flyway migration `V4` for classification columns; changes recorded earlier
+  become Unknown and need review.
+- A Change Inbox page and `GET /api/projects/{projectId}/changes`, with
+  category and review-status filters and tenant-scoped Project lookups.
 
 ### Fixed
 

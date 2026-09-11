@@ -3,11 +3,14 @@
 ## Current state
 
 ReleaseFlow currently implements the bootstrap, Organization owner, Project
-plus GitHub configuration, and signed GitHub merged-pull-request intake slices:
-one Spring Boot application, PostgreSQL/Flyway V1-V3, owner registration,
-session authentication, tenant-scoped Projects, per-integration encrypted
-webhook secrets, a signature-verified webhook endpoint that records normalized
-merged pull requests idempotently, REST/UI paths, and Testcontainers tests.
+plus GitHub configuration, signed GitHub merged-pull-request intake, and
+deterministic classification with the Change Inbox slices: one Spring Boot
+application, PostgreSQL/Flyway V1-V4, owner registration, session
+authentication, tenant-scoped Projects, per-integration encrypted webhook
+secrets, a signature-verified webhook endpoint that records normalized merged
+pull requests idempotently, rule-based classification with mandatory review
+for breaking and Unknown changes, a per-Project Change Inbox, REST/UI paths,
+and Testcontainers tests.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
 

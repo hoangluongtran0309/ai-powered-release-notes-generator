@@ -29,21 +29,26 @@
   Project and pull request number, and the last accepted delivery time.
 - `ping` acknowledgement, ignored unrelated events, and a Projects page setup
   step showing the last verified delivery.
+- Deterministic classification of each recorded change from its title type,
+  labels, and `BREAKING CHANGE` footer, with explainable reasons.
+- Mandatory review for breaking and Unknown changes, also enforced by a
+  database constraint; Flyway `V4` marks earlier changes Unknown.
+- A per-Project Change Inbox through Thymeleaf and REST with category and
+  review-status filters.
 
 ## In progress
 
-- Nothing. The signed GitHub merged-pull-request intake slice is complete and
-  awaiting review.
+- Nothing. The deterministic classification and Change Inbox slice is
+  complete and awaiting review.
 
 ## Planned
 
 In intended implementation order:
 
-1. Deterministic classification and the Change Inbox.
-2. One OpenAI structured-classification integration.
-3. Human review.
-4. Draft Release management.
-5. Immutable Release Note publication.
+1. One OpenAI structured-classification integration.
+2. Human review.
+3. Draft Release management.
+4. Immutable Release Note publication.
 
 ## Deliberately deferred
 
@@ -57,3 +62,4 @@ In intended implementation order:
 - Client-rendered pages, JavaScript bundling and tests, containers, production
   observability, release automation, and an open-core/enterprise module split.
 - Multi-repository aggregation.
+- Change Inbox pagination and search.
