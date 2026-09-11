@@ -15,7 +15,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V7`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V8`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -32,13 +32,16 @@ The application currently provides:
   category and breaking flag;
 - one Draft Release per Project, assembled from settled changes, with a live
   release note preview;
+- publication of a draft as an immutable Release Note snapshot with copyable
+  Markdown;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
 
-Release Note publication is not implemented yet. See the
+Every slice in the current plan is implemented; external distribution and a
+public changelog are deliberately deferred. See the
 [implementation status](docs/implementation-status.md).
 
 ## Requirements
@@ -243,6 +246,31 @@ A second draft returns `409 draft_release_exists`. A change that still needs
 review returns `409 change_not_releasable`. An unknown or foreign change
 returns `404 change_not_found`, and an unknown or foreign release returns
 `404 release_not_found`.
+
+## Publishing
+
+On a draft page, open **Publish release**. Publishing requires at least one
+change and a version that no other release of the Project uses, ignoring case.
+It stores an immutable snapshot of the release note as sections and Markdown,
+together with who published it and when. The page then becomes read-only and
+offers the Markdown with a **Copy** button for GitHub Releases or a changelog.
+Published releases are listed on **Releases**, and a new draft can be started.
+
+A published release cannot be edited, discarded, unpublished, or changed in
+content. Its changes can still be corrected in the Change Inbox, but the
+published note keeps what was published. PostgreSQL triggers enforce this even
+for direct SQL. See
+[ADR-0005](docs/adr/0005-immutable-release-note-snapshots.md).
+
+REST clients call `POST /api/projects/{projectId}/releases/{releaseId}/publish`.
+It returns the release with `status`, `publishedAt`, `publisherName`,
+`markdown`, and the snapshot sections in `preview`. Errors:
+
+| Situation | Response |
+| --- | --- |
+| The draft has no changes | `409 release_empty` |
+| The version is already used in this Project | `409 release_version_taken` |
+| The release is already published (publish, edit, discard, add, remove) | `409 release_published` |
 
 ## Verify
 

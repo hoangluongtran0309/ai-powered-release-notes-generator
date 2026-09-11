@@ -37,6 +37,8 @@ GET|PUT|DELETE /api/projects/{id}/releases/{releaseId} -> ReleaseService
 GET  /api/projects/{id}/releases/{releaseId}/available-changes -> ReleaseService
 POST /api/projects/{id}/releases/{releaseId}/changes -> ReleaseService
 DELETE /api/projects/{id}/releases/{releaseId}/changes/{changeId} -> ReleaseService
+POST /projects/{id}/releases/{releaseId}/publish -> ReleaseService
+POST /api/projects/{id}/releases/{releaseId}/publish -> ReleaseService
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -101,14 +103,20 @@ releases
   id (UUID PK)
   organization_id, project_id (composite FK -> projects)
   version, summary
-  status (DRAFT; at most one per Project)
+  status (DRAFT | PUBLISHED; at most one DRAFT per Project)
+  version unique per Project, ignoring case
   created_at, updated_at
+  published_at, published_by (composite FK -> app_users), publisher_name
 
 release_changes
   release_id + change_id (PK); change_id unique
   (release_id, organization_id, project_id) FK -> releases, ON DELETE CASCADE
   (change_id, organization_id, project_id) FK -> changes
   added_at
+
+release_notes (immutable)
+  release_id (PK; composite FK with organization_id, project_id -> releases)
+  version, summary, sections (jsonb), markdown, published_at
 ```
 
 Authenticated `ReleaseFlowPrincipal` contains both user ID and Organization ID.
@@ -285,8 +293,27 @@ cascade makes its changes available again.
 `ReleaseNotePreview` builds the preview on every read. Breaking changes are
 listed first and only there; the rest follow in the order Features, Fixes,
 Performance, Documentation, Maintenance, sorted by merge time. Titles drop a
-leading Conventional Commit prefix. Publication, which will turn a draft into
-an immutable snapshot, is not implemented yet.
+leading Conventional Commit prefix.
+
+## Release Note publication
+
+`ReleaseService.publish` runs in one transaction. It requires a draft with at
+least one change and a version unused in the Project. It then builds the
+sections from the current changes, renders Markdown with `ReleaseNoteMarkdown`
+(escaping Markdown syntax in titles and the summary), inserts the
+`release_notes` snapshot, and marks the release `PUBLISHED` with the
+publisher's ID, name, and time. Reads of a published release use the stored
+sections and Markdown, so reclassifying an included change afterwards never
+changes what was published. See
+[ADR-0005](adr/0005-immutable-release-note-snapshots.md).
+
+Immutability is enforced twice. The service rejects edit, discard, add,
+remove, and a second publish with `409 release_published`. PostgreSQL
+triggers reject UPDATE or DELETE on `release_notes`, UPDATE or DELETE on a
+`PUBLISHED` release, and any write to `release_changes` of a published
+release. `releases_publication_recorded` keeps status, time, and publisher
+consistent. `releases_project_version_unique` prevents a later draft from
+reusing a published version.
 
 ## User interface
 

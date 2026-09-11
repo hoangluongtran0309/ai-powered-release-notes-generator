@@ -21,7 +21,10 @@ import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.release.ChangeNotReleasableException;
 import com.hoangluongtran0309.releaseflow.release.DraftReleaseExistsException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseApiController;
+import com.hoangluongtran0309.releaseflow.release.ReleaseEmptyException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseNotFoundException;
+import com.hoangluongtran0309.releaseflow.release.ReleasePublishedException;
+import com.hoangluongtran0309.releaseflow.release.ReleaseVersionTakenException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -135,6 +138,36 @@ public class ApiExceptionHandler {
                 "Draft release exists",
                 exception.getMessage(),
                 "draft_release_exists"
+        ));
+    }
+
+    @ExceptionHandler(ReleasePublishedException.class)
+    ResponseEntity<ProblemDetail> releasePublished(ReleasePublishedException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Release published",
+                exception.getMessage(),
+                "release_published"
+        ));
+    }
+
+    @ExceptionHandler(ReleaseEmptyException.class)
+    ResponseEntity<ProblemDetail> releaseEmpty(ReleaseEmptyException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Release empty",
+                exception.getMessage(),
+                "release_empty"
+        ));
+    }
+
+    @ExceptionHandler(ReleaseVersionTakenException.class)
+    ResponseEntity<ProblemDetail> releaseVersionTaken(ReleaseVersionTakenException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Release version taken",
+                exception.getMessage(),
+                "release_version_taken"
         ));
     }
 

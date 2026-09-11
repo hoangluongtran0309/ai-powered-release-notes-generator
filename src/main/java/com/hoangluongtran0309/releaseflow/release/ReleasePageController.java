@@ -57,7 +57,7 @@ public class ReleasePageController {
         try {
             ReleaseView draft = releaseService.createDraft(principal.organizationId(), projectId, request);
             return "redirect:" + draftPath(projectId, draft.id());
-        } catch (DraftReleaseExistsException exception) {
+        } catch (DraftReleaseExistsException | ReleaseVersionTakenException exception) {
             return renderReleasesWithError(principal, projectId, HttpStatus.CONFLICT, exception, model, response);
         } catch (ProjectNotFoundException exception) {
             return renderReleasesWithError(principal, projectId, HttpStatus.NOT_FOUND, exception, model, response);
@@ -90,6 +90,8 @@ public class ReleasePageController {
         }
         try {
             releaseService.edit(principal.organizationId(), projectId, releaseId, request);
+        } catch (ReleaseVersionTakenException | ReleasePublishedException exception) {
+            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
         } catch (ReleaseNotFoundException exception) {
             return renderDraft(principal, projectId, releaseId, model, response);
         }
@@ -106,6 +108,8 @@ public class ReleasePageController {
     ) {
         try {
             releaseService.discard(principal.organizationId(), projectId, releaseId);
+        } catch (ReleasePublishedException exception) {
+            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
         } catch (ReleaseNotFoundException exception) {
             return renderDraft(principal, projectId, releaseId, model, response);
         }
@@ -130,7 +134,7 @@ public class ReleasePageController {
             releaseService.addChanges(principal.organizationId(), projectId, releaseId, request);
         } catch (ChangeNotFoundException exception) {
             return renderDraftWithError(principal, projectId, releaseId, HttpStatus.NOT_FOUND, exception, model, response);
-        } catch (ChangeNotReleasableException exception) {
+        } catch (ChangeNotReleasableException | ReleasePublishedException exception) {
             return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
         } catch (ReleaseNotFoundException exception) {
             return renderDraft(principal, projectId, releaseId, model, response);
@@ -151,6 +155,26 @@ public class ReleasePageController {
             releaseService.removeChange(principal.organizationId(), projectId, releaseId, changeId);
         } catch (ChangeNotFoundException exception) {
             return renderDraftWithError(principal, projectId, releaseId, HttpStatus.NOT_FOUND, exception, model, response);
+        } catch (ReleasePublishedException exception) {
+            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
+        } catch (ReleaseNotFoundException exception) {
+            return renderDraft(principal, projectId, releaseId, model, response);
+        }
+        return "redirect:" + draftPath(projectId, releaseId);
+    }
+
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/publish")
+    String publish(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        try {
+            releaseService.publish(principal, projectId, releaseId);
+        } catch (ReleaseEmptyException | ReleasePublishedException | ReleaseVersionTakenException exception) {
+            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
         } catch (ReleaseNotFoundException exception) {
             return renderDraft(principal, projectId, releaseId, model, response);
         }
@@ -211,6 +235,9 @@ public class ReleasePageController {
         try {
             ReleaseView release = releaseService.get(principal.organizationId(), projectId, releaseId);
             model.addAttribute("release", release);
+            if (release.status() == ReleaseStatus.PUBLISHED) {
+                return "release-note";
+            }
             model.addAttribute(
                     "availableChanges",
                     releaseService.availableChanges(principal.organizationId(), projectId, releaseId)

@@ -86,6 +86,14 @@ version has been released.
 - Flyway migration `V7` for releases and release membership, with one draft
   per Project, one release per change, and foreign keys that keep a change
   inside its own Project and tenant.
+- Release publication from the draft page or
+  `POST /api/projects/{projectId}/releases/{releaseId}/publish`, storing an
+  immutable snapshot of sections and Markdown with the publisher and time.
+- A read-only published release page with copyable Markdown, and a published
+  releases list.
+- Flyway migration `V8` for publication columns, `release_notes`,
+  case-insensitive version uniqueness per Project, and triggers that reject
+  changes to published releases, their changes, and their notes.
 
 ### Fixed
 

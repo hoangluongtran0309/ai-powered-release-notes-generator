@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.release;
 
+import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.change.ChangeInboxService;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeView;
@@ -7,6 +8,8 @@ import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -18,19 +21,25 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Draft Releases of settled changes. Every operation is scoped by Organization and
- * Project; a Project has at most one draft, and a change belongs to at most one release.
+ * Draft Releases of settled changes and their publication. Every operation is scoped
+ * by Organization and Project; a Project has at most one draft, a change belongs to at
+ * most one release, and a published release never changes again.
  */
 @Service
 class ReleaseService {
 
     private static final String ONE_DRAFT_CONSTRAINT = "releases_one_draft_per_project";
+    private static final String VERSION_CONSTRAINT = "releases_project_version_unique";
     private static final String CHANGE_UNIQUE_CONSTRAINT = "release_changes_change_unique";
+    private static final TypeReference<List<ReleaseNoteSection>> SECTIONS = new TypeReference<>() {
+    };
 
     private final ProjectService projectService;
     private final ChangeInboxService changeService;
     private final ReleaseRepository releaseRepository;
     private final ReleaseChangeRepository releaseChangeRepository;
+    private final ReleaseNoteRepository releaseNoteRepository;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
     ReleaseService(
@@ -38,12 +47,16 @@ class ReleaseService {
             ChangeInboxService changeService,
             ReleaseRepository releaseRepository,
             ReleaseChangeRepository releaseChangeRepository,
+            ReleaseNoteRepository releaseNoteRepository,
+            ObjectMapper objectMapper,
             Clock clock
     ) {
         this.projectService = projectService;
         this.changeService = changeService;
         this.releaseRepository = releaseRepository;
         this.releaseChangeRepository = releaseChangeRepository;
+        this.releaseNoteRepository = releaseNoteRepository;
+        this.objectMapper = objectMapper;
         this.clock = clock;
     }
 
@@ -59,7 +72,8 @@ class ReleaseService {
                         release.getStatus(),
                         releaseChangeRepository.countByReleaseIdAndOrganizationId(release.getId(), organizationId),
                         release.getCreatedAt(),
-                        release.getUpdatedAt()
+                        release.getUpdatedAt(),
+                        release.getPublishedAt()
                 ))
                 .toList();
     }
@@ -69,6 +83,13 @@ class ReleaseService {
         projectService.get(organizationId, projectId);
         if (releaseRepository.existsByOrganizationIdAndProjectIdAndStatus(organizationId, projectId, ReleaseStatus.DRAFT)) {
             throw new DraftReleaseExistsException();
+        }
+        if (releaseRepository.existsByOrganizationIdAndProjectIdAndVersionIgnoreCase(
+                organizationId,
+                projectId,
+                request.getVersion()
+        )) {
+            throw new ReleaseVersionTakenException();
         }
         Release release = new Release(
                 UUID.randomUUID(),
@@ -81,7 +102,7 @@ class ReleaseService {
         try {
             releaseRepository.saveAndFlush(release);
         } catch (DataIntegrityViolationException exception) {
-            throw violates(exception, ONE_DRAFT_CONSTRAINT) ? new DraftReleaseExistsException() : exception;
+            throw translate(exception);
         }
         return view(release, List.of());
     }
@@ -94,15 +115,28 @@ class ReleaseService {
 
     @Transactional
     ReleaseView edit(UUID organizationId, UUID projectId, UUID releaseId, ReleaseRequest request) {
-        Release release = find(organizationId, projectId, releaseId);
+        Release release = findDraft(organizationId, projectId, releaseId);
+        if (releaseRepository.existsByOrganizationIdAndProjectIdAndVersionIgnoreCaseAndIdNot(
+                organizationId,
+                projectId,
+                request.getVersion(),
+                releaseId
+        )) {
+            throw new ReleaseVersionTakenException();
+        }
         release.edit(request.getVersion(), request.getSummary(), clock.instant());
+        try {
+            releaseRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw translate(exception);
+        }
         return view(release, includedChanges(release));
     }
 
     // The database cascade returns the draft's changes to the available pool.
     @Transactional
     void discard(UUID organizationId, UUID projectId, UUID releaseId) {
-        releaseRepository.delete(find(organizationId, projectId, releaseId));
+        releaseRepository.delete(findDraft(organizationId, projectId, releaseId));
     }
 
     @Transactional(readOnly = true)
@@ -116,7 +150,7 @@ class ReleaseService {
 
     @Transactional
     ReleaseView addChanges(UUID organizationId, UUID projectId, UUID releaseId, ReleaseChangesRequest request) {
-        Release release = find(organizationId, projectId, releaseId);
+        Release release = findDraft(organizationId, projectId, releaseId);
         Map<UUID, UUID> membership = membership(organizationId, projectId);
 
         List<ChangeView> candidates;
@@ -154,7 +188,7 @@ class ReleaseService {
 
     @Transactional
     ReleaseView removeChange(UUID organizationId, UUID projectId, UUID releaseId, UUID changeId) {
-        Release release = find(organizationId, projectId, releaseId);
+        Release release = findDraft(organizationId, projectId, releaseId);
         if (releaseChangeRepository.deleteByReleaseIdAndChangeIdAndOrganizationId(releaseId, changeId, organizationId) == 0) {
             throw new ChangeNotFoundException();
         }
@@ -162,9 +196,49 @@ class ReleaseService {
         return view(release, includedChanges(release));
     }
 
+    /**
+     * Freezes the draft: its release note is rendered once from the current changes and
+     * stored as an immutable snapshot, together with who published it and when.
+     */
+    @Transactional
+    ReleaseView publish(ReleaseFlowPrincipal publisher, UUID projectId, UUID releaseId) {
+        Release release = findDraft(publisher.organizationId(), projectId, releaseId);
+        List<ChangeView> changes = includedChanges(release);
+        if (changes.isEmpty()) {
+            throw new ReleaseEmptyException();
+        }
+        Instant now = clock.instant();
+        List<ReleaseNoteSection> sections = ReleaseNotePreview.sections(changes);
+        releaseNoteRepository.save(new ReleaseNote(
+                release.getId(),
+                release.getOrganizationId(),
+                release.getProjectId(),
+                release.getVersion(),
+                release.getSummary(),
+                objectMapper.writeValueAsString(sections),
+                ReleaseNoteMarkdown.render(release.getVersion(), release.getSummary(), sections),
+                now
+        ));
+        release.publish(publisher.userId(), publisher.displayName(), now);
+        try {
+            releaseRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw translate(exception);
+        }
+        return view(release, changes);
+    }
+
     private Release find(UUID organizationId, UUID projectId, UUID releaseId) {
         return releaseRepository.findByIdAndOrganizationIdAndProjectId(releaseId, organizationId, projectId)
                 .orElseThrow(ReleaseNotFoundException::new);
+    }
+
+    private Release findDraft(UUID organizationId, UUID projectId, UUID releaseId) {
+        Release release = find(organizationId, projectId, releaseId);
+        if (!release.isDraft()) {
+            throw new ReleasePublishedException();
+        }
+        return release;
     }
 
     private List<ChangeView> includedChanges(Release release) {
@@ -183,7 +257,26 @@ class ReleaseService {
                 .collect(Collectors.toMap(ReleaseChange::getChangeId, ReleaseChange::getReleaseId));
     }
 
-    private static ReleaseView view(Release release, List<ChangeView> changes) {
+    private ReleaseView view(Release release, List<ChangeView> changes) {
+        if (release.isDraft()) {
+            return view(release, changes, ReleaseNotePreview.sections(changes), null);
+        }
+        ReleaseNote note = releaseNoteRepository
+                .findByReleaseIdAndOrganizationIdAndProjectId(
+                        release.getId(),
+                        release.getOrganizationId(),
+                        release.getProjectId()
+                )
+                .orElseThrow(() -> new IllegalStateException("Published release " + release.getId() + " has no note."));
+        return view(release, changes, objectMapper.readValue(note.getSections(), SECTIONS), note.getMarkdown());
+    }
+
+    private static ReleaseView view(
+            Release release,
+            List<ChangeView> changes,
+            List<ReleaseNoteSection> sections,
+            String markdown
+    ) {
         return new ReleaseView(
                 release.getId(),
                 release.getProjectId(),
@@ -193,8 +286,21 @@ class ReleaseService {
                 release.getCreatedAt(),
                 release.getUpdatedAt(),
                 changes,
-                ReleaseNotePreview.sections(changes)
+                sections,
+                release.getPublishedAt(),
+                release.getPublisherName(),
+                markdown
         );
+    }
+
+    private static RuntimeException translate(DataIntegrityViolationException exception) {
+        if (violates(exception, ONE_DRAFT_CONSTRAINT)) {
+            return new DraftReleaseExistsException();
+        }
+        if (violates(exception, VERSION_CONSTRAINT)) {
+            return new ReleaseVersionTakenException();
+        }
+        return exception;
     }
 
     private static boolean violates(DataIntegrityViolationException exception, String constraint) {

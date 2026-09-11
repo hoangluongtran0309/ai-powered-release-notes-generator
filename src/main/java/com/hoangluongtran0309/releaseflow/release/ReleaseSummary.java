@@ -10,6 +10,7 @@ public record ReleaseSummary(
         ReleaseStatus status,
         long changeCount,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Instant publishedAt
 ) {
 }
