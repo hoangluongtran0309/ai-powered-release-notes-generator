@@ -5,12 +5,13 @@
 ReleaseFlow currently implements the bootstrap, Organization owner, Project
 plus GitHub configuration, signed GitHub merged-pull-request intake, and
 deterministic classification with the Change Inbox slices: one Spring Boot
-application, PostgreSQL/Flyway V1-V4, owner registration, session
+application, PostgreSQL/Flyway V1-V5, owner registration, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
 secrets, a signature-verified webhook endpoint that records normalized merged
 pull requests idempotently, rule-based classification with mandatory review
-for breaking and Unknown changes, a per-Project Change Inbox, REST/UI paths,
-and Testcontainers tests.
+for breaking and Unknown changes, a per-Project Change Inbox, optional
+person-initiated OpenAI suggestions for Unknown changes that stay in review,
+REST/UI paths, and Testcontainers tests.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
 
@@ -41,6 +42,8 @@ Read `README.md`, `docs/architecture.md`, and
 - Credentials never appear in source, logs, examples, or later API responses.
 - `RELEASEFLOW_CREDENTIAL_MASTER_KEY` is required at startup and must decode to
   exactly 32 bytes; webhook secrets are reveal-once values.
+- `RELEASEFLOW_OPENAI_API_KEY` and `RELEASEFLOW_OPENAI_MODEL` are optional but
+  must be set together; AI output is a suggestion that always stays in review.
 - Applied Flyway migrations are immutable; add `V2` or later for schema changes.
 - Published Release Notes are immutable snapshots.
 - Tenant-owned repository lookups include both resource ID and the current

@@ -18,7 +18,12 @@ public record ChangeView(
         ChangeCategory category,
         boolean breaking,
         boolean needsReview,
-        List<String> reasons
+        List<String> reasons,
+        ClassificationSource classificationSource,
+        AiStatus aiStatus,
+        String aiModel,
+        String aiFailure,
+        boolean aiEligible
 ) {
 
     static ChangeView from(Change change) {
@@ -36,7 +41,12 @@ public record ChangeView(
                 change.getCategory(),
                 change.isBreaking(),
                 change.isNeedsReview(),
-                change.getClassificationReasons()
+                change.getClassificationReasons(),
+                change.getClassificationSource(),
+                change.getAiStatus(),
+                change.getAiModel(),
+                change.getAiFailure(),
+                change.isAiEligible()
         );
     }
 }

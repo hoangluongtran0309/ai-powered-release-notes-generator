@@ -85,6 +85,31 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     }
 
     @Test
+    void keepsAiStateConsistentAndAiSuggestionsInReview() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        Instant now = Instant.now();
+
+        assertThatCode(() -> insertChange(organization, project, 1, "Title", VALID_SHA, "FIX", false, true,
+                "AI", "SUCCEEDED", "test-model", null, now)).doesNotThrowAnyException();
+        assertThatCode(() -> insertChange(organization, project, 2, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "RULES", "FAILED", null, "OpenAI returned HTTP 500.", now)).doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> insertChange(organization, project, 3, "Title", VALID_SHA, "FIX", false, false,
+                "AI", "SUCCEEDED", "test-model", null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 4, "Title", VALID_SHA, "FIX", false, true,
+                "AI", "SUCCEEDED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 5, "Title", VALID_SHA, "FIX", false, true,
+                "RULES", "SUCCEEDED", "test-model", null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 6, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "RULES", "FAILED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 7, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "RULES", "NOT_REQUESTED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 8, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "HUMAN", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void marksChangesRecordedBeforeV4AsUnknownAndNeedingReview() {
         String schema = "v4_backfill_check";
         try {
@@ -166,13 +191,34 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
             boolean breaking,
             boolean needsReview
     ) {
+        insertChange(organizationId, projectId, number, title, sha, category, breaking, needsReview,
+                "RULES", "NOT_REQUESTED", null, null, null);
+    }
+
+    private void insertChange(
+            UUID organizationId,
+            UUID projectId,
+            int number,
+            String title,
+            String sha,
+            String category,
+            boolean breaking,
+            boolean needsReview,
+            String source,
+            String aiStatus,
+            String aiModel,
+            String aiFailure,
+            Instant aiAttemptedAt
+    ) {
         jdbcTemplate.update(
                 """
                         INSERT INTO changes
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
-                             category, breaking, needs_review, classification_reasons)
-                        VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}')
+                             category, breaking, needs_review, classification_reasons,
+                             classification_source, ai_status, ai_model, ai_failure, ai_attempted_at)
+                        VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}',
+                                ?, ?, ?, ?, ?)
                         """,
                 UUID.randomUUID(),
                 organizationId,
@@ -186,7 +232,12 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 Timestamp.from(Instant.now()),
                 category,
                 breaking,
-                needsReview
+                needsReview,
+                source,
+                aiStatus,
+                aiModel,
+                aiFailure,
+                aiAttemptedAt == null ? null : Timestamp.from(aiAttemptedAt)
         );
     }
 }

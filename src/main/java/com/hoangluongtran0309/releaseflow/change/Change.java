@@ -10,6 +10,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -74,6 +75,23 @@ class Change {
     @Column(name = "classification_reasons", nullable = false, columnDefinition = "text[]")
     private String[] classificationReasons;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "classification_source", nullable = false, length = 10)
+    private ClassificationSource classificationSource;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ai_status", nullable = false, length = 20)
+    private AiStatus aiStatus;
+
+    @Column(name = "ai_model", length = 100)
+    private String aiModel;
+
+    @Column(name = "ai_failure", length = 300)
+    private String aiFailure;
+
+    @Column(name = "ai_attempted_at")
+    private Instant aiAttemptedAt;
+
     protected Change() {
     }
 
@@ -102,8 +120,35 @@ class Change {
         this.breaking = classification.breaking();
         this.needsReview = classification.needsReview();
         this.classificationReasons = classification.reasons().toArray(String[]::new);
+        this.classificationSource = ClassificationSource.RULES;
+        this.aiStatus = AiStatus.NOT_REQUESTED;
         this.deliveryId = deliveryId;
         this.receivedAt = receivedAt;
+    }
+
+    boolean isAiEligible() {
+        return category == ChangeCategory.UNKNOWN && classificationSource == ClassificationSource.RULES;
+    }
+
+    // AI can only add caution: it never clears a breaking flag or the need for review.
+    void applyAiSuggestion(AiClassification suggestion, String model, Instant attemptedAt) {
+        this.category = suggestion.category();
+        this.breaking = breaking || suggestion.breaking();
+        this.needsReview = true;
+        this.classificationSource = ClassificationSource.AI;
+        this.aiStatus = AiStatus.SUCCEEDED;
+        this.aiModel = model;
+        this.aiFailure = null;
+        this.aiAttemptedAt = attemptedAt;
+        String[] reasons = Arrays.copyOf(classificationReasons, classificationReasons.length + 1);
+        reasons[classificationReasons.length] = "AI suggestion (" + model + "): " + suggestion.rationale();
+        this.classificationReasons = reasons;
+    }
+
+    void recordAiFailure(String failure, Instant attemptedAt) {
+        this.aiStatus = AiStatus.FAILED;
+        this.aiFailure = failure;
+        this.aiAttemptedAt = attemptedAt;
     }
 
     UUID getId() {
@@ -176,5 +221,25 @@ class Change {
 
     List<String> getClassificationReasons() {
         return List.of(classificationReasons);
+    }
+
+    ClassificationSource getClassificationSource() {
+        return classificationSource;
+    }
+
+    AiStatus getAiStatus() {
+        return aiStatus;
+    }
+
+    String getAiModel() {
+        return aiModel;
+    }
+
+    String getAiFailure() {
+        return aiFailure;
+    }
+
+    Instant getAiAttemptedAt() {
+        return aiAttemptedAt;
     }
 }

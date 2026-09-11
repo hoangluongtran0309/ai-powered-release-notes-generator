@@ -15,7 +15,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V4`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V5`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -26,14 +26,15 @@ The application currently provides:
   breaking and unrecognized changes always marked for human review;
 - a per-Project Change Inbox in the UI and REST, filterable by category and
   review status;
+- optional, person-initiated OpenAI suggestions for Unknown changes, which
+  always stay in review;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
 
-AI classification, human review, and release publication are not implemented
-yet. See the
+Human review and release publication are not implemented yet. See the
 [implementation status](docs/implementation-status.md).
 
 ## Requirements
@@ -151,6 +152,41 @@ Open `/changes` to browse a Project's inbox, or call
 `status` (`needs-review`, `classified`). An unsupported value returns
 `400 invalid_change_filter`, and another Organization's Project returns
 `404 project_not_found`.
+
+## AI suggestions
+
+AI is optional. To enable it, set both variables before starting the
+application:
+
+```bash
+export RELEASEFLOW_OPENAI_API_KEY='replace-with-an-openai-api-key'
+export RELEASEFLOW_OPENAI_MODEL='replace-with-a-model-that-supports-structured-outputs'
+```
+
+If only one of them is set, startup fails. If neither is set, the application
+runs without AI. `RELEASEFLOW_OPENAI_BASE_URL` (default
+`https://api.openai.com/v1`) and `RELEASEFLOW_OPENAI_TIMEOUT` (default `PT30S`)
+are optional.
+
+When AI is enabled, every Unknown change in the Change Inbox has a
+**Classify with AI** button. REST clients call
+`POST /api/projects/{projectId}/changes/{changeId}/ai-classification` with the
+session and a CSRF token. ReleaseFlow sends the pull request title, labels,
+target branch, and up to 4000 characters of its description, with
+`store: false`. It does not send the author. The model's category, breaking
+flag, and rationale are stored as an **AI suggestion**, and the change still
+needs review.
+
+| Outcome | REST response |
+| --- | --- |
+| Suggestion stored | `200` with the updated change |
+| Change not in this Organization's Project | `404 change_not_found` |
+| Change already classified by rules or AI | `409 change_not_eligible_for_ai` |
+| OpenAI failed; the failure is stored and shown | `502 ai_classification_failed` |
+| AI not configured | `503 ai_classification_unavailable` |
+
+Nothing retries automatically. A person can press **Retry with AI** after a
+failure.
 
 ## Verify
 
