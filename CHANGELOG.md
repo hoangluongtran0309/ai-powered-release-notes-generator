@@ -78,6 +78,14 @@ version has been released.
 - Flyway migration `V6` for review columns, a same-tenant reviewer foreign
   key, and constraints that let breaking, Unknown, and AI-suggested changes
   leave review only through a recorded review.
+- Draft Releases: one per Project, with a version, an optional summary, and
+  hand-picked settled changes, through a Releases page and
+  `/api/projects/{projectId}/releases` endpoints.
+- A release note preview with a leading breaking-changes section, a fixed
+  category order, and Conventional Commit prefixes removed.
+- Flyway migration `V7` for releases and release membership, with one draft
+  per Project, one release per change, and foreign keys that keep a change
+  inside its own Project and tenant.
 
 ### Fixed
 

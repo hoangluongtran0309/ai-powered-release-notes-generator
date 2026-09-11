@@ -15,7 +15,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V6`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V7`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -30,13 +30,15 @@ The application currently provides:
   always stay in review;
 - human review of any change, recording who confirmed or corrected its
   category and breaking flag;
+- one Draft Release per Project, assembled from settled changes, with a live
+  release note preview;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
 
-Draft Releases and release publication are not implemented yet. See the
+Release Note publication is not implemented yet. See the
 [implementation status](docs/implementation-status.md).
 
 ## Requirements
@@ -211,6 +213,36 @@ with the session, a CSRF token, and `{"category": "fix", "breaking": false}`.
 It returns the updated change, `400 invalid_change_review` for `unknown` or an
 unsupported category, `400 validation_failed` when a field is missing, and
 `404 change_not_found` for another Organization's change.
+
+## Draft Releases
+
+Open **Releases** to prepare a Project's next release. A Project has at most
+one draft at a time. A draft has a version (up to 50 characters) and an
+optional summary. Only settled changes can be added, meaning changes that no
+longer need review; each change belongs to at most one release. The draft
+page lists the included changes, the available settled changes (with **Add
+selected** and **Add all available**), and a preview of the release note:
+breaking changes first, then Features, Fixes, Performance, Documentation, and
+Maintenance, with Conventional Commit prefixes removed from titles.
+Discarding a draft deletes it and makes its changes available again.
+
+REST clients use the same rules:
+
+```text
+GET    /api/projects/{projectId}/releases
+POST   /api/projects/{projectId}/releases                                {"version", "summary"}
+GET    /api/projects/{projectId}/releases/{releaseId}
+PUT    /api/projects/{projectId}/releases/{releaseId}                    {"version", "summary"}
+DELETE /api/projects/{projectId}/releases/{releaseId}
+GET    /api/projects/{projectId}/releases/{releaseId}/available-changes
+POST   /api/projects/{projectId}/releases/{releaseId}/changes            {"changeIds": [...]} or {"allAvailable": true}
+DELETE /api/projects/{projectId}/releases/{releaseId}/changes/{changeId}
+```
+
+A second draft returns `409 draft_release_exists`. A change that still needs
+review returns `409 change_not_releasable`. An unknown or foreign change
+returns `404 change_not_found`, and an unknown or foreign release returns
+`404 release_not_found`.
 
 ## Verify
 
