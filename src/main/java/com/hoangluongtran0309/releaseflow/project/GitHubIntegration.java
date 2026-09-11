@@ -39,6 +39,9 @@ class GitHubIntegration {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "last_delivery_at")
+    private Instant lastDeliveryAt;
+
     protected GitHubIntegration() {
     }
 
@@ -98,5 +101,9 @@ class GitHubIntegration {
 
     Instant getCreatedAt() {
         return createdAt;
+    }
+
+    Instant getLastDeliveryAt() {
+        return lastDeliveryAt;
     }
 }

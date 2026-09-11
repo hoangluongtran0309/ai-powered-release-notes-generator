@@ -9,6 +9,7 @@ public record GitHubIntegrationView(
         String repository,
         UUID webhookId,
         String webhookPath,
-        Instant createdAt
+        Instant createdAt,
+        Instant lastDeliveryAt
 ) {
 }

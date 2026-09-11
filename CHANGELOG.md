@@ -38,6 +38,20 @@ version has been released.
   overview, setup progress, copy buttons, and a persistent light/dark theme.
 - Tailwind CSS 4, DaisyUI 5, Thymeleaf Layout Dialect, and Alpine.js, with
   Node.js installed by the Maven build.
+- A public, sessionless `POST /webhooks/github/{webhookId}` endpoint that
+  verifies `X-Hub-Signature-256` with the integration's own decrypted secret
+  before reading the payload.
+- Tenant identity for webhooks taken only from the verified integration, and
+  rejection of deliveries naming another repository.
+- Normalized change records for merged pull requests with number, title,
+  description, author, labels, target branch, merge commit, merge time, URL,
+  and GitHub delivery ID.
+- Flyway migration `V3` for changes, one change per pull request within a
+  Project, and the last accepted delivery time of each GitHub integration.
+- Stable webhook error codes, `ping` handling, and acknowledged but ignored
+  unrelated events.
+- A "Receive webhooks" setup step and per-repository last-delivery status on
+  the Projects page.
 
 ### Fixed
 

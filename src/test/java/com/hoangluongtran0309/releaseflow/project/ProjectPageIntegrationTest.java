@@ -131,6 +131,8 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(get("/projects").session(session))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("acme/releaseflow")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Waiting for the first signed delivery")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("No verified delivery yet")))
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("Webhook secret</dt>")
                 )));

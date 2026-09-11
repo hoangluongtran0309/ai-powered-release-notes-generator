@@ -71,7 +71,8 @@ class ProjectService {
                         integration.getRepositoryName(),
                         integration.getWebhookId(),
                         GitHubIntegrationService.webhookPath(integration.getWebhookId()),
-                        integration.getCreatedAt()
+                        integration.getCreatedAt(),
+                        integration.getLastDeliveryAt()
                 )
         );
     }
