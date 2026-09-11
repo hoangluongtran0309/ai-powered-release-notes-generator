@@ -5,7 +5,8 @@ import java.util.Optional;
 
 public enum ReviewStatus {
     NEEDS_REVIEW("needs-review", "Needs review"),
-    CLASSIFIED("classified", "Classified");
+    CLASSIFIED("classified", "Classified"),
+    REVIEWED("reviewed", "Reviewed");
 
     private final String value;
     private final String label;

@@ -24,12 +24,16 @@ interface ChangeRepository extends JpaRepository<Change, UUID> {
               and change.projectId = :projectId
               and (:category is null or change.category = :category)
               and (:needsReview is null or change.needsReview = :needsReview)
+              and (:reviewed is null
+                   or (:reviewed = true and change.reviewedAt is not null)
+                   or (:reviewed = false and change.reviewedAt is null))
             order by change.mergedAt desc, change.id desc
             """)
     List<Change> findInbox(
             @Param("organizationId") UUID organizationId,
             @Param("projectId") UUID projectId,
             @Param("category") ChangeCategory category,
-            @Param("needsReview") Boolean needsReview
+            @Param("needsReview") Boolean needsReview,
+            @Param("reviewed") Boolean reviewed
     );
 }

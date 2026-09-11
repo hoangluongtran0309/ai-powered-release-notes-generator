@@ -195,7 +195,10 @@ class OpenAiChangeClassifierTest {
                 AiStatus.NOT_REQUESTED,
                 null,
                 null,
-                true
+                true,
+                null,
+                null,
+                null
         );
     }
 }

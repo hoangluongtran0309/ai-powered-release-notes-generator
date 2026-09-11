@@ -27,6 +27,8 @@ GET  /changes                 -> ChangeInboxService (Change Inbox UI)
 GET  /api/projects/{id}/changes -> ChangeInboxService
 POST /projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
 POST /api/projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
+POST /projects/{id}/changes/{changeId}/review -> ChangeReviewService
+POST /api/projects/{id}/changes/{changeId}/review -> ChangeReviewService
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -83,8 +85,9 @@ changes
   delivery_id (X-GitHub-Delivery that recorded the change)
   received_at
   category, breaking, needs_review, classification_reasons (text[])
-  classification_source (RULES | AI), ai_status (NOT_REQUESTED | SUCCEEDED | FAILED)
+  classification_source (RULES | AI | HUMAN), ai_status (NOT_REQUESTED | SUCCEEDED | FAILED)
   ai_model, ai_failure, ai_attempted_at
+  reviewed_by (composite FK with organization_id -> app_users), reviewer_name, reviewed_at
 ```
 
 Authenticated `ReleaseFlowPrincipal` contains both user ID and Organization ID.
@@ -214,6 +217,32 @@ and attempt time consistent, and requires review for every AI suggestion. The
 REST endpoint reports a stored failure as `502 ai_classification_failed`; the
 UI redirects back to the inbox card, which shows the failure and a retry
 button.
+
+## Human review
+
+`ChangeReviewService` settles one change in a single transaction. It loads the
+change by ID, Organization ID, and Project ID, and requires a concrete
+category. It then stores the category and breaking flag exactly as the
+reviewer submitted them, sets `needs_review = false`, and records
+`reviewed_by`, `reviewer_name`, and `reviewed_at`. Because the reviewer
+submits explicit values rather than approving whatever is current, a stale
+page cannot confirm a classification it did not show. Any change may be
+reviewed, including one already settled by rules or by an earlier review; the
+latest review is kept.
+
+Confirming unchanged values keeps the classification source (`RULES` or `AI`).
+Changing either value sets it to `HUMAN`. A reviewer may clear a breaking
+flag: the invariant that breaking changes require human review is met by the
+recorded review itself.
+
+Flyway `V6` adds a unique `(id, organization_id)` key on `app_users` so that
+`changes_reviewer_fk` keeps reviewers inside the change's Organization. It
+redefines the review constraints so that breaking, Unknown, and AI-suggested
+changes can leave review only with a recorded review, a `HUMAN` source always
+has one, and a reviewed change is never Unknown. A reviewed change is no longer
+Unknown, so it is never eligible for AI classification. The inbox `status`
+filter distinguishes `needs-review`, `classified` (settled without a person),
+and `reviewed`.
 
 ## User interface
 

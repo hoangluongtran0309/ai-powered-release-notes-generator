@@ -186,8 +186,8 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(post("/projects/{projectId}/changes/{changeId}/ai-classification", projectId, unknown)
                         .session(owner.session())
                         .with(csrf())
-                        .param("category", "unknown")
-                        .param("status", ""))
+                        .param("returnCategory", "unknown")
+                        .param("returnStatus", ""))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/changes?project=" + projectId + "&category=unknown#change-" + unknown));
         mockMvc.perform(get("/changes").session(owner.session()).param("category", "unknown"))

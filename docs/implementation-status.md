@@ -38,19 +38,22 @@
 - One OpenAI structured-classification integration: person-initiated
   suggestions for Unknown changes, strict JSON Schema output, explicit
   FAILED states, no network call inside a transaction, and Flyway `V5`.
+- Human review of any change through Thymeleaf and REST: the reviewer confirms
+  or corrects the category and breaking flag, and the reviewer and time are
+  recorded. Flyway `V6` adds the review columns, a same-tenant reviewer foreign
+  key, and constraints so breaking, Unknown, and AI-suggested changes leave
+  review only through a recorded review.
 
 ## In progress
 
-- Nothing. The OpenAI structured-classification slice is complete and
-  awaiting review.
+- Nothing. The human review slice is complete and awaiting review.
 
 ## Planned
 
 In intended implementation order:
 
-1. Human review.
-2. Draft Release management.
-3. Immutable Release Note publication.
+1. Draft Release management.
+2. Immutable Release Note publication.
 
 ## Deliberately deferred
 
@@ -66,3 +69,4 @@ In intended implementation order:
   observability, release automation, and an open-core/enterprise module split.
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
+- Review history, comments, reviewer roles, and bulk review.

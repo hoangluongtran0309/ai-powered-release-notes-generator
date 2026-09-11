@@ -92,6 +92,15 @@ class Change {
     @Column(name = "ai_attempted_at")
     private Instant aiAttemptedAt;
 
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+
+    @Column(name = "reviewer_name", length = 120)
+    private String reviewerName;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
     protected Change() {
     }
 
@@ -143,6 +152,20 @@ class Change {
         String[] reasons = Arrays.copyOf(classificationReasons, classificationReasons.length + 1);
         reasons[classificationReasons.length] = "AI suggestion (" + model + "): " + suggestion.rationale();
         this.classificationReasons = reasons;
+    }
+
+    // Stores exactly what the reviewer confirmed. Changing either value makes the
+    // reviewer the source of the classification.
+    void review(ChangeCategory reviewedCategory, boolean reviewedBreaking, UUID reviewer, String name, Instant at) {
+        if (reviewedCategory != category || reviewedBreaking != breaking) {
+            this.classificationSource = ClassificationSource.HUMAN;
+        }
+        this.category = reviewedCategory;
+        this.breaking = reviewedBreaking;
+        this.needsReview = false;
+        this.reviewedBy = reviewer;
+        this.reviewerName = name;
+        this.reviewedAt = at;
     }
 
     void recordAiFailure(String failure, Instant attemptedAt) {
@@ -241,5 +264,17 @@ class Change {
 
     Instant getAiAttemptedAt() {
         return aiAttemptedAt;
+    }
+
+    UUID getReviewedBy() {
+        return reviewedBy;
+    }
+
+    String getReviewerName() {
+        return reviewerName;
+    }
+
+    Instant getReviewedAt() {
+        return reviewedAt;
     }
 }
