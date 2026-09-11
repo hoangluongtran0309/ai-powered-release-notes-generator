@@ -23,7 +23,10 @@ public record ChangeView(
         AiStatus aiStatus,
         String aiModel,
         String aiFailure,
-        boolean aiEligible
+        boolean aiEligible,
+        UUID reviewedBy,
+        String reviewerName,
+        Instant reviewedAt
 ) {
 
     static ChangeView from(Change change) {
@@ -46,7 +49,10 @@ public record ChangeView(
                 change.getAiStatus(),
                 change.getAiModel(),
                 change.getAiFailure(),
-                change.isAiEligible()
+                change.isAiEligible(),
+                change.getReviewedBy(),
+                change.getReviewerName(),
+                change.getReviewedAt()
         );
     }
 }

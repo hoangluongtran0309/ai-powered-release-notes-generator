@@ -10,6 +10,7 @@ import com.hoangluongtran0309.releaseflow.change.ChangeNotEligibleForAiException
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
+import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadException;
 import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchException;
 import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
@@ -149,6 +150,16 @@ public class ApiExceptionHandler {
                 "AI classification unavailable",
                 exception.getMessage(),
                 "ai_classification_unavailable"
+        ));
+    }
+
+    @ExceptionHandler(InvalidChangeReviewException.class)
+    ResponseEntity<ProblemDetail> invalidChangeReview(InvalidChangeReviewException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid change review",
+                exception.getMessage(),
+                "invalid_change_review"
         ));
     }
 

@@ -70,6 +70,14 @@ version has been released.
   AI suggestion in review.
 - Stable AI error codes, safe stored failure messages, and a guard against
   calling OpenAI inside a database transaction.
+- Human review of any change from the Change Inbox or
+  `POST /api/projects/{projectId}/changes/{changeId}/review`, storing the
+  confirmed category and breaking flag with the reviewer and time.
+- A `reviewed` inbox filter, "Reviewed"/"Corrected by" card details, and a
+  `HUMAN` classification source for corrected changes.
+- Flyway migration `V6` for review columns, a same-tenant reviewer foreign
+  key, and constraints that let breaking, Unknown, and AI-suggested changes
+  leave review only through a recorded review.
 
 ### Fixed
 

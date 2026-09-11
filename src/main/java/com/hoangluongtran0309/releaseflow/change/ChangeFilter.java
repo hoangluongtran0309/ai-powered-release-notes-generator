@@ -20,7 +20,7 @@ record ChangeFilter(ChangeCategory category, ReviewStatus status) {
         ReviewStatus parsedStatus = null;
         if (status != null && !status.isBlank()) {
             parsedStatus = ReviewStatus.fromValue(status).orElseThrow(() -> new InvalidChangeFilterException(
-                    "Status must be one of: needs-review, classified."
+                    "Status must be one of: needs-review, classified, reviewed."
             ));
         }
         return new ChangeFilter(parsedCategory, parsedStatus);
@@ -28,5 +28,13 @@ record ChangeFilter(ChangeCategory category, ReviewStatus status) {
 
     Boolean needsReview() {
         return status == null ? null : status == ReviewStatus.NEEDS_REVIEW;
+    }
+
+    // "Classified" means settled by rules or AI without a person; "reviewed" means a person settled it.
+    Boolean reviewed() {
+        if (status == null || status == ReviewStatus.NEEDS_REVIEW) {
+            return null;
+        }
+        return status == ReviewStatus.REVIEWED;
     }
 }

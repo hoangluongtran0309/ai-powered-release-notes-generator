@@ -33,6 +33,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     void clearDatabase() {
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
+        jdbcTemplate.update("DELETE FROM app_users");
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -110,6 +111,33 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     }
 
     @Test
+    void recordsReviewsOnlyForSettledChangesByReviewersOfTheSameTenant() {
+        UUID organization = insertOrganization("First");
+        UUID otherOrganization = insertOrganization("Second");
+        UUID project = insertProject(organization);
+        UUID reviewer = insertUser(organization, "reviewer@example.com");
+        UUID outsider = insertUser(otherOrganization, "outsider@example.com");
+
+        assertThatCode(() -> insertReviewed(organization, project, 1, "FIX", true, false, "RULES", "NOT_REQUESTED", null, reviewer))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertReviewed(organization, project, 2, "FIX", false, false, "AI", "SUCCEEDED", "test-model", reviewer))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertReviewed(organization, project, 3, "FIX", false, false, "HUMAN", "SUCCEEDED", "test-model", reviewer))
+                .doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> insertReviewed(organization, project, 4, "FIX", false, false, "RULES", "NOT_REQUESTED", null, outsider))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertReviewed(organization, project, 5, "UNKNOWN", false, false, "HUMAN", "NOT_REQUESTED", null, reviewer))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertReviewed(organization, project, 6, "FIX", false, true, "HUMAN", "NOT_REQUESTED", null, reviewer))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 7, "Title", VALID_SHA, "FIX", false, false,
+                "HUMAN", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 8, "Title", VALID_SHA, "FIX", true, false,
+                "RULES", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void marksChangesRecordedBeforeV4AsUnknownAndNeedingReview() {
         String schema = "v4_backfill_check";
         try {
@@ -152,6 +180,61 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 .target(target)
                 .load()
                 .migrate();
+    }
+
+    private UUID insertUser(UUID organizationId, String email) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO app_users (id, organization_id, email, password_hash, display_name, role, created_at)
+                        VALUES (?, ?, ?, 'hash', 'Reviewer', 'OWNER', now())
+                        """,
+                id,
+                organizationId,
+                email
+        );
+        return id;
+    }
+
+    private void insertReviewed(
+            UUID organizationId,
+            UUID projectId,
+            int number,
+            String category,
+            boolean breaking,
+            boolean needsReview,
+            String source,
+            String aiStatus,
+            String aiModel,
+            UUID reviewer
+    ) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO changes
+                            (id, organization_id, project_id, pull_request_number, title, author_login, labels,
+                             target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
+                             category, breaking, needs_review, classification_reasons,
+                             classification_source, ai_status, ai_model, ai_attempted_at,
+                             reviewed_by, reviewer_name, reviewed_at)
+                        VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main', ?, now(),
+                                'https://github.com/acme/releaseflow/pull/1', ?, now(),
+                                ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, 'Reviewer', now())
+                        """,
+                UUID.randomUUID(),
+                organizationId,
+                projectId,
+                number,
+                VALID_SHA,
+                UUID.randomUUID(),
+                category,
+                breaking,
+                needsReview,
+                source,
+                aiStatus,
+                aiModel,
+                "NOT_REQUESTED".equals(aiStatus) ? null : Timestamp.from(Instant.now()),
+                reviewer
+        );
     }
 
     private UUID insertOrganization(String name) {

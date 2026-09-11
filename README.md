@@ -15,7 +15,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V5`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V6`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -28,13 +28,15 @@ The application currently provides:
   review status;
 - optional, person-initiated OpenAI suggestions for Unknown changes, which
   always stay in review;
+- human review of any change, recording who confirmed or corrected its
+  category and breaking flag;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
 
-Human review and release publication are not implemented yet. See the
+Draft Releases and release publication are not implemented yet. See the
 [implementation status](docs/implementation-status.md).
 
 ## Requirements
@@ -149,7 +151,8 @@ classification existed are Unknown and need review.
 Open `/changes` to browse a Project's inbox, or call
 `GET /api/projects/{projectId}/changes`. Both accept `category`
 (`feature`, `fix`, `performance`, `documentation`, `maintenance`, `unknown`) and
-`status` (`needs-review`, `classified`). An unsupported value returns
+`status` (`needs-review`, `classified` for changes settled by rules without a
+person, `reviewed`). An unsupported value returns
 `400 invalid_change_filter`, and another Organization's Project returns
 `404 project_not_found`.
 
@@ -187,6 +190,27 @@ needs review.
 
 Nothing retries automatically. A person can press **Retry with AI** after a
 failure.
+
+## Human review
+
+Every change in the Change Inbox has a review form prefilled with its current
+category and breaking flag. Changes that need review show the form directly;
+other changes show it under **Edit classification**. The reviewer keeps or
+changes the values and presses **Confirm review**. ReleaseFlow stores exactly
+the submitted values, clears the need for review, and records the reviewer and
+time. A reviewer must choose a real category, since a reviewed change cannot
+stay Unknown, and may clear a breaking flag set by the rules or AI.
+
+Confirming without changes keeps the original classification source (rules or
+AI). Changing the category or breaking flag makes the reviewer the source,
+shown as "Corrected by". A change can be reviewed again; the latest review is
+kept.
+
+REST clients call `POST /api/projects/{projectId}/changes/{changeId}/review`
+with the session, a CSRF token, and `{"category": "fix", "breaking": false}`.
+It returns the updated change, `400 invalid_change_review` for `unknown` or an
+unsupported category, `400 validation_failed` when a field is missing, and
+`404 change_not_found` for another Organization's change.
 
 ## Verify
 

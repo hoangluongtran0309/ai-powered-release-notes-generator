@@ -22,7 +22,13 @@ class ChangeInboxService {
     List<ChangeView> list(UUID organizationId, UUID projectId, ChangeFilter filter) {
         // Rejects another tenant's Project as not found instead of returning an empty inbox.
         projectService.get(organizationId, projectId);
-        return changeRepository.findInbox(organizationId, projectId, filter.category(), filter.needsReview())
+        return changeRepository.findInbox(
+                        organizationId,
+                        projectId,
+                        filter.category(),
+                        filter.needsReview(),
+                        filter.reviewed()
+                )
                 .stream()
                 .map(ChangeView::from)
                 .toList();
