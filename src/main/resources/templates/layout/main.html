@@ -82,8 +82,14 @@
                    th:attr="aria-current=${currentPath == '/'} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#overview}"></use></svg><span>Overview</span></a>
                 <a th:href="@{/changes}" class="app-nav-link" th:classappend="${#strings.startsWith(currentPath, '/changes')} ? 'is-active'"
                    th:attr="aria-current=${#strings.startsWith(currentPath, '/changes')} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#inbox}"></use></svg><span>Change Inbox</span></a>
-                <a th:href="@{/projects}" class="app-nav-link" th:classappend="${#strings.startsWith(currentPath, '/projects')} ? 'is-active'"
-                   th:attr="aria-current=${#strings.startsWith(currentPath, '/projects')} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#settings}"></use></svg><span>Projects</span></a>
+                <a th:href="@{/releases}" class="app-nav-link"
+                   th:with="active=${#strings.startsWith(currentPath, '/releases') or #strings.contains(currentPath, '/releases/')}"
+                   th:classappend="${active} ? 'is-active'"
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#releases}"></use></svg><span>Releases</span></a>
+                <a th:href="@{/projects}" class="app-nav-link"
+                   th:with="active=${#strings.startsWith(currentPath, '/projects') and !#strings.contains(currentPath, '/releases')}"
+                   th:classappend="${active} ? 'is-active'"
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#settings}"></use></svg><span>Projects</span></a>
             </nav>
             <div class="app-sidebar-divider border-t p-4">
                 <div class="subtle-panel flex items-start gap-3 p-3">

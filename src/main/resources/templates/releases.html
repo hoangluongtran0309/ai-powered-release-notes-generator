@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Releases</title>
+</head>
+<body>
+<p layout:fragment="page-title">Releases</p>
+<div layout:fragment="content"
+     th:with="hasProjects=${!#lists.isEmpty(projects)}, draft=${#lists.isEmpty(releases) ? null : releases[0]}">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">Release preparation</p>
+            <h1 class="page-heading">Releases</h1>
+            <p class="page-subtitle">Prepare the next release of a project from changes that no longer need review.</p>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
+
+    <section class="empty-state" th:unless="${hasProjects}">
+        <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#releases}"></use></svg></div>
+        <h2 class="mt-5 text-xl font-bold">No projects have been created yet.</h2>
+        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create a project and connect its GitHub repository before preparing a release.</p>
+        <a class="btn btn-primary mt-5" th:href="@{/projects}">Open projects</a>
+    </section>
+
+    <th:block th:if="${hasProjects}">
+        <form class="surface-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end" th:action="@{/releases}" method="get"
+              aria-label="Choose project">
+            <label class="form-control sm:flex-1"><span class="label-text font-medium">Project</span>
+                <select name="project" class="select select-bordered w-full">
+                    <option th:each="project : ${projects}" th:value="${project.id}" th:text="${project.name}"
+                            th:selected="${project.id == selectedProjectId}">Project</option>
+                </select>
+            </label>
+            <button type="submit" class="btn btn-outline">Show</button>
+        </form>
+
+        <article class="surface-card mt-6 p-6" th:if="${draft != null}" id="draft-release">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold text-indigo-600">Draft release</p>
+                    <h2 class="mt-1 text-2xl font-bold" th:text="${draft.version}">1.4.0</h2>
+                    <p class="mt-2 whitespace-pre-line text-sm text-slate-600" th:if="${draft.summary != null}"
+                       th:text="${draft.summary}">Summary</p>
+                    <p class="mt-2 text-xs text-slate-500">
+                        <span th:text="${draft.changeCount == 1} ? '1 change' : |${draft.changeCount} changes|">3 changes</span>
+                        <span aria-hidden="true">·</span>
+                        updated
+                        <time th:datetime="${draft.updatedAt}"
+                              th:text="|${#temporals.format(draft.updatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
+                    </p>
+                </div>
+                <a class="btn btn-primary" th:href="@{/projects/{projectId}/releases/{releaseId}(projectId=${selectedProjectId},releaseId=${draft.id})}">Open draft</a>
+            </div>
+        </article>
+
+        <section class="surface-card mt-6 p-6" th:if="${draft == null and projectFound}">
+            <h2 class="section-heading">Create a draft release</h2>
+            <p class="section-copy">A project prepares one release at a time. You can add changes once the draft exists.</p>
+            <form class="mt-5 grid gap-4" method="post" th:object="${releaseRequest}"
+                  th:action="@{/projects/{projectId}/releases(projectId=${selectedProjectId})}">
+                <label class="form-control"><span class="label-text font-medium">Version</span>
+                    <input type="text" th:field="*{version}" maxlength="50" required placeholder="1.4.0"
+                           class="input input-bordered w-full sm:max-w-xs" th:errorclass="input-error">
+                    <span class="field-error" th:if="${#fields.hasErrors('version')}" th:errors="*{version}"></span>
+                </label>
+                <label class="form-control"><span class="label-text font-medium">Summary <span class="text-slate-500">(optional)</span></span>
+                    <textarea th:field="*{summary}" maxlength="2000" rows="3" class="textarea textarea-bordered w-full"
+                              th:errorclass="textarea-error" placeholder="What this release brings, in a sentence or two."></textarea>
+                    <span class="field-error" th:if="${#fields.hasErrors('summary')}" th:errors="*{summary}"></span>
+                </label>
+                <div><button type="submit" class="btn btn-primary">Create draft</button></div>
+            </form>
+        </section>
+    </th:block>
+</div>
+</body>
+</html>

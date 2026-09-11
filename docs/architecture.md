@@ -4,7 +4,7 @@
 
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
-`account`, `project`, `change`, and shared `configuration`:
+`account`, `project`, `change`, `release`, and shared `configuration`:
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
@@ -29,6 +29,14 @@ POST /projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificati
 POST /api/projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
 POST /projects/{id}/changes/{changeId}/review -> ChangeReviewService
 POST /api/projects/{id}/changes/{changeId}/review -> ChangeReviewService
+GET  /releases                -> ReleaseService (Releases UI)
+POST /projects/{id}/releases[/{releaseId}[/discard|/changes|/changes/{changeId}/remove]] -> ReleaseService
+GET  /projects/{id}/releases/{releaseId} -> ReleaseService (draft page)
+GET|POST /api/projects/{id}/releases -> ReleaseService
+GET|PUT|DELETE /api/projects/{id}/releases/{releaseId} -> ReleaseService
+GET  /api/projects/{id}/releases/{releaseId}/available-changes -> ReleaseService
+POST /api/projects/{id}/releases/{releaseId}/changes -> ReleaseService
+DELETE /api/projects/{id}/releases/{releaseId}/changes/{changeId} -> ReleaseService
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -88,6 +96,19 @@ changes
   classification_source (RULES | AI | HUMAN), ai_status (NOT_REQUESTED | SUCCEEDED | FAILED)
   ai_model, ai_failure, ai_attempted_at
   reviewed_by (composite FK with organization_id -> app_users), reviewer_name, reviewed_at
+
+releases
+  id (UUID PK)
+  organization_id, project_id (composite FK -> projects)
+  version, summary
+  status (DRAFT; at most one per Project)
+  created_at, updated_at
+
+release_changes
+  release_id + change_id (PK); change_id unique
+  (release_id, organization_id, project_id) FK -> releases, ON DELETE CASCADE
+  (change_id, organization_id, project_id) FK -> changes
+  added_at
 ```
 
 Authenticated `ReleaseFlowPrincipal` contains both user ID and Organization ID.
@@ -243,6 +264,29 @@ has one, and a reviewed change is never Unknown. A reviewed change is no longer
 Unknown, so it is never eligible for AI classification. The inbox `status`
 filter distinguishes `needs-review`, `classified` (settled without a person),
 and `reviewed`.
+
+## Draft Releases
+
+The `release` capability reads changes only through the public
+`ChangeInboxService.settledChanges` and `ChangeInboxService.changes` methods,
+both scoped by Organization and Project. `change` does not depend on
+`release`. `ReleaseService` looks a Project up through `ProjectService.get` and
+a release by ID, Organization ID, and Project ID.
+
+A Project has at most one draft (`releases_one_draft_per_project`, a partial
+unique index). Only settled changes, those with `needs_review = false`, can be
+added. No path returns a settled change to review, so a draft never contains
+work that still needs review. `release_changes_change_unique` keeps each
+change in one release. The composite foreign keys on
+`(id, organization_id, project_id)` make the database reject a change joining
+a release of another Project or tenant. Discarding a draft deletes it, and the
+cascade makes its changes available again.
+
+`ReleaseNotePreview` builds the preview on every read. Breaking changes are
+listed first and only there; the rest follow in the order Features, Fixes,
+Performance, Documentation, Maintenance, sorted by merge time. Titles drop a
+leading Conventional Commit prefix. Publication, which will turn a draft into
+an immutable snapshot, is not implemented yet.
 
 ## User interface
 

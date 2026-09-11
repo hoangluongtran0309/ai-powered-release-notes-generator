@@ -18,6 +18,10 @@ import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationAlreadyConfig
 import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAlreadyConnectedException;
 import com.hoangluongtran0309.releaseflow.project.ProjectApiController;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
+import com.hoangluongtran0309.releaseflow.release.ChangeNotReleasableException;
+import com.hoangluongtran0309.releaseflow.release.DraftReleaseExistsException;
+import com.hoangluongtran0309.releaseflow.release.ReleaseApiController;
+import com.hoangluongtran0309.releaseflow.release.ReleaseNotFoundException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -37,7 +41,8 @@ import java.util.Map;
         SessionApiController.class,
         ProjectApiController.class,
         GitHubWebhookController.class,
-        ChangeApiController.class
+        ChangeApiController.class,
+        ReleaseApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -110,6 +115,36 @@ public class ApiExceptionHandler {
                 "GitHub repository already connected",
                 exception.getMessage(),
                 "github_repository_already_connected"
+        ));
+    }
+
+    @ExceptionHandler(ReleaseNotFoundException.class)
+    ResponseEntity<ProblemDetail> releaseNotFound(ReleaseNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Release not found",
+                exception.getMessage(),
+                "release_not_found"
+        ));
+    }
+
+    @ExceptionHandler(DraftReleaseExistsException.class)
+    ResponseEntity<ProblemDetail> draftReleaseExists(DraftReleaseExistsException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Draft release exists",
+                exception.getMessage(),
+                "draft_release_exists"
+        ));
+    }
+
+    @ExceptionHandler(ChangeNotReleasableException.class)
+    ResponseEntity<ProblemDetail> changeNotReleasable(ChangeNotReleasableException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Change not releasable",
+                exception.getMessage(),
+                "change_not_releasable"
         ));
     }
 

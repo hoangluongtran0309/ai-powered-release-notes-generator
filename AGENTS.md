@@ -4,16 +4,16 @@
 
 ReleaseFlow currently implements the bootstrap, Organization owner, Project
 plus GitHub configuration, signed GitHub merged-pull-request intake,
-deterministic classification with the Change Inbox, OpenAI classification, and
-human review slices: one Spring Boot
-application, PostgreSQL/Flyway V1-V6, owner registration, session
+deterministic classification with the Change Inbox, OpenAI classification,
+human review, and Draft Release slices: one Spring Boot
+application, PostgreSQL/Flyway V1-V7, owner registration, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
 secrets, a signature-verified webhook endpoint that records normalized merged
 pull requests idempotently, rule-based classification with mandatory review
 for breaking and Unknown changes, a per-Project Change Inbox, optional
 person-initiated OpenAI suggestions for Unknown changes that stay in review,
-recorded human review of any change, REST/UI paths, and Testcontainers
-tests.
+recorded human review of any change, one Draft Release per Project built from
+settled changes, REST/UI paths, and Testcontainers tests.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
 

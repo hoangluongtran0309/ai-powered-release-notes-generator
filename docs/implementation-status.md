@@ -43,17 +43,21 @@
   recorded. Flyway `V6` adds the review columns, a same-tenant reviewer foreign
   key, and constraints so breaking, Unknown, and AI-suggested changes leave
   review only through a recorded review.
+- Draft Release management through Thymeleaf and REST: one draft per Project,
+  version and summary, settled changes added by hand or all at once, removal,
+  discard, and a grouped release note preview. Flyway `V7` enforces one draft
+  per Project, one release per change, and same-Project, same-tenant
+  membership.
 
 ## In progress
 
-- Nothing. The human review slice is complete and awaiting review.
+- Nothing. The Draft Release slice is complete and awaiting review.
 
 ## Planned
 
 In intended implementation order:
 
-1. Draft Release management.
-2. Immutable Release Note publication.
+1. Immutable Release Note publication.
 
 ## Deliberately deferred
 
@@ -70,3 +74,5 @@ In intended implementation order:
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
 - Review history, comments, reviewer roles, and bulk review.
+- Several concurrent drafts per Project, item reordering, and editing release
+  note text.
