@@ -3,7 +3,9 @@ package com.hoangluongtran0309.releaseflow.configuration;
 import com.hoangluongtran0309.releaseflow.account.DuplicateEmailException;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
+import com.hoangluongtran0309.releaseflow.change.ChangeApiController;
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
+import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
 import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadException;
 import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchException;
 import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
@@ -29,7 +31,8 @@ import java.util.Map;
         RegistrationApiController.class,
         SessionApiController.class,
         ProjectApiController.class,
-        GitHubWebhookController.class
+        GitHubWebhookController.class,
+        ChangeApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -102,6 +105,16 @@ public class ApiExceptionHandler {
                 "GitHub repository already connected",
                 exception.getMessage(),
                 "github_repository_already_connected"
+        ));
+    }
+
+    @ExceptionHandler(InvalidChangeFilterException.class)
+    ResponseEntity<ProblemDetail> invalidChangeFilter(InvalidChangeFilterException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid change filter",
+                exception.getMessage(),
+                "invalid_change_filter"
         ));
     }
 

@@ -15,21 +15,25 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V3`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V4`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
 - AES-256-GCM encryption at rest with one-time secret reveal;
 - a signed GitHub webhook endpoint that records each merged pull request once
   as a normalized change, and shows the last verified delivery per repository;
+- deterministic, explainable classification of every recorded change, with
+  breaking and unrecognized changes always marked for human review;
+- a per-Project Change Inbox in the UI and REST, filterable by category and
+  review status;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
 
-Classification, the Change Inbox, review, and release publication are not
-implemented yet. See the
+AI classification, human review, and release publication are not implemented
+yet. See the
 [implementation status](docs/implementation-status.md).
 
 ## Requirements
@@ -121,6 +125,32 @@ curl -sS -X POST "http://localhost:8080$WEBHOOK_PATH" \
   -H "X-Hub-Signature-256: $SIGNATURE" \
   --data-binary "$BODY"
 ```
+
+## Change Inbox
+
+Every change is classified when its webhook delivery is recorded, using fixed
+rules and no network call:
+
+- a Conventional Commit type at the start of the pull request title (`feat`,
+  `fix`, `perf`, `docs`, `refactor`, `chore`, `ci`, `build`, `test`, with an
+  optional scope) selects Feature, Fix, Performance, Documentation, or
+  Maintenance;
+- without a title type, familiar labels such as `enhancement`, `bug`,
+  `documentation`, or `dependencies` select the category, unless they disagree;
+- a `!` after the title type, a `breaking-change` label, or a
+  `BREAKING CHANGE:` footer in the description marks the change as breaking;
+- anything else is Unknown.
+
+Breaking and Unknown changes always need review. Each change keeps the list of
+rules that matched, and the inbox shows it. Changes recorded before
+classification existed are Unknown and need review.
+
+Open `/changes` to browse a Project's inbox, or call
+`GET /api/projects/{projectId}/changes`. Both accept `category`
+(`feature`, `fix`, `performance`, `documentation`, `maintenance`, `unknown`) and
+`status` (`needs-review`, `classified`). An unsupported value returns
+`400 invalid_change_filter`, and another Organization's Project returns
+`404 project_not_found`.
 
 ## Verify
 

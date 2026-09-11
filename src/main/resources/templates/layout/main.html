@@ -80,6 +80,8 @@
                 <p class="app-sidebar-muted px-3 pb-2 pt-3 text-xs font-semibold uppercase tracking-widest">Workspace</p>
                 <a th:href="@{/}" class="app-nav-link" th:classappend="${currentPath == '/'} ? 'is-active'"
                    th:attr="aria-current=${currentPath == '/'} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#overview}"></use></svg><span>Overview</span></a>
+                <a th:href="@{/changes}" class="app-nav-link" th:classappend="${#strings.startsWith(currentPath, '/changes')} ? 'is-active'"
+                   th:attr="aria-current=${#strings.startsWith(currentPath, '/changes')} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#inbox}"></use></svg><span>Change Inbox</span></a>
                 <a th:href="@{/projects}" class="app-nav-link" th:classappend="${#strings.startsWith(currentPath, '/projects')} ? 'is-active'"
                    th:attr="aria-current=${#strings.startsWith(currentPath, '/projects')} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#settings}"></use></svg><span>Projects</span></a>
             </nav>

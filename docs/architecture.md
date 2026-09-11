@@ -23,6 +23,8 @@ GET  /api/projects            -> tenant-scoped Project list
 POST /api/projects            -> ProjectService
 POST /api/projects/{id}/github-integration -> GitHubIntegrationService
 POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
+GET  /changes                 -> ChangeInboxService (Change Inbox UI)
+GET  /api/projects/{id}/changes -> ChangeInboxService
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -78,6 +80,7 @@ changes
   target_branch, merge_commit_sha, merged_at, url
   delivery_id (X-GitHub-Delivery that recorded the change)
   received_at
+  category, breaking, needs_review, classification_reasons (text[])
 ```
 
 Authenticated `ReleaseFlowPrincipal` contains both user ID and Organization ID.
@@ -141,6 +144,38 @@ delivery ID is retained on the row. Every accepted delivery advances the
 integration's `last_delivery_at`, which the Projects page shows as setup step
 three. Intake is synchronous and short-lived: there is no queue, retry, GitHub
 API call, or network I/O inside a database transaction.
+
+## Deterministic classification
+
+`ChangeClassifier` runs inside the webhook request, before the change is
+saved. It uses only the pull request title, labels, and description, so it
+never performs network I/O.
+
+| Signal | Rule | Effect |
+| --- | --- | --- |
+| Title type | `^(feat\|fix\|perf\|docs\|refactor\|chore\|ci\|build\|test)(scope)?(!)?: text`, case-insensitive | Feature, Fix, Performance, Documentation, or Maintenance |
+| Title `!` | Marker after the type or scope | Breaking |
+| Label | `enhancement`, `feature`; `bug`, `bugfix`; `performance`; `documentation`, `docs`; `dependencies`, `maintenance`, `chore`, `refactor` | Category, only without a title type |
+| Breaking label | `breaking-change`, `breaking change`, `breaking` | Breaking |
+| Footer | A description line starting with `BREAKING CHANGE:` or `BREAKING-CHANGE:` | Breaking |
+
+A title type outranks labels, and every matched rule is kept as a reason, so a
+disagreement stays visible. Labels naming different categories without a title
+type, or no matching rule at all, produce Unknown. `needs_review` is true for
+every breaking or Unknown change; the `changes_review_required` check
+constraint enforces that invariant in the database as well. Flyway `V4`
+assigns Unknown, needs review, and the reason "Recorded before rule-based
+classification" to changes recorded before it ran.
+
+## Change Inbox
+
+`ChangeInboxService` serves both `GET /changes` and
+`GET /api/projects/{projectId}/changes`. It first resolves the Project through
+`ProjectService.get` with the principal's Organization ID, so another tenant's
+Project is reported as not found. It then queries changes by both Organization
+and Project ID, optionally filtered by category and review status, newest
+merge first. Unsupported filter values return `400 invalid_change_filter`. The
+page defaults to the first Project and uses a plain GET form for filters.
 
 ## User interface
 

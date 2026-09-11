@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Change Inbox</title>
+</head>
+<body>
+<p layout:fragment="page-title">Change Inbox</p>
+<div layout:fragment="content" th:with="hasProjects=${!#lists.isEmpty(projects)}">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">Merged changes</p>
+            <h1 class="page-heading">Change Inbox</h1>
+            <p class="page-subtitle">Every merged pull request, classified by fixed rules. Breaking and unrecognized changes wait for human review.</p>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
+
+    <section class="empty-state" th:unless="${hasProjects}">
+        <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#inbox}"></use></svg></div>
+        <h2 class="mt-5 text-xl font-bold">No projects have been created yet.</h2>
+        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create a project and connect its GitHub repository to start collecting merged changes.</p>
+        <a class="btn btn-primary mt-5" th:href="@{/projects}">Open projects</a>
+    </section>
+
+    <th:block th:if="${hasProjects}">
+        <form class="surface-card grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_auto] lg:items-end"
+              th:action="@{/changes}" method="get" aria-label="Filter changes">
+            <label class="form-control"><span class="label-text font-medium">Project</span>
+                <select name="project" class="select select-bordered w-full">
+                    <option th:each="project : ${projects}" th:value="${project.id}" th:text="${project.name}"
+                            th:selected="${project.id == selectedProjectId}">Project</option>
+                </select>
+            </label>
+            <label class="form-control"><span class="label-text font-medium">Category</span>
+                <select name="category" class="select select-bordered w-full">
+                    <option value="">All categories</option>
+                    <option th:each="option : ${categories}" th:value="${option.value}" th:text="${option.label}"
+                            th:selected="${option.value == selectedCategory}">Feature</option>
+                </select>
+            </label>
+            <label class="form-control"><span class="label-text font-medium">Status</span>
+                <select name="status" class="select select-bordered w-full">
+                    <option value="">All statuses</option>
+                    <option th:each="option : ${statuses}" th:value="${option.value}" th:text="${option.label}"
+                            th:selected="${option.value == selectedStatus}">Needs review</option>
+                </select>
+            </label>
+            <button type="submit" class="btn btn-primary">Apply</button>
+        </form>
+
+        <p class="mt-6 text-sm text-slate-500" th:if="${pageError == null and !#lists.isEmpty(changes)}"
+           th:text="${#lists.size(changes) == 1} ? '1 change' : |${#lists.size(changes)} changes|">3 changes</p>
+
+        <section class="empty-state mt-6" th:if="${pageError == null and #lists.isEmpty(changes)}">
+            <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#empty}"></use></svg></div>
+            <th:block th:if="${filtered}">
+                <h2 class="mt-5 text-xl font-bold">No changes match these filters.</h2>
+                <p class="mx-auto mt-2 max-w-lg text-slate-600">Choose a different category or status.</p>
+            </th:block>
+            <th:block th:unless="${filtered}">
+                <h2 class="mt-5 text-xl font-bold">No merged pull requests yet.</h2>
+                <p class="mx-auto mt-2 max-w-lg text-slate-600">Finish the GitHub webhook setup on the Projects page. Merged pull requests appear here as soon as GitHub delivers them.</p>
+            </th:block>
+        </section>
+
+        <ol class="mt-3 grid gap-4" th:if="${pageError == null and !#lists.isEmpty(changes)}" aria-label="Changes">
+            <li class="surface-card p-5" th:each="change : ${changes}" th:id="|change-${change.id}|">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <h2 class="font-bold">
+                            <a class="link-hover" th:href="${change.url}" target="_blank" rel="noopener noreferrer">
+                                <span class="text-slate-500" th:text="|#${change.pullRequestNumber}|">#101</span>
+                                <span th:text="${change.title}">feat: add CSV export</span>
+                            </a>
+                        </h2>
+                        <p class="mt-1 text-xs text-slate-500">
+                            <span th:text="${change.authorLogin}">octocat</span>
+                            <span aria-hidden="true">·</span>
+                            merged into <code th:text="${change.targetBranch}">main</code>
+                            <span aria-hidden="true">·</span>
+                            <time th:datetime="${change.mergedAt}"
+                                  th:text="|${#temporals.format(change.mergedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">10 Sep 2026, 09:14 UTC</time>
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <th:block th:switch="${change.category.name()}">
+                            <span th:case="'FEATURE'" class="badge badge-soft badge-primary font-semibold" th:text="${change.category.label}">Feature</span>
+                            <span th:case="'FIX'" class="badge badge-soft badge-info font-semibold" th:text="${change.category.label}">Fix</span>
+                            <span th:case="'PERFORMANCE'" class="badge badge-soft badge-accent font-semibold" th:text="${change.category.label}">Performance</span>
+                            <span th:case="'DOCUMENTATION'" class="badge badge-soft badge-secondary font-semibold" th:text="${change.category.label}">Documentation</span>
+                            <span th:case="'MAINTENANCE'" class="badge badge-soft badge-neutral font-semibold" th:text="${change.category.label}">Maintenance</span>
+                            <span th:case="*" class="badge badge-ghost font-semibold" th:text="${change.category.label}">Unknown</span>
+                        </th:block>
+                        <span class="badge badge-error font-semibold" th:if="${change.breaking}">Breaking</span>
+                        <span class="badge badge-warning font-semibold" th:if="${change.needsReview}">Needs review</span>
+                        <span class="badge badge-soft badge-success font-semibold" th:unless="${change.needsReview}">Classified</span>
+                    </div>
+                </div>
+
+                <div class="mt-3 flex flex-wrap gap-1.5" th:unless="${#lists.isEmpty(change.labels)}">
+                    <span class="badge badge-outline badge-sm" th:each="label : ${change.labels}" th:text="${label}">enhancement</span>
+                </div>
+
+                <p class="mt-3 text-sm text-slate-600">
+                    <span class="font-semibold">Why:</span>
+                    <span th:text="${#strings.listJoin(change.reasons, '; ')}">Title type "feat"</span>
+                </p>
+
+                <details class="mt-3 text-sm" th:if="${change.description != null}">
+                    <summary class="cursor-pointer font-medium text-slate-600">Description</summary>
+                    <p class="mt-2 whitespace-pre-line text-slate-700" th:text="${change.description}">Pull request description.</p>
+                </details>
+            </li>
+        </ol>
+    </th:block>
+</div>
+</body>
+</html>

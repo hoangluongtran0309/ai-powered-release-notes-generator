@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,10 +9,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -21,6 +24,9 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private DataSource dataSource;
 
     @BeforeEach
     @AfterEach
@@ -61,6 +67,68 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void requiresReviewForBreakingAndUnknownChanges() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+
+        assertThatThrownBy(() -> insertChange(organization, project, 1, "Title", VALID_SHA, "OTHER", false, true))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 2, "Title", VALID_SHA, "FEATURE", true, false))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 3, "Title", VALID_SHA, "UNKNOWN", false, false))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> insertChange(organization, project, 4, "Title", VALID_SHA, "FEATURE", true, true))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertChange(organization, project, 5, "Title", VALID_SHA, "UNKNOWN", false, true))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void marksChangesRecordedBeforeV4AsUnknownAndNeedingReview() {
+        String schema = "v4_backfill_check";
+        try {
+            migrate(schema, "3");
+            UUID organization = UUID.randomUUID();
+            UUID project = UUID.randomUUID();
+            jdbcTemplate.update("INSERT INTO " + schema + ".organizations (id, name, created_at) VALUES (?, 'Old', now())",
+                    organization);
+            jdbcTemplate.update("INSERT INTO " + schema + ".projects (id, organization_id, name, created_at) VALUES (?, ?, 'Old', now())",
+                    project, organization);
+            jdbcTemplate.update(
+                    "INSERT INTO " + schema + """
+                            .changes (id, organization_id, project_id, pull_request_number, title, author_login,
+                                labels, target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at)
+                            VALUES (?, ?, ?, 1, 'feat: recorded before V4', 'octocat', '{}', 'main', ?, now(),
+                                'https://github.com/acme/releaseflow/pull/1', ?, now())
+                            """,
+                    UUID.randomUUID(), organization, project, VALID_SHA, UUID.randomUUID()
+            );
+
+            migrate(schema, "4");
+
+            assertThat(jdbcTemplate.queryForMap(
+                    "SELECT category, breaking, needs_review, array_to_string(classification_reasons, '|') AS reasons FROM "
+                            + schema + ".changes"
+            )).containsEntry("category", "UNKNOWN")
+                    .containsEntry("breaking", false)
+                    .containsEntry("needs_review", true)
+                    .containsEntry("reasons", "Recorded before rule-based classification");
+        } finally {
+            jdbcTemplate.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+        }
+    }
+
+    private void migrate(String schema, String target) {
+        Flyway.configure()
+                .dataSource(dataSource)
+                .schemas(schema)
+                .locations("classpath:db/migration")
+                .target(target)
+                .load()
+                .migrate();
+    }
+
     private UUID insertOrganization(String name) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
@@ -85,12 +153,26 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     }
 
     private void insertChange(UUID organizationId, UUID projectId, int number, String title, String sha) {
+        insertChange(organizationId, projectId, number, title, sha, "FEATURE", false, false);
+    }
+
+    private void insertChange(
+            UUID organizationId,
+            UUID projectId,
+            int number,
+            String title,
+            String sha,
+            String category,
+            boolean breaking,
+            boolean needsReview
+    ) {
         jdbcTemplate.update(
                 """
                         INSERT INTO changes
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
-                             target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at)
-                        VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?)
+                             target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
+                             category, breaking, needs_review, classification_reasons)
+                        VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}')
                         """,
                 UUID.randomUUID(),
                 organizationId,
@@ -101,7 +183,10 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 Timestamp.from(Instant.now()),
                 "https://github.com/acme/releaseflow/pull/" + number,
                 UUID.randomUUID(),
-                Timestamp.from(Instant.now())
+                Timestamp.from(Instant.now()),
+                category,
+                breaking,
+                needsReview
         );
     }
 }

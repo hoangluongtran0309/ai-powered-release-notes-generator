@@ -12,7 +12,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-class ProjectService {
+public class ProjectService {
 
     private final ProjectRepository projectRepository;
     private final GitHubIntegrationRepository integrationRepository;
@@ -41,7 +41,17 @@ class ProjectService {
     }
 
     @Transactional(readOnly = true)
-    List<ProjectView> list(UUID organizationId) {
+    public ProjectView get(UUID organizationId, UUID projectId) {
+        Project project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                .orElseThrow(ProjectNotFoundException::new);
+        return toView(
+                project,
+                integrationRepository.findByProjectIdAndOrganizationId(projectId, organizationId).orElse(null)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectView> list(UUID organizationId) {
         List<Project> projects = projectRepository.findAllByOrganizationIdOrderByCreatedAtAscIdAsc(organizationId);
         if (projects.isEmpty()) {
             return List.of();

@@ -2,6 +2,8 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -58,6 +60,20 @@ class Change {
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ChangeCategory category;
+
+    @Column(nullable = false)
+    private boolean breaking;
+
+    @Column(name = "needs_review", nullable = false)
+    private boolean needsReview;
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "classification_reasons", nullable = false, columnDefinition = "text[]")
+    private String[] classificationReasons;
+
     protected Change() {
     }
 
@@ -66,6 +82,7 @@ class Change {
             UUID organizationId,
             UUID projectId,
             MergedPullRequest pullRequest,
+            ChangeClassification classification,
             UUID deliveryId,
             Instant receivedAt
     ) {
@@ -81,6 +98,10 @@ class Change {
         this.mergeCommitSha = pullRequest.mergeCommitSha();
         this.mergedAt = pullRequest.mergedAt();
         this.url = pullRequest.url();
+        this.category = classification.category();
+        this.breaking = classification.breaking();
+        this.needsReview = classification.needsReview();
+        this.classificationReasons = classification.reasons().toArray(String[]::new);
         this.deliveryId = deliveryId;
         this.receivedAt = receivedAt;
     }
@@ -139,5 +160,21 @@ class Change {
 
     Instant getReceivedAt() {
         return receivedAt;
+    }
+
+    ChangeCategory getCategory() {
+        return category;
+    }
+
+    boolean isBreaking() {
+        return breaking;
+    }
+
+    boolean isNeedsReview() {
+        return needsReview;
+    }
+
+    List<String> getClassificationReasons() {
+        return List.of(classificationReasons);
     }
 }

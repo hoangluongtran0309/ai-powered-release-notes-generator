@@ -113,6 +113,7 @@ class GitHubWebhookService {
                     webhook.organizationId(),
                     webhook.projectId(),
                     pullRequest,
+                    ChangeClassifier.classify(pullRequest),
                     deliveryId,
                     clock.instant()
             ));
