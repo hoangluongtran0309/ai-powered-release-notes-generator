@@ -9,6 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,5 +57,15 @@ public class ProjectApiController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .cacheControl(CacheControl.noStore())
                 .body(created);
+    }
+
+    @PutMapping("/{projectId}/github-integration/token")
+    ResponseEntity<Void> replaceGitHubToken(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @Valid @RequestBody GitHubTokenRequest request
+    ) {
+        integrationService.replaceToken(principal.organizationId(), projectId, request);
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 }

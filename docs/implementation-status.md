@@ -62,10 +62,21 @@
 - GitHub Actions gates: Conventional PR titles, actionlint, npm audit, Maven
   verification, CodeQL, dependency review, a full-history Gitleaks scan, and
   a Trivy image scan with a Compose smoke test; weekly Dependabot updates.
+- Optional, write-only GitHub access tokens set by administrators through
+  Thymeleaf and REST, checked against the repository's pull requests before
+  they are stored encrypted.
+- A durable change processing queue: webhook intake records a `PROCESSING`
+  change and a job; a scheduled worker claims jobs with `SKIP LOCKED`, lists
+  changed files outside any transaction, retries transient GitHub failures,
+  and recovers stale claims.
+- Typed review triggers for sensitive paths and unavailable file lists, a
+  configurable sensitive-path baseline, a documentation-only rule, and Flyway
+  `V10` constraints that keep processing changes unsettled and triggered
+  changes in review until a person reviews them.
 
 ## In progress
 
-- Nothing. The CI and container slice is complete and awaiting review.
+- Nothing. The changed-file review slice is complete and awaiting review.
 
 ## Planned
 
@@ -77,9 +88,11 @@ deliberately deferred list below, one reviewed slice at a time.
 - Role changes and member removal.
 - Additional source and AI providers, automatic AI classification, and AI
   retries.
-- Historical imports, polling, schedulers, queues, and automatic retries.
-- GitHub access tokens, provider-side repository validation, integration
-  replacement, and secret rotation.
+- Historical imports, polling, and queues or retries for work other than
+  changed-file collection.
+- Validating a repository with GitHub when it is connected, per-Project
+  sensitive-path additions, keyword review triggers, integration replacement,
+  and secret or token rotation reminders.
 - Dynamic audiences, localization, translation, and template engines.
 - Automation, distribution integrations, and a public changelog.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end

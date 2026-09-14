@@ -31,6 +31,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     @BeforeEach
     @AfterEach
     void clearDatabase() {
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
@@ -215,10 +216,10 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
                              category, breaking, needs_review, classification_reasons,
                              classification_source, ai_status, ai_model, ai_attempted_at,
-                             reviewed_by, reviewer_name, reviewed_at)
+                             reviewed_by, reviewer_name, reviewed_at, processing_status, review_triggers)
                         VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main', ?, now(),
                                 'https://github.com/acme/releaseflow/pull/1', ?, now(),
-                                ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, 'Reviewer', now())
+                                ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, 'Reviewer', now(), 'COMPLETED', '[]')
                         """,
                 UUID.randomUUID(),
                 organizationId,
@@ -299,9 +300,10 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
                              category, breaking, needs_review, classification_reasons,
-                             classification_source, ai_status, ai_model, ai_failure, ai_attempted_at)
+                             classification_source, ai_status, ai_model, ai_failure, ai_attempted_at,
+                             processing_status, review_triggers)
                         VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}',
-                                ?, ?, ?, ?, ?)
+                                ?, ?, ?, ?, ?, 'COMPLETED', '[]')
                         """,
                 UUID.randomUUID(),
                 organizationId,

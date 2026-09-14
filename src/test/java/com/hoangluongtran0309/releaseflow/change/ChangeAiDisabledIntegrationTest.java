@@ -46,6 +46,7 @@ class ChangeAiDisabledIntegrationTest extends PostgreSqlIntegrationTest {
     @BeforeEach
     @AfterEach
     void clearDatabase() {
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
@@ -79,10 +80,7 @@ class ChangeAiDisabledIntegrationTest extends PostgreSqlIntegrationTest {
                 "https://github.com/acme/releaseflow/pull/1"
         );
         UUID changeId = UUID.randomUUID();
-        changeRepository.saveAndFlush(new Change(
-                changeId, organizationId, projectId, pullRequest,
-                ChangeClassifier.classify(pullRequest), UUID.randomUUID(), Instant.now()
-        ));
+        changeRepository.saveAndFlush(ProcessedChanges.processed(changeId, organizationId, projectId, pullRequest));
 
         mockMvc.perform(get("/changes").session(session))
                 .andExpect(status().isOk())

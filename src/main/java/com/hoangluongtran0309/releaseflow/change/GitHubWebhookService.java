@@ -6,11 +6,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -21,17 +24,23 @@ class GitHubWebhookService {
 
     private final GitHubWebhookVerifier verifier;
     private final ChangeRepository changeRepository;
+    private final ChangeProcessingJobRepository jobRepository;
+    private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     GitHubWebhookService(
             GitHubWebhookVerifier verifier,
             ChangeRepository changeRepository,
+            ChangeProcessingJobRepository jobRepository,
+            PlatformTransactionManager transactionManager,
             ObjectMapper objectMapper,
             Clock clock
     ) {
         this.verifier = verifier;
         this.changeRepository = changeRepository;
+        this.jobRepository = jobRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -107,16 +116,21 @@ class GitHubWebhookService {
         )) {
             return WebhookOutcome.DUPLICATE;
         }
+        // The change and its processing job are recorded together; changed files are
+        // collected and the change classified later, outside this request.
         try {
-            changeRepository.saveAndFlush(new Change(
-                    UUID.randomUUID(),
-                    webhook.organizationId(),
-                    webhook.projectId(),
-                    pullRequest,
-                    ChangeClassifier.classify(pullRequest),
-                    deliveryId,
-                    clock.instant()
-            ));
+            transactionTemplate.executeWithoutResult(status -> {
+                Instant receivedAt = clock.instant();
+                Change change = changeRepository.saveAndFlush(Change.received(
+                        UUID.randomUUID(),
+                        webhook.organizationId(),
+                        webhook.projectId(),
+                        pullRequest,
+                        deliveryId,
+                        receivedAt
+                ));
+                jobRepository.save(new ChangeProcessingJob(UUID.randomUUID(), change, receivedAt));
+            });
         } catch (DataIntegrityViolationException exception) {
             // A concurrent delivery for the same pull request committed first.
             if (violates(exception, PULL_REQUEST_UNIQUE_CONSTRAINT)) {

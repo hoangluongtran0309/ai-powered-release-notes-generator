@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,8 +13,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Explainable, fixed rules. A title type outranks labels; anything the rules do not
- * recognize is Unknown, and Unknown or breaking changes always need human review.
+ * Explainable, fixed rules. A documentation-only file list outranks a title type, which
+ * outranks labels; anything the rules do not recognize is Unknown. Unknown, breaking,
+ * and triggered changes always need human review.
  */
 final class ChangeClassifier {
 
@@ -50,9 +53,28 @@ final class ChangeClassifier {
     private ChangeClassifier() {
     }
 
-    static ChangeClassification classify(MergedPullRequest pullRequest) {
+    static ChangeClassification classify(
+            MergedPullRequest pullRequest,
+            PullRequestFiles files,
+            SensitivePathRules sensitivePaths
+    ) {
         List<String> reasons = new ArrayList<>();
+        List<ReviewTrigger> triggers = new ArrayList<>();
         boolean breaking = false;
+
+        if (files.isCollected()) {
+            sensitivePaths.matches(files.files()).stream()
+                    .map(ReviewTrigger::sensitivePath)
+                    .forEach(triggers::add);
+        } else {
+            triggers.add(ReviewTrigger.changedFilesUnavailable());
+        }
+        boolean documentationOnly = files.isCollected()
+                && !files.files().isEmpty()
+                && files.files().stream().allMatch(file -> isDocumentation(file.path()));
+        if (documentationOnly) {
+            reasons.add("All changed files are documentation");
+        }
 
         ChangeCategory titleCategory = null;
         Matcher title = TITLE_TYPE.matcher(pullRequest.title().strip());
@@ -84,7 +106,9 @@ final class ChangeClassifier {
         }
 
         ChangeCategory category;
-        if (titleCategory != null) {
+        if (documentationOnly) {
+            category = ChangeCategory.DOCUMENTATION;
+        } else if (titleCategory != null) {
             category = titleCategory;
         } else if (Set.copyOf(labelCategories.values()).size() == 1) {
             category = labelCategories.values().iterator().next();
@@ -100,8 +124,17 @@ final class ChangeClassifier {
         return new ChangeClassification(
                 category,
                 breaking,
-                breaking || category == ChangeCategory.UNKNOWN,
-                reasons
+                breaking || category == ChangeCategory.UNKNOWN || !triggers.isEmpty(),
+                reasons,
+                triggers
         );
+    }
+
+    private static boolean isDocumentation(String path) {
+        String normalized = path.toLowerCase(Locale.ROOT);
+        return normalized.startsWith("docs/")
+                || normalized.endsWith(".md")
+                || normalized.endsWith(".adoc")
+                || normalized.endsWith(".rst");
     }
 }

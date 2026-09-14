@@ -91,12 +91,45 @@ public class ProjectPageController {
         return "projects";
     }
 
+    @PostMapping("/projects/{projectId}/github-integration/token")
+    String replaceGitHubToken(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @Valid @ModelAttribute("githubTokenRequest") GitHubTokenRequest request,
+            BindingResult bindingResult,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (!bindingResult.hasErrors()) {
+            try {
+                integrationService.replaceToken(principal.organizationId(), projectId, request);
+                return "redirect:/projects?tokenSaved";
+            } catch (ProjectNotFoundException | GitHubIntegrationNotFoundException exception) {
+                response.setStatus(HttpStatus.NOT_FOUND.value());
+                model.addAttribute("pageError", exception.getMessage());
+            } catch (GitHubTokenRejectedException exception) {
+                response.setStatus(HttpStatus.BAD_REQUEST.value());
+                model.addAttribute("tokenError", exception.getMessage());
+            } catch (GitHubUnavailableException exception) {
+                response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
+                model.addAttribute("tokenError", exception.getMessage());
+            }
+        }
+        // The submitted token is never rendered back into the page.
+        model.addAttribute("tokenProjectId", projectId);
+        addPageModel(principal, model);
+        return "projects";
+    }
+
     private void addPageModel(ReleaseFlowPrincipal principal, Model model) {
         if (!model.containsAttribute("projectRequest")) {
             model.addAttribute("projectRequest", new ProjectRequest());
         }
         if (!model.containsAttribute("githubIntegrationRequest")) {
             model.addAttribute("githubIntegrationRequest", new GitHubIntegrationRequest());
+        }
+        if (!model.containsAttribute("githubTokenRequest")) {
+            model.addAttribute("githubTokenRequest", new GitHubTokenRequest());
         }
         model.addAttribute("projects", projectService.list(principal.organizationId()));
     }

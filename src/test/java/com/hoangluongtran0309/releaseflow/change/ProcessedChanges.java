@@ -1,0 +1,30 @@
+package com.hoangluongtran0309.releaseflow.change;
+
+import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Builds changes that finished processing with one ordinary source file, so the rules
+ * alone decide their classification.
+ */
+final class ProcessedChanges {
+
+    private static final PullRequestFiles ORDINARY_FILES = PullRequestFiles.collected(
+            List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))
+    );
+    private static final SensitivePathRules RULES = new SensitivePathRules(List.of("**/db/migration/**"));
+
+    private ProcessedChanges() {
+    }
+
+    static Change processed(UUID id, UUID organizationId, UUID projectId, MergedPullRequest pullRequest) {
+        Change change = Change.received(id, organizationId, projectId, pullRequest, UUID.randomUUID(), Instant.now());
+        change.completeProcessing(ORDINARY_FILES, ChangeClassifier.classify(pullRequest, ORDINARY_FILES, RULES));
+        return change;
+    }
+}

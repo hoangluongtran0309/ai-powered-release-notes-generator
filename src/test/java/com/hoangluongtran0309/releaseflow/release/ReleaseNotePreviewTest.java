@@ -3,6 +3,8 @@ package com.hoangluongtran0309.releaseflow.release;
 import com.hoangluongtran0309.releaseflow.change.AiStatus;
 import com.hoangluongtran0309.releaseflow.change.ChangeCategory;
 import com.hoangluongtran0309.releaseflow.change.ChangeView;
+import com.hoangluongtran0309.releaseflow.change.ChangedFileStatus;
+import com.hoangluongtran0309.releaseflow.change.ProcessingStatus;
 import com.hoangluongtran0309.releaseflow.change.ClassificationSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -90,7 +92,11 @@ class ReleaseNotePreviewTest {
                 false,
                 null,
                 null,
-                null
+                null,
+                ProcessingStatus.COMPLETED,
+                ChangedFileStatus.COLLECTED,
+                List.of(),
+                List.of()
         );
     }
 }

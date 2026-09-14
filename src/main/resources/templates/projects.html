@@ -19,6 +19,7 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.tokenSaved}"><span>Access token saved. New changes will be checked for sensitive files.</span></div>
 
     <ol class="grid gap-3 md:grid-cols-3" aria-label="Setup progress">
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasProjects} ? 'border-emerald-200' : 'border-indigo-300'">
@@ -69,7 +70,7 @@
     <div class="mt-6 grid gap-6 lg:grid-cols-2" th:if="${hasProjects}">
         <article class="surface-card flex flex-col p-6" th:each="project : ${projects}"
                  th:id="|project-${project.id}|"
-                 th:with="failing=${integrationProjectId == project.id}, integration=${project.githubIntegration}">
+                 th:with="failing=${integrationProjectId == project.id}, tokenFailing=${tokenProjectId == project.id}, integration=${project.githubIntegration}">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
                     <h2 class="truncate text-xl font-bold" th:text="${project.name}">Project name</h2>
@@ -109,12 +110,45 @@
                         </dd>
                         <dd class="mt-1 text-slate-600" th:unless="${integration.lastDeliveryAt != null}">No verified delivery yet</dd>
                     </div>
+                    <div>
+                        <dt class="text-slate-500">Access token</dt>
+                        <dd class="mt-1 font-semibold" th:if="${integration.accessTokenConfigured}">
+                            Configured <span class="font-normal text-slate-600">on
+                            <time th:datetime="${integration.accessTokenUpdatedAt}"
+                                  th:text="|${#temporals.format(integration.accessTokenUpdatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">12 Sep 2026, 10:02 UTC</time></span>
+                        </dd>
+                        <dd class="mt-1 text-amber-700" th:unless="${integration.accessTokenConfigured}">
+                            Not configured. Every new change needs review until a token lets ReleaseFlow check its files.
+                        </dd>
+                    </div>
                 </dl>
                 <p class="mt-4 text-xs text-slate-500">
                     In the repository's GitHub webhook settings, use your ReleaseFlow address followed by this path
                     as the payload URL, content type <code>application/json</code>, the saved secret, and the
                     <strong>Pull requests</strong> event. Merged pull requests are recorded once each.
                 </p>
+
+                <form class="mt-5 grid gap-3" th:if="${viewer.admin}"
+                      th:action="@{/projects/{projectId}/github-integration/token(projectId=${project.id})}"
+                      th:object="${githubTokenRequest}" method="post">
+                    <div>
+                        <h3 class="font-bold" th:text="${integration.accessTokenConfigured} ? 'Replace access token' : 'Add access token'">Add access token</h3>
+                        <p class="mt-1 text-sm text-slate-600">
+                            A fine-grained token with read access to this repository's pull requests. ReleaseFlow checks it
+                            with GitHub, stores it encrypted, and never shows it again.
+                        </p>
+                    </div>
+                    <div class="alert alert-error" role="alert" th:if="${tokenFailing and tokenError != null}">
+                        <span th:text="${tokenError}">GitHub did not accept this token.</span>
+                    </div>
+                    <label class="form-control"><span class="label-text font-medium">Access token</span>
+                        <input type="password" name="token" maxlength="255" required autocomplete="off" spellcheck="false"
+                               class="input input-bordered w-full font-mono"
+                               th:classappend="${tokenFailing and #fields.hasErrors('token')} ? 'input-error'">
+                        <span class="field-error" th:if="${tokenFailing and #fields.hasErrors('token')}" th:errors="*{token}"></span>
+                    </label>
+                    <button type="submit" class="btn btn-outline w-full">Save access token</button>
+                </form>
             </div>
 
             <p class="text-sm text-slate-600" th:if="${integration == null and !viewer.admin}">

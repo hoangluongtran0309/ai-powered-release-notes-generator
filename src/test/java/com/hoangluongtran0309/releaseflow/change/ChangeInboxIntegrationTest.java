@@ -48,6 +48,7 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
     @BeforeEach
     @AfterEach
     void clearDatabase() {
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
@@ -226,15 +227,7 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
                 Instant.parse(mergedAt),
                 "https://github.com/acme/releaseflow/pull/" + number
         );
-        changeRepository.saveAndFlush(new Change(
-                UUID.randomUUID(),
-                owner.organizationId(),
-                projectId,
-                pullRequest,
-                ChangeClassifier.classify(pullRequest),
-                UUID.randomUUID(),
-                Instant.now()
-        ));
+        changeRepository.saveAndFlush(ProcessedChanges.processed(UUID.randomUUID(), owner.organizationId(), projectId, pullRequest));
     }
 
     private UUID createProject(MockHttpSession session, String name) throws Exception {
