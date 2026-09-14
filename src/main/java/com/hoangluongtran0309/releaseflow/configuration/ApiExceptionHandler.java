@@ -1,6 +1,12 @@
 package com.hoangluongtran0309.releaseflow.configuration;
 
 import com.hoangluongtran0309.releaseflow.account.DuplicateEmailException;
+import com.hoangluongtran0309.releaseflow.account.InvalidInvitationException;
+import com.hoangluongtran0309.releaseflow.account.InvitationAlreadyPendingException;
+import com.hoangluongtran0309.releaseflow.account.InvitationEmailUnavailableException;
+import com.hoangluongtran0309.releaseflow.account.InvitationNotFoundException;
+import com.hoangluongtran0309.releaseflow.account.OrganizationMemberApiController;
+import com.hoangluongtran0309.releaseflow.account.PublicInvitationApiController;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
 import com.hoangluongtran0309.releaseflow.change.AiClassificationFailedException;
@@ -42,6 +48,8 @@ import java.util.Map;
 @RestControllerAdvice(assignableTypes = {
         RegistrationApiController.class,
         SessionApiController.class,
+        OrganizationMemberApiController.class,
+        PublicInvitationApiController.class,
         ProjectApiController.class,
         GitHubWebhookController.class,
         ChangeApiController.class,
@@ -84,6 +92,46 @@ public class ApiExceptionHandler {
                 "Email already registered",
                 exception.getMessage(),
                 "email_already_registered"
+        ));
+    }
+
+    @ExceptionHandler(InvalidInvitationException.class)
+    ResponseEntity<ProblemDetail> invalidInvitation(InvalidInvitationException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid invitation",
+                exception.getMessage(),
+                "invitation_invalid"
+        ));
+    }
+
+    @ExceptionHandler(InvitationEmailUnavailableException.class)
+    ResponseEntity<ProblemDetail> invitationEmailUnavailable(InvitationEmailUnavailableException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Email unavailable",
+                exception.getMessage(),
+                "invitation_email_unavailable"
+        ));
+    }
+
+    @ExceptionHandler(InvitationAlreadyPendingException.class)
+    ResponseEntity<ProblemDetail> invitationAlreadyPending(InvitationAlreadyPendingException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Invitation already pending",
+                exception.getMessage(),
+                "invitation_already_pending"
+        ));
+    }
+
+    @ExceptionHandler(InvitationNotFoundException.class)
+    ResponseEntity<ProblemDetail> invitationNotFound(InvitationNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Invitation not found",
+                exception.getMessage(),
+                "invitation_not_found"
         ));
     }
 

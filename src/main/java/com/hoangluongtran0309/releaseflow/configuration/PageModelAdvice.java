@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.configuration;
 
+import com.hoangluongtran0309.releaseflow.account.AppUserRole;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
@@ -23,7 +24,8 @@ class PageModelAdvice {
                 displayName,
                 principal.getUsername(),
                 role.charAt(0) + role.substring(1).toLowerCase(Locale.ROOT),
-                displayName.substring(0, displayName.offsetByCodePoints(0, 1)).toUpperCase(Locale.ROOT)
+                displayName.substring(0, displayName.offsetByCodePoints(0, 1)).toUpperCase(Locale.ROOT),
+                principal.role() == AppUserRole.ADMIN
         );
     }
 
@@ -32,6 +34,6 @@ class PageModelAdvice {
         return request.getRequestURI().substring(request.getContextPath().length());
     }
 
-    public record Viewer(String displayName, String email, String role, String initial) {
+    public record Viewer(String displayName, String email, String role, String initial, boolean admin) {
     }
 }

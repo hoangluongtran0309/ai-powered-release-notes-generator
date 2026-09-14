@@ -16,7 +16,7 @@
             <h1 class="text-5xl font-bold leading-tight">Create release notes without losing human judgment.</h1>
             <p class="auth-showcase-copy mt-6 text-lg leading-8">Set up your organization, then connect the repositories whose changes you want to ship.</p>
         </div>
-        <p class="auth-showcase-copy text-sm">Your first account becomes the organization owner.</p>
+        <p class="auth-showcase-copy text-sm">Your first account becomes the organization administrator.</p>
     </section>
     <section class="theme-canvas flex items-center justify-center p-5 sm:p-10">
         <div class="w-full max-w-lg">
@@ -27,7 +27,7 @@
             <div class="auth-card">
                 <p class="text-sm font-semibold text-indigo-600">Get started</p>
                 <h2 class="mt-2 text-3xl font-bold tracking-tight">Create your organization</h2>
-                <p class="mt-2 text-sm text-slate-600">The first account becomes the organization owner.</p>
+                <p class="mt-2 text-sm text-slate-600">The first account becomes the organization administrator.</p>
                 <form class="mt-7 grid gap-4" th:action="@{/register}" th:object="${registration}" method="post">
                     <label class="form-control"><span class="label-text font-medium">Organization name</span>
                         <input type="text" th:field="*{organizationName}" maxlength="120" autocomplete="organization"

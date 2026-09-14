@@ -2,11 +2,12 @@
 
 ## Current state
 
-ReleaseFlow currently implements the bootstrap, Organization owner, Project
+ReleaseFlow currently implements the bootstrap, Organization administrator, Project
 plus GitHub configuration, signed GitHub merged-pull-request intake,
 deterministic classification with the Change Inbox, OpenAI classification,
 human review, Draft Release, and Release Note publication slices: one Spring Boot
-application, PostgreSQL/Flyway V1-V8, owner registration, session
+application, PostgreSQL/Flyway V1-V9, administrator registration, member
+invitations with administrator and member roles, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
 secrets, a signature-verified webhook endpoint that records normalized merged
 pull requests idempotently, rule-based classification with mandatory review
@@ -43,6 +44,7 @@ Read `README.md`, `docs/architecture.md`, and
 - External and AI failures become explicit unknown/review states.
 - Network I/O does not run inside database transactions.
 - Credentials never appear in source, logs, examples, or later API responses.
+- Invitation tokens are shown once and stored only as SHA-256 hashes.
 - `RELEASEFLOW_CREDENTIAL_MASTER_KEY` is required at startup and must decode to
   exactly 32 bytes; webhook secrets are reveal-once values.
 - `RELEASEFLOW_OPENAI_API_KEY` and `RELEASEFLOW_OPENAI_MODEL` are optional but

@@ -72,7 +72,7 @@ class AuthenticationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.userId").value(first.userId().toString()))
                 .andExpect(jsonPath("$.organizationId").value(first.organizationId().toString()))
                 .andExpect(jsonPath("$.email").value("first@example.com"))
-                .andExpect(jsonPath("$.role").value("OWNER"));
+                .andExpect(jsonPath("$.role").value("ADMIN"));
 
         assertThat(appUserRepository.findByIdAndOrganizationId(first.userId(), second.organizationId())).isEmpty();
         assertThat(appUserRepository.findByIdAndOrganizationId(first.userId(), first.organizationId())).isPresent();

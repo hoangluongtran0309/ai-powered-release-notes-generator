@@ -31,6 +31,7 @@
                 <div th:if="${param.error}" class="alert alert-error mt-6" role="alert"><span>The email or password is incorrect.</span></div>
                 <div th:if="${param.logout}" class="alert alert-success mt-6" role="status"><span>You have signed out.</span></div>
                 <div th:if="${param.registered}" class="alert alert-success mt-6" role="status"><span>Your organization is ready. Sign in to continue.</span></div>
+                <div th:if="${param.invited}" class="alert alert-success mt-6" role="status"><span>Your account is ready. Sign in to join your organization.</span></div>
                 <form method="post" th:action="@{/login}" class="mt-7 flex flex-col gap-4">
                     <label class="form-control"><span class="label-text font-medium">Email</span>
                         <input type="email" name="email" maxlength="254" autocomplete="email" class="input input-bordered w-full" required autofocus>

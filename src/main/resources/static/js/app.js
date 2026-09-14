@@ -15,6 +15,18 @@
         return next;
     };
 
+    // Invitation links carry the token in the URL fragment, which browsers never send to
+    // the server. Move it into the server-rendered form, drop it from the address bar and
+    // history, then submit. Without JavaScript the invitee pastes the code instead.
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.querySelector('form[data-invitation-open]');
+        const match = /^#token=([A-Za-z0-9_-]{1,128})$/.exec(window.location.hash);
+        if (!form || !match) return;
+        form.elements.token.value = match[1];
+        history.replaceState(null, '', window.location.pathname);
+        form.requestSubmit();
+    });
+
     document.addEventListener('alpine:init', () => {
         Alpine.data('themeToggle', () => ({
             theme: currentTheme(),

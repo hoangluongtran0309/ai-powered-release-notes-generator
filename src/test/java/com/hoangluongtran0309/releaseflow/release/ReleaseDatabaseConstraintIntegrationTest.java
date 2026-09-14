@@ -148,7 +148,7 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
         jdbcTemplate.update(
                 """
                         INSERT INTO app_users (id, organization_id, email, password_hash, display_name, role, created_at)
-                        VALUES (?, ?, ?, 'hash', 'Publisher', 'OWNER', now())
+                        VALUES (?, ?, ?, 'hash', 'Publisher', 'ADMIN', now())
                         """,
                 id, organizationId, id + "@example.com"
         );

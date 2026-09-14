@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Members</title>
+</head>
+<body>
+<p layout:fragment="page-title">Members</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">Organization administration</p>
+            <h1 class="page-heading">Members and invitations</h1>
+            <p class="page-subtitle">Invite teammates by email. Each link works once and expires after seven days.</p>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Invitation was not found.</span></div>
+
+    <section class="surface-card p-6">
+        <h2 class="section-heading">Invite a member</h2>
+        <p class="section-copy">Members can review changes and prepare and publish releases. Only administrators manage members and repositories.</p>
+        <form class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start" th:action="@{/members/invitations}"
+              th:object="${invitationRequest}" method="post">
+            <label class="form-control sm:flex-1">
+                <span class="sr-only">Email address</span>
+                <input type="email" th:field="*{email}" maxlength="254" placeholder="teammate@example.com" autocomplete="off"
+                       class="input input-bordered w-full" th:errorclass="input-error" required>
+                <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></span>
+            </label>
+            <button type="submit" class="btn btn-primary">
+                <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#plus}"></use></svg>
+                <span>Create invitation</span>
+            </button>
+        </form>
+    </section>
+
+    <section class="surface-card mt-6 p-6" id="members">
+        <h2 class="section-heading">Members</h2>
+        <div class="mt-4 overflow-x-auto">
+            <table class="table">
+                <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead>
+                <tbody>
+                <tr th:each="member : ${members}">
+                    <td class="font-semibold" th:text="${member.displayName}">Mai Tran</td>
+                    <td th:text="${member.email}">mai@example.com</td>
+                    <td><span class="badge badge-soft font-semibold"
+                              th:classappend="${member.role.name() == 'ADMIN'} ? 'badge-primary' : 'badge-ghost'"
+                              th:text="${member.role.name() == 'ADMIN'} ? 'Admin' : 'Member'">Admin</span></td>
+                    <td><time th:datetime="${member.createdAt}"
+                              th:text="|${#temporals.format(member.createdAt, 'd MMM yyyy', 'UTC')}|">11 Sep 2026</time></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="surface-card mt-6 p-6" id="invitations">
+        <h2 class="section-heading">Invitations</h2>
+        <p class="section-copy" th:if="${#lists.isEmpty(invitations)}">No invitations yet.</p>
+        <div class="mt-4 overflow-x-auto" th:unless="${#lists.isEmpty(invitations)}">
+            <table class="table">
+                <thead><tr><th>Email</th><th>Status</th><th>Expires</th><th>Invited by</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                <tr th:each="invitation : ${invitations}" th:id="|invitation-${invitation.id}|">
+                    <td th:text="${invitation.email}">teammate@example.com</td>
+                    <td th:switch="${invitation.status.name()}">
+                        <span th:case="'PENDING'" class="badge badge-warning badge-soft font-semibold">Pending</span>
+                        <span th:case="'ACCEPTED'" class="badge badge-success badge-soft font-semibold">Accepted</span>
+                        <span th:case="'REVOKED'" class="badge badge-ghost font-semibold">Revoked</span>
+                        <span th:case="*" class="badge badge-ghost font-semibold">Expired</span>
+                    </td>
+                    <td><time th:datetime="${invitation.expiresAt}"
+                              th:text="|${#temporals.format(invitation.expiresAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">18 Sep 2026, 09:14 UTC</time></td>
+                    <td th:text="${invitation.createdByName}">Mai Tran</td>
+                    <td class="flex flex-wrap justify-end gap-2">
+                        <form method="post" th:unless="${invitation.status.name() == 'ACCEPTED'}"
+                              th:action="@{/members/invitations/{id}/reissue(id=${invitation.id})}">
+                            <button type="submit" class="btn btn-outline btn-sm">Reissue</button>
+                        </form>
+                        <form method="post" th:if="${invitation.status.name() == 'PENDING'}"
+                              th:action="@{/members/invitations/{id}/revoke(id=${invitation.id})}">
+                            <button type="submit" class="btn btn-ghost btn-sm">Revoke</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+</body>
+</html>

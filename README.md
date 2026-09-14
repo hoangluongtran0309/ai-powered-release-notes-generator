@@ -9,13 +9,14 @@ that is currently implemented.
 
 The application currently provides:
 
-- an atomic Organization and owner registration flow through REST and
+- an atomic Organization and administrator registration flow through REST and
   Thymeleaf;
-- canonical, globally unique owner email addresses and BCrypt password hashes;
+- canonical, globally unique account email addresses and BCrypt password hashes;
+- administrator and member roles, with single-use, expiring member invitations;
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V8`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V9`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -69,7 +70,7 @@ export RELEASEFLOW_CREDENTIAL_MASTER_KEY='replace-with-the-generated-base64-key'
 
 Set `RELEASEFLOW_SESSION_COOKIE_SECURE=true` whenever the application is served
 over HTTPS. Open `http://localhost:8080/register` to create the first
-organization owner.
+organization administrator.
 
 REST clients use the same session and CSRF policy as the server-rendered UI:
 
@@ -89,6 +90,38 @@ connected once per Organization, while different Organizations may connect the
 same repository.
 
 `GET /api/status` remains public.
+
+## Members and invitations
+
+The account created at registration is an **administrator**. Administrators
+open **Members** to invite teammates by email, and only they can connect a
+GitHub repository. Members can do everything else: review changes, request AI
+suggestions, and prepare and publish releases.
+
+An invitation link has the form `/accept-invite#token=…` and is shown once.
+ReleaseFlow stores only a hash of it. The link expires after seven days (set
+`RELEASEFLOW_INVITATION_TTL`, for example `P3D`, to change this), works once,
+and can be reissued or revoked from the Members page. The invitee confirms the
+organization, chooses a name and a password, and signs in as a member. Roles
+cannot be changed and members cannot be removed yet.
+
+REST clients use the same rules:
+
+```text
+GET    /api/members                         (administrator)
+GET    /api/invitations                     (administrator)
+POST   /api/invitations {"email"}           (administrator; 201, returns acceptancePath once)
+POST   /api/invitations/{id}/reissue        (administrator)
+DELETE /api/invitations/{id}                (administrator)
+POST   /api/public/invitations/inspect {"token"}
+POST   /api/public/invitations/accept  {"token", "displayName", "password"}
+```
+
+The public endpoints need a CSRF token from `GET /api/csrf`. Every unusable
+token returns `400 invitation_invalid`. Other errors are `409
+invitation_already_pending`, `409 invitation_email_unavailable` (the email
+already has an account), `404 invitation_not_found`, and `403 access_denied`
+for members calling administrator endpoints.
 
 ## Receive GitHub webhooks
 
