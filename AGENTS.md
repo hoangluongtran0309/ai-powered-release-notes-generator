@@ -15,7 +15,8 @@ for breaking and Unknown changes, a per-Project Change Inbox, optional
 person-initiated OpenAI suggestions for Unknown changes that stay in review,
 recorded human review of any change, one Draft Release per Project built from
 settled changes, immutable published Release Note snapshots, REST/UI paths,
-and Testcontainers tests.
+and Testcontainers tests. A non-root container image, a Docker Compose demo
+stack, and GitHub Actions security and test gates are also in place.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
 
@@ -53,6 +54,8 @@ Read `README.md`, `docs/architecture.md`, and
 - Published Release Notes are immutable snapshots.
 - Tenant-owned repository lookups include both resource ID and the current
   principal's Organization ID.
+- GitHub Actions stay pinned to commit SHAs, images to digests, and downloaded
+  CI tools to SHA-256 checksums. Compose secrets never get default values.
 
 ## Commands
 
@@ -68,7 +71,11 @@ variables documented in `README.md`.
 ./mvnw verify
 ./mvnw spring-boot:run
 PATH="$PWD/node:$PATH" ./node/npm run watch
+docker compose -f docker-compose.demo.yml up --build
 ```
+
+The Compose stack reads `.env`; copy `.env.example` and replace every
+placeholder first.
 
 The Maven build installs Node.js and npm into `node/` and compiles
 `static/css/application.css` into `target/classes`; do not commit `node/` or

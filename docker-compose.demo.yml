@@ -1,0 +1,62 @@
+# ReleaseFlow demo stack: the application image and PostgreSQL. GitHub and
+# OpenAI remain external services configured through the environment.
+#
+#   cp .env.example .env    # then replace every REPLACE_ME value
+#   docker compose -f docker-compose.demo.yml up --build
+#
+# Open http://127.0.0.1:${RELEASEFLOW_HTTP_PORT:-8080}. `down --volumes` wipes
+# the demo data. This stack is for local evaluation, not production.
+
+name: releaseflow
+
+services:
+  app:
+    image: releaseflow:demo
+    build:
+      context: .
+    environment:
+      RELEASEFLOW_DB_URL: jdbc:postgresql://db:5432/${RELEASEFLOW_DB_NAME:-releaseflow}
+      RELEASEFLOW_DB_USERNAME: ${RELEASEFLOW_DB_USERNAME:-releaseflow}
+      RELEASEFLOW_DB_PASSWORD: ${RELEASEFLOW_DB_PASSWORD:?set RELEASEFLOW_DB_PASSWORD in .env}
+      RELEASEFLOW_CREDENTIAL_MASTER_KEY: ${RELEASEFLOW_CREDENTIAL_MASTER_KEY:?set RELEASEFLOW_CREDENTIAL_MASTER_KEY in .env (openssl rand -base64 32)}
+      RELEASEFLOW_SESSION_COOKIE_SECURE: ${RELEASEFLOW_SESSION_COOKIE_SECURE:-false}
+      # Optional; leave both empty to run without AI suggestions.
+      RELEASEFLOW_OPENAI_API_KEY: ${RELEASEFLOW_OPENAI_API_KEY:-}
+      RELEASEFLOW_OPENAI_MODEL: ${RELEASEFLOW_OPENAI_MODEL:-}
+      # Other optional settings are deliberately not forwarded: Compose turns an
+      # unset variable into an empty string, which would replace the default in
+      # application.properties instead of falling back to it.
+    ports:
+      - "127.0.0.1:${RELEASEFLOW_HTTP_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - releaseflow
+
+  db:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: ${RELEASEFLOW_DB_NAME:-releaseflow}
+      POSTGRES_USER: ${RELEASEFLOW_DB_USERNAME:-releaseflow}
+      POSTGRES_PASSWORD: ${RELEASEFLOW_DB_PASSWORD:?set RELEASEFLOW_DB_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # No published port: only the application reaches the database.
+    networks:
+      - releaseflow
+
+volumes:
+  postgres-data:
+    name: releaseflow-demo-postgres-data
+
+networks:
+  releaseflow:
+    name: releaseflow-demo

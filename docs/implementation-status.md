@@ -56,11 +56,16 @@
 
 - Administrator and member roles with single-use, hashed, expiring member
   invitations through Thymeleaf and REST, a Members page, and Flyway `V9`.
+- A two-stage, digest-pinned, non-root container image with a health check on
+  `GET /api/status`, and a Docker Compose demo stack with PostgreSQL that
+  requires its secrets to be supplied.
+- GitHub Actions gates: Conventional PR titles, actionlint, npm audit, Maven
+  verification, CodeQL, dependency review, a full-history Gitleaks scan, and
+  a Trivy image scan with a Compose smoke test; weekly Dependabot updates.
 
 ## In progress
 
-- Nothing. The organization roles and invitations slice is complete and
-  awaiting review.
+- Nothing. The CI and container slice is complete and awaiting review.
 
 ## Planned
 
@@ -77,8 +82,10 @@ deliberately deferred list below, one reviewed slice at a time.
   replacement, and secret rotation.
 - Dynamic audiences, localization, translation, and template engines.
 - Automation, distribution integrations, and a public changelog.
-- Client-rendered pages, JavaScript bundling and tests, containers, production
-  observability, release automation, and an open-core/enterprise module split.
+- Client-rendered pages, JavaScript bundling and tests, browser end-to-end
+  tests, production observability (Actuator, metrics, Prometheus, Grafana),
+  image publication, release automation, and an open-core/enterprise module
+  split.
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
 - Review history, comments, reviewer roles, and bulk review.

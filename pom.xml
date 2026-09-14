@@ -19,6 +19,10 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Spring Boot 4.1.1 manages Tomcat 11.0.24, which has critical CVEs
+             (CVE-2026-65182, CVE-2026-65905, CVE-2026-68525). Remove this
+             override once the parent manages 11.0.25 or later. -->
+        <tomcat.version>11.0.25</tomcat.version>
         <alpinejs.version>3.16.1</alpinejs.version>
         <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
         <frontend-maven-plugin.nodeVersion>v22.22.3</frontend-maven-plugin.nodeVersion>

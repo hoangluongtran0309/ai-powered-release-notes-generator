@@ -64,6 +64,12 @@ Before requesting review:
 5. Prefer a squash merge so the resulting integration commit also follows the
    commit convention.
 
+GitHub Actions enforces the automated part of this gate on every pull request
+to `develop` and `main`: the pull request title must follow the commit
+convention above, and the `CI`, `CodeQL`, `Dependency Review`, `Secret Scan`,
+and `Container` workflows must pass. Keep new actions pinned to a commit SHA
+and new images to a digest.
+
 Merges into `main` represent a reviewed release decision. Tags, release
 artifacts, and deployment automation are added only when a real publication
 process exists.
