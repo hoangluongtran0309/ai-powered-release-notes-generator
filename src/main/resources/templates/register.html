@@ -34,6 +34,16 @@
                                class="input input-bordered w-full" th:errorclass="input-error" required autofocus>
                         <span class="field-error" th:if="${#fields.hasErrors('organizationName')}" th:errors="*{organizationName}"></span>
                     </label>
+                    <label class="form-control"><span class="label-text font-medium">Release note language</span>
+                        <input type="text" th:field="*{outputLanguage}" maxlength="64" list="output-language-options"
+                               autocomplete="off" spellcheck="false" placeholder="en"
+                               class="input input-bordered w-full" th:errorclass="input-error">
+                        <datalist id="output-language-options">
+                            <option th:each="option : ${outputLanguageOptions}" th:value="${option.tag}" th:text="${option.displayName}">English</option>
+                        </datalist>
+                        <span class="text-xs text-slate-500">A language tag such as <code>en</code>, <code>vi</code>, or <code>pt-BR</code>. You can change it later.</span>
+                        <span class="field-error" th:if="${#fields.hasErrors('outputLanguage')}" th:errors="*{outputLanguage}"></span>
+                    </label>
                     <label class="form-control"><span class="label-text font-medium">Your name</span>
                         <input type="text" th:field="*{displayName}" maxlength="120" autocomplete="name"
                                class="input input-bordered w-full" th:errorclass="input-error" required>

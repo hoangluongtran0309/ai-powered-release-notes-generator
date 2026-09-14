@@ -24,6 +24,7 @@
              override once the parent manages 11.0.25 or later. -->
         <tomcat.version>11.0.25</tomcat.version>
         <alpinejs.version>3.16.1</alpinejs.version>
+        <anthropic-java.version>2.62.0</anthropic-java.version>
         <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
         <frontend-maven-plugin.nodeVersion>v22.22.3</frontend-maven-plugin.nodeVersion>
         <frontend-maven-plugin.npmVersion>10.9.8</frontend-maven-plugin.npmVersion>
@@ -70,6 +71,11 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.anthropic</groupId>
+            <artifactId>anthropic-java</artifactId>
+            <version>${anthropic-java.version}</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>

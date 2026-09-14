@@ -4,9 +4,10 @@
 
 ReleaseFlow currently implements the bootstrap, Organization administrator, Project
 plus GitHub configuration, signed GitHub merged-pull-request intake,
-deterministic classification with the Change Inbox, OpenAI classification,
+deterministic classification with the Change Inbox, automatic AI
+classification with neutral summaries and an Organization output language,
 human review, Draft Release, Release Note publication, and changed-file review
-slices: one Spring Boot application, PostgreSQL/Flyway V1-V10, administrator
+slices: one Spring Boot application, PostgreSQL/Flyway V1-V11, administrator
 registration, member
 invitations with administrator and member roles, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
@@ -14,8 +15,8 @@ secrets, a signature-verified webhook endpoint that records normalized merged
 pull requests idempotently, optional write-only GitHub access tokens, a durable
 `SKIP LOCKED` worker that lists changed files outside transactions,
 rule-based classification with mandatory review for breaking, Unknown, and
-sensitive-file changes, a per-Project Change Inbox, optional
-person-initiated OpenAI suggestions for Unknown changes that stay in review,
+sensitive-file changes, a per-Project Change Inbox, optional automatic AI
+classification (OpenAI, Anthropic, or DeepSeek) that the rules always override,
 recorded human review of any change, one Draft Release per Project built from
 settled changes, immutable published Release Note snapshots, REST/UI paths,
 and Testcontainers tests. A non-root container image, a Docker Compose demo
@@ -59,8 +60,14 @@ Read `README.md`, `docs/architecture.md`, and
 - The sensitive-path list must compile and must not be empty.
 - `RELEASEFLOW_CREDENTIAL_MASTER_KEY` is required at startup and must decode to
   exactly 32 bytes; webhook secrets are reveal-once values.
-- `RELEASEFLOW_OPENAI_API_KEY` and `RELEASEFLOW_OPENAI_MODEL` are optional but
-  must be set together; AI output is a suggestion that always stays in review.
+- AI is optional. `RELEASEFLOW_AI_PROVIDER` selects one provider, which needs
+  its key and model; there is no default model. AI never replaces a category
+  the rules chose, never clears a breaking flag, and never settles a change that
+  is Unknown, triggered, or that it asked to have reviewed.
+- Each change gets exactly one automatic AI request; a stalled `CLASSIFYING`
+  job is completed without asking again, and a failure becomes a
+  `CLASSIFIER_FALLBACK` trigger, never an automatic retry.
+- AI failures store fixed, safe messages, never exception text or bodies.
 - Applied Flyway migrations are immutable; add `V2` or later for schema changes.
 - Published Release Notes are immutable snapshots.
 - Tenant-owned repository lookups include both resource ID and the current

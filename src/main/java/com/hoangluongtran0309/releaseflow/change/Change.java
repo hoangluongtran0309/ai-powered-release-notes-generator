@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+import com.hoangluongtran0309.releaseflow.change.ChangeAiMerge.ClassifiedChange;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,7 +14,6 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -120,6 +120,16 @@ class Change {
     @Column(name = "review_triggers", nullable = false, columnDefinition = "jsonb")
     private List<ReviewTrigger> reviewTriggers;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "neutral_summary", columnDefinition = "jsonb")
+    private NeutralSummary neutralSummary;
+
+    @Column(name = "content_language", length = 16)
+    private String contentLanguage;
+
+    @Column(name = "ai_provider", length = 20)
+    private String aiProvider;
+
     protected Change() {
     }
 
@@ -175,43 +185,85 @@ class Change {
         );
     }
 
-    void completeProcessing(PullRequestFiles files, ChangeClassification classification) {
-        if (processingStatus != ProcessingStatus.PROCESSING) {
-            throw new IllegalStateException("Change " + id + " has already been processed.");
-        }
+    /**
+     * Keeps the collected file list before the AI is asked, so a job that stops during
+     * the AI call can still be classified from it without asking again.
+     */
+    void recordChangedFiles(PullRequestFiles files) {
+        requireProcessing();
         this.changedFileStatus = files.isCollected() ? ChangedFileStatus.COLLECTED : ChangedFileStatus.UNAVAILABLE;
         this.changedFiles = files.isCollected() ? new ArrayList<>(files.files()) : null;
-        this.category = classification.category();
-        this.breaking = classification.breaking();
-        this.needsReview = classification.needsReview();
-        this.classificationReasons = classification.reasons().toArray(String[]::new);
-        this.reviewTriggers = new ArrayList<>(classification.triggers());
+    }
+
+    /** The changed files as recorded; a change recorded before collection counts as unavailable. */
+    PullRequestFiles recordedFiles() {
+        return changedFileStatus == ChangedFileStatus.COLLECTED
+                ? PullRequestFiles.collected(changedFiles)
+                : PullRequestFiles.unavailable(PullRequestFiles.UNAVAILABLE, false);
+    }
+
+    void completeProcessing(PullRequestFiles files, ClassifiedChange outcome, Instant at) {
+        requireProcessing();
+        recordChangedFiles(files);
+        apply(outcome, List.of(), at);
         this.processingStatus = ProcessingStatus.COMPLETED;
+    }
+
+    /**
+     * A person asked the AI again after a failure. Existing review triggers are kept, so
+     * a change that needed review still does.
+     */
+    void applyAiRetry(ClassifiedChange outcome, Instant at) {
+        if (!isAiEligible()) {
+            throw new ChangeNotEligibleForAiException();
+        }
+        apply(outcome, reviewTriggers, at);
     }
 
     boolean isProcessing() {
         return processingStatus == ProcessingStatus.PROCESSING;
     }
 
+    // A failed automatic attempt, or an Unknown change recorded before automatic AI.
     boolean isAiEligible() {
         return processingStatus == ProcessingStatus.COMPLETED
-                && category == ChangeCategory.UNKNOWN
-                && classificationSource == ClassificationSource.RULES;
+                && reviewedAt == null
+                && (aiStatus == AiStatus.FAILED
+                || (aiStatus == AiStatus.NOT_REQUESTED && category == ChangeCategory.UNKNOWN));
     }
 
-    // AI can only add caution: it never clears a breaking flag or the need for review.
-    void applyAiSuggestion(AiClassification suggestion, String model, Instant attemptedAt) {
-        this.category = suggestion.category();
-        this.breaking = breaking || suggestion.breaking();
-        this.needsReview = true;
-        this.classificationSource = ClassificationSource.AI;
-        this.aiStatus = AiStatus.SUCCEEDED;
-        this.aiModel = model;
-        this.aiFailure = null;
-        this.aiAttemptedAt = attemptedAt;
-        String[] reasons = Arrays.copyOf(classificationReasons, classificationReasons.length + 1);
-        reasons[classificationReasons.length] = "AI suggestion (" + model + "): " + suggestion.rationale();
-        this.classificationReasons = reasons;
+    private void apply(ClassifiedChange outcome, List<ReviewTrigger> keptTriggers, Instant at) {
+        ChangeClassification classification = outcome.classification();
+        List<ReviewTrigger> triggers = new ArrayList<>(keptTriggers);
+        classification.triggers().stream().filter(trigger -> !triggers.contains(trigger)).forEach(triggers::add);
+        this.category = classification.category();
+        this.breaking = classification.breaking();
+        this.needsReview = classification.needsReview() || !triggers.isEmpty();
+        this.classificationReasons = classification.reasons().toArray(String[]::new);
+        this.reviewTriggers = triggers;
+        this.classificationSource = outcome.source();
+        AiOutcome ai = outcome.ai();
+        if (ai == null) {
+            return;
+        }
+        this.aiProvider = ai.provider().getValue();
+        this.aiModel = ai.model();
+        this.aiAttemptedAt = at;
+        if (ai.succeeded()) {
+            this.aiStatus = AiStatus.SUCCEEDED;
+            this.aiFailure = null;
+            this.neutralSummary = ai.classification().summary();
+            this.contentLanguage = ai.language().tag();
+        } else {
+            this.aiStatus = AiStatus.FAILED;
+            this.aiFailure = ai.failure();
+        }
+    }
+
+    private void requireProcessing() {
+        if (processingStatus != ProcessingStatus.PROCESSING) {
+            throw new IllegalStateException("Change " + id + " has already been processed.");
+        }
     }
 
     // Stores exactly what the reviewer confirmed. Changing either value makes the
@@ -229,12 +281,6 @@ class Change {
         this.reviewedBy = reviewer;
         this.reviewerName = name;
         this.reviewedAt = at;
-    }
-
-    void recordAiFailure(String failure, Instant attemptedAt) {
-        this.aiStatus = AiStatus.FAILED;
-        this.aiFailure = failure;
-        this.aiAttemptedAt = attemptedAt;
     }
 
     UUID getId() {
@@ -355,5 +401,17 @@ class Change {
 
     List<ReviewTrigger> getReviewTriggers() {
         return List.copyOf(reviewTriggers);
+    }
+
+    NeutralSummary getNeutralSummary() {
+        return neutralSummary;
+    }
+
+    String getContentLanguage() {
+        return contentLanguage;
+    }
+
+    AiProvider getAiProvider() {
+        return aiProvider == null ? null : AiProvider.fromValue(aiProvider).orElse(null);
     }
 }

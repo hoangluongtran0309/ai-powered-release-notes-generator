@@ -34,7 +34,7 @@ class DatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest {
     void databaseEnforcesUniqueCanonicalEmail() {
         UUID organizationId = UUID.randomUUID();
         jdbcTemplate.update(
-                "INSERT INTO organizations (id, name, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, ?, ?, 'en')",
                 organizationId,
                 "Acme",
                 Timestamp.from(Instant.now())

@@ -36,10 +36,14 @@ public class RegistrationService {
             throw new DuplicateEmailException();
         }
 
+        OutputLanguage outputLanguage = request.getOutputLanguage() == null || request.getOutputLanguage().isBlank()
+                ? OutputLanguage.DEFAULT
+                : OutputLanguage.parse(request.getOutputLanguage());
         Instant createdAt = clock.instant();
         Organization organization = new Organization(
                 UUID.randomUUID(),
                 request.getOrganizationName().strip(),
+                outputLanguage,
                 createdAt
         );
         AppUser admin = new AppUser(
@@ -65,7 +69,8 @@ public class RegistrationService {
                 admin.getId(),
                 admin.getEmail(),
                 admin.getDisplayName(),
-                admin.getRole()
+                admin.getRole(),
+                outputLanguage.tag()
         );
     }
 }

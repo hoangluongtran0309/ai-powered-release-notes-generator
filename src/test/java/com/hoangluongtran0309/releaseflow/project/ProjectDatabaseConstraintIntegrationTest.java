@@ -66,7 +66,7 @@ class ProjectDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
     private UUID insertOrganization(String name) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
-                "INSERT INTO organizations (id, name, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, ?, ?, 'en')",
                 id,
                 name,
                 Timestamp.from(Instant.now())

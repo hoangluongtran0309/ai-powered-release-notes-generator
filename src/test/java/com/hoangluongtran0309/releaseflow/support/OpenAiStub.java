@@ -27,7 +27,7 @@ public final class OpenAiStub implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final List<RecordedRequest> requests = new CopyOnWriteArrayList<>();
-    private volatile StubResponse response = new StubResponse(200, completion("feature", false, "Adds a capability."), Duration.ZERO);
+    private volatile StubResponse response = new StubResponse(200, completion("feature", false, false, "Adds a capability."), Duration.ZERO);
 
     private OpenAiStub() {
         try {
@@ -56,8 +56,13 @@ public final class OpenAiStub implements AutoCloseable {
         response = new StubResponse(status, body, delay);
     }
 
-    public void respondWithClassification(String category, boolean breaking, String rationale) {
-        respond(200, completion(category, breaking, rationale));
+    /** A valid answer whose what_changed is {@code summary}; the AI does not ask for review. */
+    public void respondWithClassification(String category, boolean breaking, String summary) {
+        respondWithClassification(category, breaking, false, summary);
+    }
+
+    public void respondWithClassification(String category, boolean breaking, boolean needsReview, String summary) {
+        respond(200, completion(category, breaking, needsReview, summary));
     }
 
     public List<RecordedRequest> requests() {
@@ -69,12 +74,25 @@ public final class OpenAiStub implements AutoCloseable {
         respondWithClassification("feature", false, "Adds a capability.");
     }
 
-    public static String completion(String category, boolean breaking, String rationale) {
-        String content = OBJECT_MAPPER.writeValueAsString(Map.of(
+    public static String completion(String category, boolean breaking, boolean needsReview, String summary) {
+        return completionWithContent(classification(category, breaking, needsReview, summary));
+    }
+
+    public static String classification(String category, boolean breaking, boolean needsReview, String summary) {
+        return OBJECT_MAPPER.writeValueAsString(Map.of(
                 "category", category,
-                "breaking", breaking,
-                "rationale", rationale
+                "breaking_change", breaking,
+                "needs_human_review", needsReview,
+                "neutral_core", Map.of(
+                        "what_changed", summary,
+                        "why_changed", "Requested by users.",
+                        "technical_detail", "Handled in the exporter.",
+                        "migration_step", ""
+                )
         ));
+    }
+
+    public static String completionWithContent(String content) {
         return OBJECT_MAPPER.writeValueAsString(Map.of(
                 "id", "chatcmpl-test",
                 "object", "chat.completion",

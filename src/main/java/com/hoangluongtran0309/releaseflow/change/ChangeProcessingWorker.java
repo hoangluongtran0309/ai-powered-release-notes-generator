@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
+import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.github.GitHubApiClient;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
 import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAccess;
@@ -20,10 +22,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Collects the changed files of received pull requests and classifies them. Claims
- * and results are written in short transactions; the GitHub call runs between them.
- * A change whose files cannot be listed is still classified, with a trigger that
- * forces review.
+ * Collects the changed files of received pull requests, asks the configured AI once,
+ * and classifies them. Claims and results are written in short transactions; GitHub
+ * and the AI are called between them. A change whose files or AI answer cannot be
+ * obtained is still classified, with a trigger that forces review.
  */
 @Component
 class ChangeProcessingWorker {
@@ -31,6 +33,8 @@ class ChangeProcessingWorker {
     static final int MAX_ATTEMPTS = 3;
     static final Duration STALE_AFTER = Duration.ofMinutes(10);
     static final String UNEXPECTED_ERROR = "unexpected_error";
+    static final String AI_FAILED = "ai_failed";
+    static final String AI_DID_NOT_FINISH = "ai_did_not_finish";
 
     private static final Logger log = LoggerFactory.getLogger(ChangeProcessingWorker.class);
 
@@ -39,6 +43,8 @@ class ChangeProcessingWorker {
     private final GitHubRepositoryAccess repositoryAccess;
     private final GitHubApiClient gitHubApiClient;
     private final SensitivePathRules sensitivePaths;
+    private final AiClassifiers aiClassifiers;
+    private final OutputLanguageService outputLanguageService;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final boolean enabled;
@@ -49,6 +55,8 @@ class ChangeProcessingWorker {
             GitHubRepositoryAccess repositoryAccess,
             GitHubApiClient gitHubApiClient,
             SensitivePathRules sensitivePaths,
+            AiClassifiers aiClassifiers,
+            OutputLanguageService outputLanguageService,
             PlatformTransactionManager transactionManager,
             Clock clock,
             @Value("${releaseflow.processing.enabled}") boolean enabled
@@ -58,6 +66,8 @@ class ChangeProcessingWorker {
         this.repositoryAccess = repositoryAccess;
         this.gitHubApiClient = gitHubApiClient;
         this.sensitivePaths = sensitivePaths;
+        this.aiClassifiers = aiClassifiers;
+        this.outputLanguageService = outputLanguageService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.enabled = enabled;
@@ -93,13 +103,20 @@ class ChangeProcessingWorker {
 
         Optional<Claim> claim = transactionTemplate.execute(status -> jobRepository.lockNextDue(now)
                 .map(job -> {
-                    job.claim(now);
                     Change change = findChange(job);
+                    if (job.isFallbackRequired()) {
+                        completeWithoutAi(job, change, now);
+                        return Claim.FINISHED;
+                    }
+                    job.claim(now);
                     return new Claim(job.getId(), job.getOrganizationId(), job.getProjectId(), job.getChangeId(),
                             job.getAttempts(), now, change.pullRequest());
                 }));
         if (claim.isEmpty()) {
             return false;
+        }
+        if (claim.get() == Claim.FINISHED) {
+            return true;
         }
         try {
             process(claim.get());
@@ -117,20 +134,81 @@ class ChangeProcessingWorker {
             reschedule(claim, files.failure());
             return;
         }
+        ChangeClassification rules = ChangeClassifier.classify(claim.pullRequest(), files, sensitivePaths);
 
-        ChangeClassification classification = ChangeClassifier.classify(claim.pullRequest(), files, sensitivePaths);
+        Optional<AiChangeClassifier> ai = aiClassifiers.active();
+        if (ai.isEmpty()) {
+            complete(claim, files, ChangeAiMerge.merge(rules, null), files.failure());
+            return;
+        }
+
+        Boolean classifying = transactionTemplate.execute(status -> jobRepository.findById(claim.jobId())
+                .filter(job -> job.isClaimedAt(claim.claimedAt()))
+                .map(job -> {
+                    findChange(job).recordChangedFiles(files);
+                    job.startClassifying();
+                    return true;
+                })
+                .orElse(false));
+        if (!Boolean.TRUE.equals(classifying)) {
+            return;
+        }
+
+        AiOutcome outcome = askAi(ai.get(), claim, rules.category());
+        complete(
+                claim,
+                files,
+                ChangeAiMerge.merge(rules, outcome),
+                outcome.succeeded() ? files.failure() : AI_FAILED
+        );
+    }
+
+    // Exactly one request per change: a failure becomes a fallback, never a retry.
+    private AiOutcome askAi(AiChangeClassifier ai, Claim claim, ChangeCategory rulesCategory) {
+        OutputLanguage language = outputLanguageService.outputLanguage(claim.organizationId());
+        try {
+            AiClassification answer = ai.classify(AiClassificationRequest.of(
+                    claim.changeId(),
+                    claim.pullRequest(),
+                    language,
+                    rulesCategory
+            ));
+            return AiOutcome.succeeded(ai, answer, language);
+        } catch (AiClassificationException exception) {
+            return AiOutcome.failed(ai, exception.getMessage());
+        } catch (RuntimeException exception) {
+            log.error("AI classification of change {} failed unexpectedly.", claim.changeId(), exception);
+            return AiOutcome.failed(ai, "AI classification failed unexpectedly.");
+        }
+    }
+
+    private void complete(Claim claim, PullRequestFiles files, ChangeAiMerge.ClassifiedChange outcome, String error) {
         transactionTemplate.executeWithoutResult(status -> {
             ChangeProcessingJob job = jobRepository.findById(claim.jobId()).orElseThrow();
             if (!job.isClaimedAt(claim.claimedAt())) {
                 // The claim went stale and another worker took the job over.
                 return;
             }
-            findChange(job).completeProcessing(files, classification);
-            job.complete(files.failure(), now());
+            Instant now = now();
+            findChange(job).completeProcessing(files, outcome, now);
+            job.complete(error, now);
         });
-        log.info("Processed change {} with {} changed file(s) {}.", claim.changeId(),
+        log.info("Processed change {} with {} changed file(s) {}{}.", claim.changeId(),
                 files.isCollected() ? files.files().size() : 0,
-                files.isCollected() ? "collected" : "unavailable (" + files.failure() + ")");
+                files.isCollected() ? "collected" : "unavailable (" + files.failure() + ")",
+                outcome.ai() == null ? "" : outcome.ai().succeeded() ? " and an AI summary" : " and an AI failure");
+    }
+
+    // A job whose AI call may already have happened is finished from the recorded files.
+    private void completeWithoutAi(ChangeProcessingJob job, Change change, Instant now) {
+        PullRequestFiles files = change.recordedFiles();
+        ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files, sensitivePaths);
+        AiOutcome outcome = aiClassifiers.active()
+                .map(ai -> AiOutcome.failed(ai, AiOutcome.DID_NOT_FINISH))
+                .orElse(null);
+        change.completeProcessing(files, ChangeAiMerge.merge(rules, outcome), now);
+        job.complete(AI_DID_NOT_FINISH, now);
+        log.warn("Completed change {} without AI because its classification did not finish.", change.getId());
     }
 
     private PullRequestFiles collectFiles(Claim claim) {
@@ -147,10 +225,12 @@ class ChangeProcessingWorker {
         );
     }
 
+    // Only a job still collecting files is retried; once the AI may have been asked, it never is.
     private void reschedule(Claim claim, String error) {
         Instant retryAt = now().plus(backoff(claim.attempt()));
         transactionTemplate.executeWithoutResult(status -> jobRepository.findById(claim.jobId())
                 .filter(job -> job.isClaimedAt(claim.claimedAt()))
+                .filter(job -> job.getStatus() == ChangeProcessingJob.Status.ENRICHING)
                 .ifPresent(job -> job.retry(error, retryAt)));
         log.info("Retrying change {} at {} after attempt {} ({}).", claim.changeId(), retryAt, claim.attempt(), error);
     }
@@ -183,5 +263,7 @@ class ChangeProcessingWorker {
             Instant claimedAt,
             MergedPullRequest pullRequest
     ) {
+        // Marks a job that was completed while claiming it.
+        static final Claim FINISHED = new Claim(null, null, null, null, 0, null, null);
     }
 }

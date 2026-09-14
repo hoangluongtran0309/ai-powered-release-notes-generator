@@ -75,7 +75,19 @@ class ChangeProcessingJob {
     // True only for the worker holding the current claim; a claim that went stale and was
     // taken over by another worker no longer belongs to it.
     boolean isClaimedAt(Instant claim) {
-        return status == Status.ENRICHING && claim.equals(claimedAt);
+        return (status == Status.ENRICHING || status == Status.CLASSIFYING) && claim.equals(claimedAt);
+    }
+
+    // From here on the single AI call may be in flight; a stale job must not repeat it.
+    void startClassifying() {
+        if (status != Status.ENRICHING) {
+            throw new IllegalStateException("Job " + id + " is not collecting changed files.");
+        }
+        this.status = Status.CLASSIFYING;
+    }
+
+    boolean isFallbackRequired() {
+        return status == Status.FALLBACK_REQUIRED;
     }
 
     void retry(String error, Instant nextAttemptAt) {
@@ -129,6 +141,8 @@ class ChangeProcessingJob {
     enum Status {
         PENDING,
         ENRICHING,
+        CLASSIFYING,
+        FALLBACK_REQUIRED,
         COMPLETED
     }
 }

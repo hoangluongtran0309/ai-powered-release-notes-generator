@@ -32,8 +32,11 @@ The application currently provides:
   review;
 - a per-Project Change Inbox in the UI and REST, filterable by category and
   review status;
-- optional, person-initiated OpenAI suggestions for Unknown changes, which
-  always stay in review;
+- optional automatic AI classification with OpenAI, Anthropic, or DeepSeek:
+  one request per change, a neutral summary in the Organization's output
+  language, and rules and review triggers that always win;
+- an Organization output language, chosen at registration and changed by
+  administrators;
 - human review of any change, recording who confirmed or corrected its
   category and breaking flag;
 - one Draft Release per Project, assembled from settled changes, with a live
@@ -279,40 +282,86 @@ person, `reviewed`). An unsupported value returns
 `400 invalid_change_filter`, and another Organization's Project returns
 `404 project_not_found`.
 
-## AI suggestions
+## AI classification and summaries
 
-AI is optional. To enable it, set both variables before starting the
-application:
+AI is optional. To enable it, choose one provider and give it a key and a
+model before starting the application:
 
 ```bash
-export RELEASEFLOW_OPENAI_API_KEY='replace-with-an-openai-api-key'
-export RELEASEFLOW_OPENAI_MODEL='replace-with-a-model-that-supports-structured-outputs'
+export RELEASEFLOW_AI_PROVIDER=anthropic          # or openai, deepseek
+export RELEASEFLOW_ANTHROPIC_API_KEY='replace-with-an-api-key'
+export RELEASEFLOW_ANTHROPIC_MODEL='replace-with-a-model-id'   # for example claude-opus-5
 ```
 
-If only one of them is set, startup fails. If neither is set, the application
-runs without AI. `RELEASEFLOW_OPENAI_BASE_URL` (default
-`https://api.openai.com/v1`) and `RELEASEFLOW_OPENAI_TIMEOUT` (default `PT30S`)
-are optional.
+| Provider | Key and model variables | Base URL variable (default) |
+| --- | --- | --- |
+| `openai` | `RELEASEFLOW_OPENAI_API_KEY`, `RELEASEFLOW_OPENAI_MODEL` | `RELEASEFLOW_OPENAI_BASE_URL` (`https://api.openai.com/v1`) |
+| `anthropic` | `RELEASEFLOW_ANTHROPIC_API_KEY`, `RELEASEFLOW_ANTHROPIC_MODEL` | `RELEASEFLOW_ANTHROPIC_BASE_URL` (`https://api.anthropic.com`) |
+| `deepseek` | `RELEASEFLOW_DEEPSEEK_API_KEY`, `RELEASEFLOW_DEEPSEEK_MODEL` | `RELEASEFLOW_DEEPSEEK_BASE_URL` (`https://api.deepseek.com`) |
 
-When AI is enabled, every Unknown change in the Change Inbox has a
-**Classify with AI** button. REST clients call
+There is no default model; pick one that supports structured JSON output.
+Startup fails when the selected provider lacks its key or model, when the
+provider name is unknown, or when a provider's key or model is set but
+`RELEASEFLOW_AI_PROVIDER` is empty. `RELEASEFLOW_AI_TIMEOUT` (default `PT60S`)
+bounds each request. With no provider, changes are classified by the rules
+alone.
+
+With a provider, the change worker asks the AI **once** for every new change,
+after its changed files are known. It sends the pull request title, labels,
+target branch, up to 4000 characters of the description, the Organization's
+output language, and the category the rules chose, if any. It does not send
+the author, and OpenAI requests set `store: false`. The answer is a category, a
+breaking flag, whether a person should review it, and a **neutral summary**
+(what changed, why, technical detail, migration step) written in the output
+language. The Change Inbox shows the summary under each change, and the changes
+API returns it as `neutralSummary` with `contentLanguage` and `aiProvider`.
+
+The rules always win:
+
+- a category the rules chose is kept;
+- the AI may mark a change breaking but never clears the flag;
+- breaking, Unknown, and triggered changes, and changes the AI asks to have
+  reviewed, stay in review.
+
+Otherwise the AI's answer settles the change, and an Unknown change can
+receive its category from the AI.
+
+If the AI call fails or returns something unusable, the change keeps the rule
+result, records `aiStatus: FAILED` with a safe message, and gets an
+**AI classification failed** review trigger. Nothing is retried automatically,
+and a worker that stops mid-call never asks again. A person can press **Retry
+with AI** in the Change Inbox, or call
 `POST /api/projects/{projectId}/changes/{changeId}/ai-classification` with the
-session and a CSRF token. ReleaseFlow sends the pull request title, labels,
-target branch, and up to 4000 characters of its description, with
-`store: false`. It does not send the author. The model's category, breaking
-flag, and rationale are stored as an **AI suggestion**, and the change still
-needs review.
+session and a CSRF token. The same applies to Unknown changes recorded before
+automatic AI. The failure trigger stays, so a person still reviews the change.
 
 | Outcome | REST response |
 | --- | --- |
-| Suggestion stored | `200` with the updated change |
+| AI answer stored | `200` with the updated change |
 | Change not in this Organization's Project | `404 change_not_found` |
-| Change already classified by rules or AI | `409 change_not_eligible_for_ai` |
-| OpenAI failed; the failure is stored and shown | `502 ai_classification_failed` |
+| Change still being processed | `409 change_processing` |
+| Change already classified by AI, or reviewed | `409 change_not_eligible_for_ai` |
+| The provider failed; the failure is stored and shown | `502 ai_classification_failed` |
 | AI not configured | `503 ai_classification_unavailable` |
 
-Nothing retries automatically. A person can press **Retry with AI** after a
-failure.
+## Output language
+
+Each Organization writes its AI summaries in one output language, a language
+tag such as `en`, `vi`, or `pt-BR`. It is chosen at registration
+(`outputLanguage`, English by default) and shown on the Projects page, where
+administrators can change it. Changes affect only changes classified
+afterwards.
+
+```text
+GET /api/organization/output-language                     (any member)
+PUT /api/organization/output-language {"outputLanguage"}  (administrator)
+```
+
+Both return `{outputLanguage, displayName, supported}`. Tags are canonicalized
+(`vi_VN` becomes `vi-VN`); any tag whose language is an ISO 639 code is
+accepted, and an invalid one returns `400 output_language_invalid`.
+`RELEASEFLOW_OUTPUT_LANGUAGES` (default `en,vi`) lists the suggestions offered
+in the forms.
 
 ## Human review
 

@@ -24,7 +24,11 @@ final class ProcessedChanges {
 
     static Change processed(UUID id, UUID organizationId, UUID projectId, MergedPullRequest pullRequest) {
         Change change = Change.received(id, organizationId, projectId, pullRequest, UUID.randomUUID(), Instant.now());
-        change.completeProcessing(ORDINARY_FILES, ChangeClassifier.classify(pullRequest, ORDINARY_FILES, RULES));
+        change.completeProcessing(
+                ORDINARY_FILES,
+                ChangeAiMerge.merge(ChangeClassifier.classify(pullRequest, ORDINARY_FILES, RULES), null),
+                Instant.now()
+        );
         return change;
     }
 }

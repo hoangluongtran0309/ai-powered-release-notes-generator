@@ -23,6 +23,10 @@ public class RegistrationRequest {
     @ValidPassword
     private String password;
 
+    // Optional; English when omitted. Validated as a language tag by the service.
+    @Size(max = 64)
+    private String outputLanguage;
+
     public String getOrganizationName() {
         return organizationName;
     }
@@ -53,5 +57,13 @@ public class RegistrationRequest {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getOutputLanguage() {
+        return outputLanguage;
+    }
+
+    public void setOutputLanguage(String outputLanguage) {
+        this.outputLanguage = outputLanguage == null ? null : outputLanguage.strip();
     }
 }

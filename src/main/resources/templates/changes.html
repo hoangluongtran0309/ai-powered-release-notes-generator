@@ -55,7 +55,7 @@
 
         <p class="subtle-panel mt-3 p-3 text-sm text-slate-600"
            th:if="${!aiEnabled and !#lists.isEmpty(changes.?[aiEligible])}">
-            Set <code>RELEASEFLOW_OPENAI_API_KEY</code> and <code>RELEASEFLOW_OPENAI_MODEL</code> to get AI suggestions for Unknown changes.
+            Set <code>RELEASEFLOW_AI_PROVIDER</code> with that provider's API key and model to classify and summarize changes with AI.
         </p>
 
         <section class="empty-state mt-6" th:if="${pageError == null and #lists.isEmpty(changes)}">
@@ -105,9 +105,9 @@
                             <span th:case="*" class="badge badge-ghost font-semibold" th:text="${change.category.label}">Unknown</span>
                         </th:block>
                         <span class="badge badge-soft badge-secondary gap-1 font-semibold" th:if="${change.classificationSource.name() == 'AI'}"
-                              th:title="|Suggested by ${change.aiModel}|">
+                              th:title="|Category chosen by ${change.aiProvider != null ? change.aiProvider.label : 'AI'} ${change.aiModel}|">
                             <svg class="icon h-3.5 w-3.5" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#sparkles}"></use></svg>
-                            <span>AI suggestion</span>
+                            <span>AI category</span>
                         </span>
                         <span class="badge badge-error font-semibold" th:if="${change.breaking}">Breaking</span>
                         <span class="badge badge-warning font-semibold" th:if="${change.needsReview}">Needs review</span>
@@ -143,6 +143,17 @@
                             <li th:each="trigger : ${change.reviewTriggers}" th:text="${trigger.describe()}">Sensitive file db/migration/V9.sql</li>
                         </ul>
                     </div>
+                    <details class="mt-3 text-sm" th:if="${change.neutralSummary != null}" open>
+                        <summary class="cursor-pointer font-medium text-slate-600"
+                                 th:text="|Summary (${change.contentLanguage})|">Summary (en)</summary>
+                        <dl class="subtle-panel mt-2 grid gap-2 p-3" th:lang="${change.contentLanguage}"
+                            th:with="summary=${change.neutralSummary}">
+                            <div><dt class="font-semibold">What changed</dt><dd class="whitespace-pre-line" th:text="${summary.whatChanged}">Adds CSV export to every table.</dd></div>
+                            <div th:unless="${#strings.isEmpty(summary.whyChanged)}"><dt class="font-semibold">Why</dt><dd class="whitespace-pre-line" th:text="${summary.whyChanged}">Users asked to download data.</dd></div>
+                            <div th:unless="${#strings.isEmpty(summary.technicalDetail)}"><dt class="font-semibold">Technical detail</dt><dd class="whitespace-pre-line" th:text="${summary.technicalDetail}">Streams rows to avoid loading the table in memory.</dd></div>
+                            <div th:unless="${#strings.isEmpty(summary.migrationStep)}"><dt class="font-semibold">Migration</dt><dd class="whitespace-pre-line" th:text="${summary.migrationStep}">Nothing to do.</dd></div>
+                        </dl>
+                    </details>
                     <details class="mt-3 text-sm" th:unless="${#lists.isEmpty(change.changedFiles)}">
                         <summary class="cursor-pointer font-medium text-slate-600"
                                  th:text="|Changed files (${#lists.size(change.changedFiles)})|">Changed files (3)</summary>

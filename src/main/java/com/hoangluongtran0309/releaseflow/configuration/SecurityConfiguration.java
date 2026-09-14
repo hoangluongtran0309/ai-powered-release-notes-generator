@@ -67,6 +67,10 @@ public class SecurityConfiguration {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/projects/*/github-integration/token")
                         .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/organization/output-language")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/organization/output-language")
+                        .hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

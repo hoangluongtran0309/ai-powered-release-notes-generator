@@ -36,9 +36,14 @@
   database constraint; Flyway `V4` marks earlier changes Unknown.
 - A per-Project Change Inbox through Thymeleaf and REST with category and
   review-status filters.
-- One OpenAI structured-classification integration: person-initiated
-  suggestions for Unknown changes, strict JSON Schema output, explicit
-  FAILED states, no network call inside a transaction, and Flyway `V5`.
+- Optional automatic AI classification (ADR-0009) with OpenAI, Anthropic, or
+  DeepSeek behind one `AiChangeClassifier` interface: one request per change in
+  the worker, a shared JSON contract with a neutral summary, rules and review
+  triggers that always win, explicit FAILED states with a fallback trigger, no
+  automatic retry, stale-claim completion without a second call, a manual retry
+  for failures and older Unknown changes, and Flyway `V5` and `V11`.
+- An Organization output language (BCP 47) chosen at registration, changed by
+  administrators through Thymeleaf and REST, and used for AI summaries.
 - Human review of any change through Thymeleaf and REST: the reviewer confirms
   or corrects the category and breaking flag, and the reviewer and time are
   recorded. Flyway `V6` adds the review columns, a same-tenant reviewer foreign
@@ -76,7 +81,8 @@
 
 ## In progress
 
-- Nothing. The changed-file review slice is complete and awaiting review.
+- Nothing. The automatic AI classification and output language slice is
+  complete and awaiting review.
 
 ## Planned
 
@@ -86,8 +92,8 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Additional source and AI providers, automatic AI classification, and AI
-  retries.
+- Additional source providers, audience narratives, category suggestions,
+  context sufficiency, and automatic AI retries.
 - Historical imports, polling, and queues or retries for work other than
   changed-file collection.
 - Validating a repository with GitHub when it is connected, per-Project

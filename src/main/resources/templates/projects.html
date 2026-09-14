@@ -20,6 +20,7 @@
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
     <div class="alert alert-success mb-6" role="status" th:if="${param.tokenSaved}"><span>Access token saved. New changes will be checked for sensitive files.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.languageSaved}"><span>Output language saved. New changes will be summarized in it.</span></div>
 
     <ol class="grid gap-3 md:grid-cols-3" aria-label="Setup progress">
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasProjects} ? 'border-emerald-200' : 'border-indigo-300'">
@@ -59,6 +60,33 @@
                 <span>Create project</span>
             </button>
         </form>
+    </section>
+
+    <section class="surface-card mt-6 p-6" id="output-language">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <h2 class="section-heading">Output language</h2>
+                <p class="section-copy">
+                    AI summaries are written in
+                    <strong th:text="|${outputLanguage.displayName} (${outputLanguage.outputLanguage})|">English (en)</strong>.
+                    Changing it affects changes classified afterwards.
+                </p>
+            </div>
+            <form class="flex flex-col gap-2 sm:flex-row sm:items-start" th:if="${viewer.admin}"
+                  th:action="@{/organization/output-language}" th:object="${outputLanguageRequest}" method="post">
+                <label class="form-control">
+                    <span class="sr-only">Output language</span>
+                    <input type="text" th:field="*{outputLanguage}" maxlength="64" list="output-language-options"
+                           autocomplete="off" spellcheck="false" required
+                           class="input input-bordered w-full sm:w-44" th:errorclass="input-error">
+                    <datalist id="output-language-options">
+                        <option th:each="option : ${outputLanguage.supported}" th:value="${option.tag}" th:text="${option.displayName}">English</option>
+                    </datalist>
+                    <span class="field-error" th:if="${#fields.hasErrors('outputLanguage')}" th:errors="*{outputLanguage}"></span>
+                </label>
+                <button type="submit" class="btn btn-outline">Save language</button>
+            </form>
+        </div>
     </section>
 
     <section class="empty-state mt-6" th:unless="${hasProjects}">

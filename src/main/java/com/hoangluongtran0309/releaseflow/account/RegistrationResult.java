@@ -8,6 +8,7 @@ public record RegistrationResult(
         UUID userId,
         String email,
         String displayName,
-        AppUserRole role
+        AppUserRole role,
+        String outputLanguage
 ) {
 }
