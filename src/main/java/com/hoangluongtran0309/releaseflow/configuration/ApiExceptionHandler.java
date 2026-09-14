@@ -14,6 +14,7 @@ import com.hoangluongtran0309.releaseflow.change.AiClassificationUnavailableExce
 import com.hoangluongtran0309.releaseflow.change.ChangeApiController;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotEligibleForAiException;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
+import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
@@ -21,7 +22,10 @@ import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadExceptio
 import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchException;
 import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
 import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationAlreadyConfiguredException;
+import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAlreadyConnectedException;
+import com.hoangluongtran0309.releaseflow.project.GitHubTokenRejectedException;
+import com.hoangluongtran0309.releaseflow.project.GitHubUnavailableException;
 import com.hoangluongtran0309.releaseflow.project.ProjectApiController;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.release.ChangeNotReleasableException;
@@ -166,6 +170,46 @@ public class ApiExceptionHandler {
                 "GitHub repository already connected",
                 exception.getMessage(),
                 "github_repository_already_connected"
+        ));
+    }
+
+    @ExceptionHandler(GitHubIntegrationNotFoundException.class)
+    ResponseEntity<ProblemDetail> integrationNotFound(GitHubIntegrationNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "GitHub integration not found",
+                exception.getMessage(),
+                "github_integration_not_found"
+        ));
+    }
+
+    @ExceptionHandler(GitHubTokenRejectedException.class)
+    ResponseEntity<ProblemDetail> gitHubTokenRejected(GitHubTokenRejectedException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "GitHub token rejected",
+                exception.getMessage(),
+                "github_token_rejected"
+        ));
+    }
+
+    @ExceptionHandler(GitHubUnavailableException.class)
+    ResponseEntity<ProblemDetail> gitHubUnavailable(GitHubUnavailableException exception) {
+        return response(problem(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "GitHub unavailable",
+                exception.getMessage(),
+                "github_unavailable"
+        ));
+    }
+
+    @ExceptionHandler(ChangeProcessingException.class)
+    ResponseEntity<ProblemDetail> changeProcessing(ChangeProcessingException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Change still processing",
+                exception.getMessage(),
+                "change_processing"
         ));
     }
 

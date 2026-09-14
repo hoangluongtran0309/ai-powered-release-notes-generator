@@ -4,7 +4,8 @@
 
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
-`account`, `project`, `change`, `release`, and shared `configuration`:
+`account`, `project`, `change`, `release`, the `github` API client shared by
+`project` and `change`, and shared `configuration`:
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
@@ -22,6 +23,8 @@ POST /projects/{id}/github-integration -> GitHubIntegrationService
 GET  /api/projects            -> tenant-scoped Project list
 POST /api/projects            -> ProjectService
 POST /api/projects/{id}/github-integration -> GitHubIntegrationService
+POST /projects/{id}/github-integration/token -> GitHubIntegrationService (administrator)
+PUT  /api/projects/{id}/github-integration/token -> GitHubIntegrationService (administrator)
 POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
 GET  /changes                 -> ChangeInboxService (Change Inbox UI)
 GET  /api/projects/{id}/changes -> ChangeInboxService
@@ -177,6 +180,18 @@ Base64-encoded 32-byte key from `RELEASEFLOW_CREDENTIAL_MASTER_KEY`. Key and
 credential material are never logged. See
 [ADR-0002](adr/0002-per-integration-webhook-credentials.md).
 
+An administrator may add or replace one GitHub access token per integration.
+`GitHubIntegrationService.replaceToken` reads the integration in one short
+transaction, asks GitHub with `GitHubApiClient.checkPullRequestAccess`
+(`GET /repos/{owner}/{repo}/pulls?state=closed&per_page=1`) outside any
+transaction, and stores the token in a second short transaction. The token uses
+the same cipher and authenticated data as the secret plus a
+`github-access-token` purpose line, so the two ciphertexts cannot be swapped.
+Project reads report only whether a token exists and when it was set.
+`GitHubRepositoryAccess` is the single way the `change` capability obtains the
+decrypted token, always by Organization and Project ID. See
+[ADR-0008](adr/0008-durable-change-processing.md).
+
 ## GitHub webhook intake
 
 `POST /webhooks/github/{webhookId}` is served by its own Spring Security filter
@@ -208,14 +223,45 @@ service checks for an existing row first and treats a concurrent unique
 violation as a duplicate, so redeliveries return `200 duplicate`. The first
 delivery ID is retained on the row. Every accepted delivery advances the
 integration's `last_delivery_at`, which the Projects page shows as setup step
-three. Intake is synchronous and short-lived: there is no queue, retry, GitHub
-API call, or network I/O inside a database transaction.
+three. Intake stays short: one transaction inserts the change, `PROCESSING`,
+Unknown, and in review, together with a `PENDING` row in
+`change_processing_jobs`. The webhook request makes no GitHub call.
+
+## Change processing
+
+`ChangeProcessingWorker` runs every second on the scheduler and drains due
+jobs. Each step is its own short transaction, and the GitHub call happens
+between them:
+
+1. Jobs left `ENRICHING` for more than ten minutes return to `PENDING`.
+2. One due `PENDING` job is locked with `FOR UPDATE SKIP LOCKED`, marked
+   `ENRICHING`, its attempt counted, and its claim time recorded, so several
+   workers never take the same job.
+3. Without a transaction, `GitHubRepositoryAccess` supplies the repository and
+   token, and `GitHubApiClient.pullRequestFiles` lists the files, 100 per page
+   for at most five pages. A full fifth page, a refused or missing token, or an
+   invalid response is final. Timeouts, network errors, rate limits, and 5xx
+   responses are retried after 2 and 4 seconds, up to three attempts.
+4. The rules classify the change with the result, and the change and job are
+   completed together, but only if the job still carries this worker's claim.
+   A claim that went stale and was taken over is discarded.
+
+An unexpected failure reschedules the job rather than skipping it, so the
+change stays visibly Processing. Changes recorded before Flyway `V10` were
+marked `COMPLETED` and are never processed.
+
+The database protects the outcome. `changes_processing_unsettled` keeps a
+`PROCESSING` change Unknown, in review, unreviewed, and without files or
+triggers, so it cannot be released, reviewed, or sent to AI. The service layer
+also rejects such a review with `409 change_processing`.
+`changes_triggers_require_review` allows review triggers only on changes that
+need or have received review.
 
 ## Deterministic classification
 
-`ChangeClassifier` runs inside the webhook request, before the change is
-saved. It uses only the pull request title, labels, and description, so it
-never performs network I/O.
+`ChangeClassifier` runs in the worker after the changed files are known. It
+uses the pull request title, labels, description, and file list, and never
+performs network I/O itself.
 
 | Signal | Rule | Effect |
 | --- | --- | --- |
@@ -224,12 +270,19 @@ never performs network I/O.
 | Label | `enhancement`, `feature`; `bug`, `bugfix`; `performance`; `documentation`, `docs`; `dependencies`, `maintenance`, `chore`, `refactor` | Category, only without a title type |
 | Breaking label | `breaking-change`, `breaking change`, `breaking` | Breaking |
 | Footer | A description line starting with `BREAKING CHANGE:` or `BREAKING-CHANGE:` | Breaking |
+| Files | Every changed file is in `docs/` or ends in `.md`, `.adoc`, or `.rst` | Documentation, before the title type |
+| Sensitive path | A changed or previous path matches `releaseflow.classification.sensitive-paths` | `SENSITIVE_PATH` review trigger |
+| No file list | The files could not be listed | `CHANGED_FILES_UNAVAILABLE` review trigger |
 
 A title type outranks labels, and every matched rule is kept as a reason, so a
 disagreement stays visible. Labels naming different categories without a title
 type, or no matching rule at all, produce Unknown. `needs_review` is true for
-every breaking or Unknown change; the `changes_review_required` check
-constraint enforces that invariant in the database as well. Flyway `V4`
+every breaking, Unknown, or triggered change; the `changes_review_required`
+and `changes_triggers_require_review` check constraints enforce that invariant
+in the database as well. Review triggers are stored as typed JSON
+(`{type, detail}`) beside the textual reasons. `SensitivePathRules` compiles
+the configured JDK globs at startup, also matching `**/x` patterns at the
+root, and refuses to start with an invalid pattern or an empty list. Flyway `V4`
 assigns Unknown, needs review, and the reason "Recorded before rule-based
 classification" to changes recorded before it ran.
 
@@ -391,8 +444,8 @@ checksums. See [ADR-0007](adr/0007-ci-and-container-supply-chain.md).
 
 New code is grouped by product capability. A capability starts with direct,
 readable classes and gains internal layers only when implemented behavior needs
-them. GitHub configuration and webhook intake perform no provider call,
-access-token validation, or historical import. The only outbound call is a
-person-initiated OpenAI request. There is no background worker or
-separately deployed frontend in the current system; the compiled stylesheet
-ships inside the application JAR.
+them. Connecting a repository and receiving webhooks make no provider call,
+and there is no historical import. Outbound calls are a person-initiated OpenAI request,
+the GitHub access-token check, and the changed-file listing made by the one
+background worker. There is no separately deployed frontend; the compiled
+stylesheet ships inside the application JAR.

@@ -6,10 +6,12 @@ record ChangeClassification(
         ChangeCategory category,
         boolean breaking,
         boolean needsReview,
-        List<String> reasons
+        List<String> reasons,
+        List<ReviewTrigger> triggers
 ) {
 
     ChangeClassification {
         reasons = List.copyOf(reasons);
+        triggers = List.copyOf(triggers);
     }
 }

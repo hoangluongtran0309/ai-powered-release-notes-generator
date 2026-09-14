@@ -62,6 +62,11 @@ public class SecurityConfiguration {
                         // Configuring a repository creates its webhook signing secret.
                         .requestMatchers(HttpMethod.POST, "/projects/*/github-integration", "/api/projects/*/github-integration")
                         .hasRole("ADMIN")
+                        // An access token is a credential, set only by administrators.
+                        .requestMatchers(HttpMethod.POST, "/projects/*/github-integration/token")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/projects/*/github-integration/token")
+                        .hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

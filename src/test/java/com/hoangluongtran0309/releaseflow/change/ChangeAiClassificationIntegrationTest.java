@@ -69,6 +69,7 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void reset() {
         OPENAI.reset();
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
@@ -234,15 +235,7 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
                 "https://github.com/acme/releaseflow/pull/" + number
         );
         UUID id = UUID.randomUUID();
-        changeRepository.saveAndFlush(new Change(
-                id,
-                owner.organizationId(),
-                projectId,
-                pullRequest,
-                ChangeClassifier.classify(pullRequest),
-                UUID.randomUUID(),
-                Instant.now()
-        ));
+        changeRepository.saveAndFlush(ProcessedChanges.processed(id, owner.organizationId(), projectId, pullRequest));
         return id;
     }
 

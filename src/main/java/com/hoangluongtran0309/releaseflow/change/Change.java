@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,6 +12,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -101,42 +104,99 @@ class Change {
     @Column(name = "reviewed_at")
     private Instant reviewedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "processing_status", nullable = false, length = 20)
+    private ProcessingStatus processingStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "changed_file_status", length = 20)
+    private ChangedFileStatus changedFileStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "changed_files", columnDefinition = "jsonb")
+    private List<ChangedFile> changedFiles;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "review_triggers", nullable = false, columnDefinition = "jsonb")
+    private List<ReviewTrigger> reviewTriggers;
+
     protected Change() {
     }
 
-    Change(
+    /**
+     * A merged pull request that has just been received. It waits, Unknown and in
+     * review, until its changed files are checked and the rules classify it.
+     */
+    static Change received(
             UUID id,
             UUID organizationId,
             UUID projectId,
             MergedPullRequest pullRequest,
-            ChangeClassification classification,
             UUID deliveryId,
             Instant receivedAt
     ) {
-        this.id = id;
-        this.organizationId = organizationId;
-        this.projectId = projectId;
-        this.pullRequestNumber = pullRequest.number();
-        this.title = pullRequest.title();
-        this.description = pullRequest.description();
-        this.authorLogin = pullRequest.authorLogin();
-        this.labels = pullRequest.labels().toArray(String[]::new);
-        this.targetBranch = pullRequest.targetBranch();
-        this.mergeCommitSha = pullRequest.mergeCommitSha();
-        this.mergedAt = pullRequest.mergedAt();
-        this.url = pullRequest.url();
+        Change change = new Change();
+        change.id = id;
+        change.organizationId = organizationId;
+        change.projectId = projectId;
+        change.pullRequestNumber = pullRequest.number();
+        change.title = pullRequest.title();
+        change.description = pullRequest.description();
+        change.authorLogin = pullRequest.authorLogin();
+        change.labels = pullRequest.labels().toArray(String[]::new);
+        change.targetBranch = pullRequest.targetBranch();
+        change.mergeCommitSha = pullRequest.mergeCommitSha();
+        change.mergedAt = pullRequest.mergedAt();
+        change.url = pullRequest.url();
+        change.category = ChangeCategory.UNKNOWN;
+        change.breaking = false;
+        change.needsReview = true;
+        change.classificationReasons = new String[]{"Waiting for changed files"};
+        change.classificationSource = ClassificationSource.RULES;
+        change.aiStatus = AiStatus.NOT_REQUESTED;
+        change.processingStatus = ProcessingStatus.PROCESSING;
+        change.reviewTriggers = List.of();
+        change.deliveryId = deliveryId;
+        change.receivedAt = receivedAt;
+        return change;
+    }
+
+    MergedPullRequest pullRequest() {
+        return new MergedPullRequest(
+                pullRequestNumber,
+                title,
+                description,
+                authorLogin,
+                List.of(labels),
+                targetBranch,
+                mergeCommitSha,
+                mergedAt,
+                url
+        );
+    }
+
+    void completeProcessing(PullRequestFiles files, ChangeClassification classification) {
+        if (processingStatus != ProcessingStatus.PROCESSING) {
+            throw new IllegalStateException("Change " + id + " has already been processed.");
+        }
+        this.changedFileStatus = files.isCollected() ? ChangedFileStatus.COLLECTED : ChangedFileStatus.UNAVAILABLE;
+        this.changedFiles = files.isCollected() ? new ArrayList<>(files.files()) : null;
         this.category = classification.category();
         this.breaking = classification.breaking();
         this.needsReview = classification.needsReview();
         this.classificationReasons = classification.reasons().toArray(String[]::new);
-        this.classificationSource = ClassificationSource.RULES;
-        this.aiStatus = AiStatus.NOT_REQUESTED;
-        this.deliveryId = deliveryId;
-        this.receivedAt = receivedAt;
+        this.reviewTriggers = new ArrayList<>(classification.triggers());
+        this.processingStatus = ProcessingStatus.COMPLETED;
+    }
+
+    boolean isProcessing() {
+        return processingStatus == ProcessingStatus.PROCESSING;
     }
 
     boolean isAiEligible() {
-        return category == ChangeCategory.UNKNOWN && classificationSource == ClassificationSource.RULES;
+        return processingStatus == ProcessingStatus.COMPLETED
+                && category == ChangeCategory.UNKNOWN
+                && classificationSource == ClassificationSource.RULES;
     }
 
     // AI can only add caution: it never clears a breaking flag or the need for review.
@@ -157,6 +217,9 @@ class Change {
     // Stores exactly what the reviewer confirmed. Changing either value makes the
     // reviewer the source of the classification.
     void review(ChangeCategory reviewedCategory, boolean reviewedBreaking, UUID reviewer, String name, Instant at) {
+        if (isProcessing()) {
+            throw new ChangeProcessingException();
+        }
         if (reviewedCategory != category || reviewedBreaking != breaking) {
             this.classificationSource = ClassificationSource.HUMAN;
         }
@@ -276,5 +339,21 @@ class Change {
 
     Instant getReviewedAt() {
         return reviewedAt;
+    }
+
+    ProcessingStatus getProcessingStatus() {
+        return processingStatus;
+    }
+
+    ChangedFileStatus getChangedFileStatus() {
+        return changedFileStatus;
+    }
+
+    List<ChangedFile> getChangedFiles() {
+        return changedFiles == null ? List.of() : List.copyOf(changedFiles);
+    }
+
+    List<ReviewTrigger> getReviewTriggers() {
+        return List.copyOf(reviewTriggers);
     }
 }

@@ -1,5 +1,8 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -11,6 +14,85 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ChangeClassifierTest {
+
+    private static final SensitivePathRules RULES =
+            new SensitivePathRules(List.of("**/db/migration/**", "**/*.sql", "**/security/**"));
+
+    @Test
+    void sensitiveFileForcesReviewAndRecordsThePath() {
+        ChangeClassification classification = ChangeClassifier.classify(
+                pullRequest("feat: add audit table"),
+                PullRequestFiles.collected(List.of(
+                        new ChangedFile("src/main/java/Audit.java", null, ChangedFileKind.ADDED),
+                        new ChangedFile("src/main/resources/db/migration/V9__audit.sql", null, ChangedFileKind.ADDED)
+                )),
+                RULES
+        );
+
+        assertThat(classification.category()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(classification.breaking()).isFalse();
+        assertThat(classification.needsReview()).isTrue();
+        assertThat(classification.triggers()).containsExactly(
+                new ReviewTrigger(ReviewTriggerType.SENSITIVE_PATH, "src/main/resources/db/migration/V9__audit.sql")
+        );
+    }
+
+    @Test
+    void unavailableFilesForceReviewButKeepTheRuleCategory() {
+        ChangeClassification classification = ChangeClassifier.classify(
+                pullRequest("fix: handle empty tables"),
+                PullRequestFiles.unavailable(PullRequestFiles.NO_ACCESS_TOKEN, false),
+                RULES
+        );
+
+        assertThat(classification.category()).isEqualTo(ChangeCategory.FIX);
+        assertThat(classification.needsReview()).isTrue();
+        assertThat(classification.triggers())
+                .containsExactly(new ReviewTrigger(ReviewTriggerType.CHANGED_FILES_UNAVAILABLE, null));
+    }
+
+    @Test
+    void documentationOnlyFilesOutrankTheTitleType() {
+        ChangeClassification classification = ChangeClassifier.classify(
+                pullRequest("feat: describe exports", List.of("enhancement"), null),
+                PullRequestFiles.collected(List.of(
+                        new ChangedFile("docs/exports.md", null, ChangedFileKind.ADDED),
+                        new ChangedFile("README.MD", null, ChangedFileKind.MODIFIED),
+                        new ChangedFile("guide/setup.adoc", "guide/install.rst", ChangedFileKind.RENAMED)
+                )),
+                RULES
+        );
+
+        assertThat(classification.category()).isEqualTo(ChangeCategory.DOCUMENTATION);
+        assertThat(classification.needsReview()).isFalse();
+        assertThat(classification.reasons()).first().isEqualTo("All changed files are documentation");
+    }
+
+    @Test
+    void sensitiveDocumentationStillNeedsReview() {
+        ChangeClassification classification = ChangeClassifier.classify(
+                pullRequest("docs: rotate keys"),
+                PullRequestFiles.collected(List.of(new ChangedFile("docs/security/keys.md", null, ChangedFileKind.MODIFIED))),
+                RULES
+        );
+
+        assertThat(classification.category()).isEqualTo(ChangeCategory.DOCUMENTATION);
+        assertThat(classification.needsReview()).isTrue();
+        assertThat(classification.triggers()).extracting(ReviewTrigger::detail).containsExactly("docs/security/keys.md");
+    }
+
+    @Test
+    void anEmptyFileListIsNotDocumentationOnly() {
+        ChangeClassification classification = ChangeClassifier.classify(
+                pullRequest("chore: empty merge"),
+                PullRequestFiles.collected(List.of()),
+                RULES
+        );
+
+        assertThat(classification.category()).isEqualTo(ChangeCategory.MAINTENANCE);
+        assertThat(classification.needsReview()).isFalse();
+        assertThat(classification.triggers()).isEmpty();
+    }
 
     @ParameterizedTest
     @CsvSource({
@@ -29,7 +111,7 @@ class ChangeClassifierTest {
             "'  docs(readme): typo', DOCUMENTATION, docs"
     })
     void classifiesConventionalCommitTitleTypes(String title, ChangeCategory category, String type) {
-        ChangeClassification classification = ChangeClassifier.classify(pullRequest(title));
+        ChangeClassification classification = classify(pullRequest(title));
 
         assertThat(classification.category()).isEqualTo(category);
         assertThat(classification.breaking()).isFalse();
@@ -44,7 +126,7 @@ class ChangeClassifierTest {
 
     @Test
     void breakingTitleMarkerKeepsCategoryAndRequiresReview() {
-        ChangeClassification classification = ChangeClassifier.classify(pullRequest("feat(api)!: drop v1 endpoints"));
+        ChangeClassification classification = classify(pullRequest("feat(api)!: drop v1 endpoints"));
 
         assertThat(classification.category()).isEqualTo(ChangeCategory.FEATURE);
         assertThat(classification.breaking()).isTrue();
@@ -58,7 +140,7 @@ class ChangeClassifierTest {
             "BREAKING-CHANGE: configuration keys were renamed."
     })
     void breakingChangeFooterRequiresReview(String description) {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("fix: rename configuration keys", List.of(), description)
         );
 
@@ -75,7 +157,7 @@ class ChangeClassifierTest {
             "breaking change: lowercase footer tokens do not count."
     })
     void ignoresBreakingWordsOutsideTheFooterToken(String description) {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("feat: add export", List.of(), description)
         );
 
@@ -98,7 +180,7 @@ class ChangeClassifierTest {
             "refactor, MAINTENANCE"
     })
     void classifiesByLabelWhenTheTitleHasNoType(String label, ChangeCategory category) {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("Improve the export flow", List.of(label, "good first issue"), null)
         );
 
@@ -110,7 +192,7 @@ class ChangeClassifierTest {
     @ParameterizedTest
     @ValueSource(strings = {"breaking-change", "Breaking Change", "breaking"})
     void breakingLabelsRequireReview(String label) {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("Rework the API", List.of("enhancement", label), null)
         );
 
@@ -122,7 +204,7 @@ class ChangeClassifierTest {
 
     @Test
     void titleTypeOutranksAConflictingLabelAndBothReasonsAreKept() {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("feat: add retries", List.of("bug"), null)
         );
 
@@ -133,7 +215,7 @@ class ChangeClassifierTest {
 
     @Test
     void conflictingLabelsWithoutATitleTypeAreUnknown() {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("Improve exports", List.of("bug", "enhancement", "docs"), null)
         );
 
@@ -149,7 +231,7 @@ class ChangeClassifierTest {
 
     @Test
     void labelsNamingTheSameCategoryAreNotAConflict() {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("Improve exports", List.of("bug", "bugfix"), null)
         );
 
@@ -160,7 +242,7 @@ class ChangeClassifierTest {
     @ParameterizedTest
     @ValueSource(strings = {"feature: add export", "fixes typo in README", "feat add export", "feat:", "Revert \"feat: x\""})
     void unrecognizedChangesAreUnknownAndNeedReview(String title) {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest(title, List.of("good first issue"), "Some context.")
         );
 
@@ -172,7 +254,7 @@ class ChangeClassifierTest {
 
     @Test
     void breakingChangeWithoutCategoryIsUnknownAndNeedsReview() {
-        ChangeClassification classification = ChangeClassifier.classify(
+        ChangeClassification classification = classify(
                 pullRequest("Rework storage", List.of("breaking-change"), null)
         );
 
@@ -181,6 +263,15 @@ class ChangeClassifierTest {
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.reasons())
                 .containsExactly("Breaking label \"breaking-change\"", "No category rule matched");
+    }
+
+    // An ordinary source file: no sensitive path and no documentation-only rule.
+    private static ChangeClassification classify(MergedPullRequest pullRequest) {
+        return ChangeClassifier.classify(
+                pullRequest,
+                PullRequestFiles.collected(List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))),
+                RULES
+        );
     }
 
     private static MergedPullRequest pullRequest(String title) {

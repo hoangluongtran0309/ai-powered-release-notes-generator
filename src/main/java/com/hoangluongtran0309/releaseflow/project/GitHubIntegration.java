@@ -42,6 +42,15 @@ class GitHubIntegration {
     @Column(name = "last_delivery_at")
     private Instant lastDeliveryAt;
 
+    @Column(name = "token_nonce", columnDefinition = "bytea")
+    private byte[] tokenNonce;
+
+    @Column(name = "token_ciphertext", columnDefinition = "bytea")
+    private byte[] tokenCiphertext;
+
+    @Column(name = "token_updated_at")
+    private Instant tokenUpdatedAt;
+
     protected GitHubIntegration() {
     }
 
@@ -105,5 +114,23 @@ class GitHubIntegration {
 
     Instant getLastDeliveryAt() {
         return lastDeliveryAt;
+    }
+
+    void replaceToken(CredentialCipher.EncryptedSecret token, Instant updatedAt) {
+        this.tokenNonce = token.nonce();
+        this.tokenCiphertext = token.ciphertext();
+        this.tokenUpdatedAt = updatedAt;
+    }
+
+    boolean hasAccessToken() {
+        return tokenCiphertext != null;
+    }
+
+    CredentialCipher.EncryptedSecret getToken() {
+        return new CredentialCipher.EncryptedSecret(tokenNonce, tokenCiphertext);
+    }
+
+    Instant getTokenUpdatedAt() {
+        return tokenUpdatedAt;
     }
 }

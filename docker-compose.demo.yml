@@ -23,9 +23,11 @@ services:
       # Optional; leave both empty to run without AI suggestions.
       RELEASEFLOW_OPENAI_API_KEY: ${RELEASEFLOW_OPENAI_API_KEY:-}
       RELEASEFLOW_OPENAI_MODEL: ${RELEASEFLOW_OPENAI_MODEL:-}
-      # Other optional settings are deliberately not forwarded: Compose turns an
-      # unset variable into an empty string, which would replace the default in
-      # application.properties instead of falling back to it.
+      # Other optional settings, including RELEASEFLOW_SENSITIVE_PATHS, are
+      # deliberately not forwarded: Compose turns an unset variable into an empty
+      # string, which would replace the default in application.properties (an
+      # empty sensitive-path list stops the application).
+      # The GitHub access token is set per Project in the UI, not here.
     ports:
       - "127.0.0.1:${RELEASEFLOW_HTTP_PORT:-8080}:8080"
     depends_on:

@@ -113,6 +113,28 @@ version has been released.
 - Checksum-verified installers for actionlint, Gitleaks, and Trivy, and weekly
   Dependabot updates targeting `develop`.
 
+- Optional, write-only GitHub access tokens per repository, set by
+  administrators on the Projects page or with
+  `PUT /api/projects/{projectId}/github-integration/token`, checked against the
+  repository's pull requests and stored with AES-256-GCM.
+- A durable change processing queue: merged pull requests are recorded as
+  Processing with a job, and a scheduled worker lists their changed files with
+  `FOR UPDATE SKIP LOCKED` claims, bounded retries with backoff, and stale
+  claim recovery.
+- Typed review triggers for sensitive files and unavailable file lists, shown
+  in the Change Inbox with the changed files and returned by the changes API.
+- A configurable sensitive-path baseline (`RELEASEFLOW_SENSITIVE_PATHS`) and a
+  documentation-only rule.
+- Flyway migration `V10` for access tokens, processing state, changed files,
+  review triggers, and `change_processing_jobs`, with constraints that keep
+  Processing changes unsettled and triggered changes in review.
+
+### Changed
+
+- Classification now runs after the changed files are known instead of inside
+  the webhook request; a change cannot be reviewed, sent to AI, or released
+  while it is Processing (`409 change_processing` for reviews).
+
 ### Security
 
 - Tomcat is pinned to 11.0.25 to fix CVE-2026-65182, CVE-2026-65905, and

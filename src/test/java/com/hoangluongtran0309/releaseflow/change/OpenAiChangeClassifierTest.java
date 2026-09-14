@@ -198,7 +198,11 @@ class OpenAiChangeClassifierTest {
                 true,
                 null,
                 null,
-                null
+                null,
+                ProcessingStatus.COMPLETED,
+                ChangedFileStatus.COLLECTED,
+                List.of(),
+                List.of()
         );
     }
 }

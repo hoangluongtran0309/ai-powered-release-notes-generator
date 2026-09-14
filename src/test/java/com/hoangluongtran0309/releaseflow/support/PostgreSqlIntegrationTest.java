@@ -19,6 +19,8 @@ public abstract class PostgreSqlIntegrationTest {
     @DynamicPropertySource
     static void credentialProperties(DynamicPropertyRegistry registry) {
         registry.add("releaseflow.credentials.master-key", () -> TEST_MASTER_KEY);
+        // Tests drive the change worker explicitly instead of racing its schedule.
+        registry.add("releaseflow.processing.enabled", () -> "false");
     }
 
     private static String generateTestMasterKey() {

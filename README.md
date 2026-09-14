@@ -23,8 +23,13 @@ The application currently provides:
 - AES-256-GCM encryption at rest with one-time secret reveal;
 - a signed GitHub webhook endpoint that records each merged pull request once
   as a normalized change, and shows the last verified delivery per repository;
+- an optional, write-only GitHub access token per repository, verified with
+  GitHub and stored encrypted;
+- a durable processing queue that lists each merged pull request's changed
+  files outside the webhook request, with bounded retries;
 - deterministic, explainable classification of every recorded change, with
-  breaking and unrecognized changes always marked for human review;
+  breaking, unrecognized, and sensitive-file changes always marked for human
+  review;
 - a per-Project Change Inbox in the UI and REST, filterable by category and
   review status;
 - optional, person-initiated OpenAI suggestions for Unknown changes, which
@@ -86,6 +91,9 @@ REST clients use the same session and CSRF policy as the server-rendered UI:
 6. Configure a repository with
    `POST /api/projects/{projectId}/github-integration`. Save the returned
    `webhookSecret` immediately; it is never returned again.
+7. Optionally set its access token with
+   `PUT /api/projects/{projectId}/github-integration/token` (see
+   [GitHub access token](#github-access-token)).
 
 Authenticated users can perform the same workflow at `/projects`. GitHub owner
 and repository names are canonicalized to lowercase. A repository can be
@@ -120,7 +128,7 @@ reads the same `RELEASEFLOW_*` environment variables as `./mvnw spring-boot:run`
 
 The account created at registration is an **administrator**. Administrators
 open **Members** to invite teammates by email, and only they can connect a
-GitHub repository. Members can do everything else: review changes, request AI
+GitHub repository or set its access token. Members can do everything else: review changes, request AI
 suggestions, and prepare and publish releases.
 
 An invitation link has the form `/accept-invite#token=…` and is shown once.
@@ -192,10 +200,45 @@ curl -sS -X POST "http://localhost:8080$WEBHOOK_PATH" \
   --data-binary "$BODY"
 ```
 
+## GitHub access token
+
+With an access token, ReleaseFlow lists the files each merged pull request
+changed, so changes that touch sensitive files are always reviewed. Without
+one, every new change needs review, because nothing can be ruled out.
+
+Create a fine-grained personal access token limited to the repository, with
+**Pull requests: Read-only** permission (a classic token needs `repo` for a
+private repository). An administrator enters it in the Project's card on the
+Projects page, or calls:
+
+```text
+PUT /api/projects/{projectId}/github-integration/token {"token"}   (administrator; 204)
+```
+
+ReleaseFlow first asks GitHub for the repository's pull requests with the
+token, then stores it encrypted with AES-256-GCM. The token is never returned;
+the Project only reports `accessTokenConfigured` and `accessTokenUpdatedAt`.
+Sending a new token replaces the old one. Errors are `400 github_token_rejected`
+when GitHub refuses the token, `503 github_unavailable` when GitHub cannot be
+reached, `404 github_integration_not_found`, and `403` for members.
+
+`RELEASEFLOW_GITHUB_API_BASE_URL` (default `https://api.github.com`) and
+`RELEASEFLOW_GITHUB_TIMEOUT` (default `PT5S`) are optional.
+
 ## Change Inbox
 
-Every change is classified when its webhook delivery is recorded, using fixed
-rules and no network call:
+A recorded change first shows as **Processing**. Within about a second, a
+background worker lists its changed files with the Project's access token
+(fewer than 500 files), outside any database transaction, and then classifies it.
+If GitHub is unreachable or rate limited, the worker tries up to three times,
+waiting 2 and then 4 seconds; if the files still cannot be listed, if the
+token is missing or refused, or if the pull request changes 500 files or
+more, the change is classified anyway with a **Changed files unavailable**
+review trigger. A Processing change cannot be reviewed, sent to AI, or added
+to a release. Work survives restarts, and a claim left by a stopped worker is
+taken over after ten minutes.
+
+Classification uses fixed rules:
 
 - a Conventional Commit type at the start of the pull request title (`feat`,
   `fix`, `perf`, `docs`, `refactor`, `chore`, `ci`, `build`, `test`, with an
@@ -203,13 +246,30 @@ rules and no network call:
   Maintenance;
 - without a title type, familiar labels such as `enhancement`, `bug`,
   `documentation`, or `dependencies` select the category, unless they disagree;
+- when every changed file is in `docs/` or ends in `.md`, `.adoc`, or `.rst`,
+  the change is Documentation, whatever its title says;
 - a `!` after the title type, a `breaking-change` label, or a
   `BREAKING CHANGE:` footer in the description marks the change as breaking;
 - anything else is Unknown.
 
-Breaking and Unknown changes always need review. Each change keeps the list of
-rules that matched, and the inbox shows it. Changes recorded before
-classification existed are Unknown and need review.
+Breaking and Unknown changes always need review, and so does any change with a
+review trigger: a changed file (or the previous path of a renamed file) that
+matches a sensitive-path pattern, or changed files that could not be listed.
+Each change keeps the rules that matched, its typed `reviewTriggers`, and its
+`changedFiles`, and the inbox shows them. A review settles a triggered change
+but keeps the trigger as a record. Changes recorded before classification
+existed are Unknown and need review; changes recorded before changed-file
+collection keep their classification.
+
+Sensitive paths are JDK glob patterns. The default list covers `security` and
+`auth` directories, files named like `*Security*`, `*Auth*`, `*Credential*`,
+or `*Password*`, database migrations and `*.sql`, `pom.xml`, `package.json`,
+`package-lock.json`, `.github/workflows/`, `Dockerfile`,
+`application*.properties`, and `*.env*`. A pattern starting with `**/` also
+matches at the repository root. Replace the list with the comma-separated
+`RELEASEFLOW_SENSITIVE_PATHS` (brace groups such as `{a,b}` are not
+supported). An invalid pattern or an empty list stops the application from
+starting, so the rule cannot be switched off by accident.
 
 Open `/changes` to browse a Project's inbox, or call
 `GET /api/projects/{projectId}/changes`. Both accept `category`
@@ -347,9 +407,10 @@ second terminal:
 PATH="$PWD/node:$PATH" ./node/npm run watch
 ```
 
-The application receives GitHub webhooks but never calls the GitHub API, so it
-does not import history or validate repositories with GitHub. No image or
-release artifact is published.
+The application calls the GitHub API only to check an access token and to list
+the changed files of a merged pull request; it does not import history or
+validate repositories when they are connected. No image or release artifact is
+published.
 
 ## Continuous integration
 

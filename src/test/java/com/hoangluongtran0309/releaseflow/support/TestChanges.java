@@ -34,9 +34,11 @@ public final class TestChanges {
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
                              category, breaking, needs_review, classification_reasons,
-                             classification_source, ai_status, reviewed_by, reviewer_name, reviewed_at)
+                             classification_source, ai_status, reviewed_by, reviewer_name, reviewed_at,
+                             processing_status, changed_file_status, changed_files, review_triggers)
                         VALUES (?, ?, ?, ?, ?, 'mai-dev', '{}', 'main', ?, ?, ?, ?, now(),
-                                ?, ?, ?, '{"Seeded for a test"}', 'RULES', 'NOT_REQUESTED', ?, ?, ?)
+                                ?, ?, ?, '{"Seeded for a test"}', 'RULES', 'NOT_REQUESTED', ?, ?, ?,
+                                'COMPLETED', 'COLLECTED', '[]', '[]')
                         """,
                 id,
                 organizationId,

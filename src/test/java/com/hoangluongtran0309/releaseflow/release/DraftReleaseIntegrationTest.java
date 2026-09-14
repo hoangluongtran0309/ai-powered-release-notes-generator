@@ -46,6 +46,7 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
         jdbcTemplate.execute("TRUNCATE release_notes, release_changes, releases");
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");

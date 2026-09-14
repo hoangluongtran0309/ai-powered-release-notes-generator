@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -26,8 +28,17 @@ public record ChangeView(
         boolean aiEligible,
         UUID reviewedBy,
         String reviewerName,
-        Instant reviewedAt
+        Instant reviewedAt,
+        ProcessingStatus processingStatus,
+        ChangedFileStatus changedFileStatus,
+        List<ChangedFile> changedFiles,
+        List<ReviewTrigger> reviewTriggers
 ) {
+
+    public boolean processing() {
+        return processingStatus == ProcessingStatus.PROCESSING;
+    }
+
 
     static ChangeView from(Change change) {
         return new ChangeView(
@@ -52,7 +63,11 @@ public record ChangeView(
                 change.isAiEligible(),
                 change.getReviewedBy(),
                 change.getReviewerName(),
-                change.getReviewedAt()
+                change.getReviewedAt(),
+                change.getProcessingStatus(),
+                change.getChangedFileStatus(),
+                change.getChangedFiles(),
+                change.getReviewTriggers()
         );
     }
 }

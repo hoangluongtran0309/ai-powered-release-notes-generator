@@ -52,11 +52,15 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
     private ChangeRepository changeRepository;
 
     @Autowired
+    private ChangeProcessingJobRepository jobRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     @AfterEach
     void clearDatabase() {
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
@@ -88,23 +92,18 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(change.getUrl()).isEqualTo("https://github.com/acme/releaseflow/pull/42");
         assertThat(change.getDeliveryId()).isEqualTo(deliveryId);
         assertThat(change.getReceivedAt()).isNotNull();
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FEATURE);
-        assertThat(change.isBreaking()).isFalse();
-        assertThat(change.isNeedsReview()).isFalse();
-        assertThat(change.getClassificationReasons()).containsExactly("Label \"feature\"");
-
-        String breaking = pullRequest("acme/releaseflow", 43, "closed", true)
-                .replace("Thêm xuất CSV cho bảng điều khiển", "feat(api)!: remove v1 export");
-        deliver(repository, "pull_request", breaking, UUID.randomUUID())
-                .andExpect(jsonPath("$.outcome").value("recorded"));
-        assertThat(changeRepository.findAll())
-                .filteredOn(recorded -> recorded.getPullRequestNumber() == 43)
-                .singleElement()
-                .satisfies(recorded -> {
-                    assertThat(recorded.getCategory()).isEqualTo(ChangeCategory.FEATURE);
-                    assertThat(recorded.isBreaking()).isTrue();
-                    assertThat(recorded.isNeedsReview()).isTrue();
-                });
+        // Classification waits for the change processing worker.
+        assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.PROCESSING);
+        assertThat(change.getCategory()).isEqualTo(ChangeCategory.UNKNOWN);
+        assertThat(change.isNeedsReview()).isTrue();
+        assertThat(change.getClassificationReasons()).containsExactly("Waiting for changed files");
+        assertThat(change.getReviewTriggers()).isEmpty();
+        assertThat(jobRepository.findByChangeId(change.getId())).hasValueSatisfying(job -> {
+            assertThat(job.getStatus()).isEqualTo(ChangeProcessingJob.Status.PENDING);
+            assertThat(job.getAttempts()).isZero();
+            assertThat(job.getOrganizationId()).isEqualTo(repository.organizationId());
+            assertThat(job.getProjectId()).isEqualTo(repository.projectId());
+        });
 
         mockMvc.perform(get("/api/projects").session(repository.session()))
                 .andExpect(status().isOk())

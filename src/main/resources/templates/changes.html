@@ -89,7 +89,13 @@
                                   th:text="|${#temporals.format(change.mergedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">10 Sep 2026, 09:14 UTC</time>
                         </p>
                     </div>
-                    <div class="flex flex-wrap gap-2">
+                    <div class="flex flex-wrap gap-2" th:if="${change.processing()}">
+                        <span class="badge badge-soft badge-info gap-1 font-semibold">
+                            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+                            <span>Processing</span>
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap gap-2" th:unless="${change.processing()}">
                         <th:block th:switch="${change.category.name()}">
                             <span th:case="'FEATURE'" class="badge badge-soft badge-primary font-semibold" th:text="${change.category.label}">Feature</span>
                             <span th:case="'FIX'" class="badge badge-soft badge-info font-semibold" th:text="${change.category.label}">Fix</span>
@@ -123,10 +129,31 @@
                     <span class="badge badge-outline badge-sm" th:each="label : ${change.labels}" th:text="${label}">enhancement</span>
                 </div>
 
-                <p class="mt-3 text-sm text-slate-600">
-                    <span class="font-semibold">Why:</span>
-                    <span th:text="${#strings.listJoin(change.reasons, '; ')}">Title type "feat"</span>
+                <p class="mt-3 text-sm text-slate-600" th:if="${change.processing()}">
+                    Checking which files this pull request changed before classifying it.
                 </p>
+                <th:block th:unless="${change.processing()}">
+                    <p class="mt-3 text-sm text-slate-600">
+                        <span class="font-semibold">Why:</span>
+                        <span th:text="${#strings.listJoin(change.reasons, '; ')}">Title type "feat"</span>
+                    </p>
+                    <div class="mt-2 text-sm text-amber-800" th:unless="${#lists.isEmpty(change.reviewTriggers)}">
+                        <span class="font-semibold">Review required:</span>
+                        <ul class="mt-1 list-inside list-disc">
+                            <li th:each="trigger : ${change.reviewTriggers}" th:text="${trigger.describe()}">Sensitive file db/migration/V9.sql</li>
+                        </ul>
+                    </div>
+                    <details class="mt-3 text-sm" th:unless="${#lists.isEmpty(change.changedFiles)}">
+                        <summary class="cursor-pointer font-medium text-slate-600"
+                                 th:text="|Changed files (${#lists.size(change.changedFiles)})|">Changed files (3)</summary>
+                        <ul class="mt-2 space-y-1 font-mono text-xs text-slate-700">
+                            <li th:each="file : ${change.changedFiles}">
+                                <span class="badge badge-ghost badge-xs mr-1" th:text="${#strings.toLowerCase(file.kind())}">modified</span>
+                                <span th:if="${file.previousPath() != null}" th:text="|${file.previousPath()} → |">old/path → </span><span th:text="${file.path()}">src/main/App.java</span>
+                            </li>
+                        </ul>
+                    </details>
+                </th:block>
 
                 <div class="alert alert-warning mt-3 py-2 text-sm" role="status"
                      th:if="${change.aiEligible and change.aiStatus.name() == 'FAILED'}">
@@ -145,11 +172,11 @@
                     </button>
                 </form>
 
-                <div class="subtle-panel mt-3 p-3" th:if="${change.needsReview}">
+                <div class="subtle-panel mt-3 p-3" th:if="${change.needsReview and !change.processing()}">
                     <p class="mb-2 text-sm font-semibold">Review</p>
                     <form th:replace="~{fragments/change-review-form :: reviewForm(${change})}"></form>
                 </div>
-                <details class="mt-3 text-sm" th:unless="${change.needsReview}">
+                <details class="mt-3 text-sm" th:if="${!change.needsReview and !change.processing()}">
                     <summary class="cursor-pointer font-medium text-slate-600">Edit classification</summary>
                     <div class="mt-2"><form th:replace="~{fragments/change-review-form :: reviewForm(${change})}"></form></div>
                 </details>

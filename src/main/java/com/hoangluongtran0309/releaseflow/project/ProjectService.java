@@ -82,7 +82,9 @@ public class ProjectService {
                         integration.getWebhookId(),
                         GitHubIntegrationService.webhookPath(integration.getWebhookId()),
                         integration.getCreatedAt(),
-                        integration.getLastDeliveryAt()
+                        integration.getLastDeliveryAt(),
+                        integration.hasAccessToken(),
+                        integration.getTokenUpdatedAt()
                 )
         );
     }

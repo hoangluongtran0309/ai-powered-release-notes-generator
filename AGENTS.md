@@ -5,13 +5,16 @@
 ReleaseFlow currently implements the bootstrap, Organization administrator, Project
 plus GitHub configuration, signed GitHub merged-pull-request intake,
 deterministic classification with the Change Inbox, OpenAI classification,
-human review, Draft Release, and Release Note publication slices: one Spring Boot
-application, PostgreSQL/Flyway V1-V9, administrator registration, member
+human review, Draft Release, Release Note publication, and changed-file review
+slices: one Spring Boot application, PostgreSQL/Flyway V1-V10, administrator
+registration, member
 invitations with administrator and member roles, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
 secrets, a signature-verified webhook endpoint that records normalized merged
-pull requests idempotently, rule-based classification with mandatory review
-for breaking and Unknown changes, a per-Project Change Inbox, optional
+pull requests idempotently, optional write-only GitHub access tokens, a durable
+`SKIP LOCKED` worker that lists changed files outside transactions,
+rule-based classification with mandatory review for breaking, Unknown, and
+sensitive-file changes, a per-Project Change Inbox, optional
 person-initiated OpenAI suggestions for Unknown changes that stay in review,
 recorded human review of any change, one Draft Release per Project built from
 settled changes, immutable published Release Note snapshots, REST/UI paths,
@@ -46,6 +49,14 @@ Read `README.md`, `docs/architecture.md`, and
 - Network I/O does not run inside database transactions.
 - Credentials never appear in source, logs, examples, or later API responses.
 - Invitation tokens are shown once and stored only as SHA-256 hashes.
+- GitHub access tokens are write-only: only administrators set them, GitHub
+  confirms them first, and no response, page, or log ever contains one.
+- Review triggers only add a need for review; only a recorded human review
+  clears it. Missing, refused, or incomplete changed-file lists force review.
+- A `PROCESSING` change cannot be reviewed, sent to AI, or released.
+- Background work uses its own job table, short claim and result
+  transactions, and `FOR UPDATE SKIP LOCKED`; retries stay bounded.
+- The sensitive-path list must compile and must not be empty.
 - `RELEASEFLOW_CREDENTIAL_MASTER_KEY` is required at startup and must decode to
   exactly 32 bytes; webhook secrets are reveal-once values.
 - `RELEASEFLOW_OPENAI_API_KEY` and `RELEASEFLOW_OPENAI_MODEL` are optional but
