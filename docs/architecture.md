@@ -370,6 +370,23 @@ UI validation displays the same application errors next to the relevant field.
 Session cookies are HttpOnly and SameSite=Lax; deployments using HTTPS must set
 the secure-cookie environment switch.
 
+## Build, container, and CI
+
+The Maven build is the only build: it runs the tests, compiles the stylesheet,
+and packages `target/releaseflow.jar`. The `Dockerfile` runs that build with the
+`release` profile in a JDK stage and copies the JAR into a Temurin 21 JRE UBI
+minimal image that runs as UID/GID `65534`. The image health check calls
+`GET /api/status`. `docker-compose.demo.yml` adds PostgreSQL 17 on a private
+network, publishes the application on host loopback only, and requires the
+database password and credential master key to be supplied.
+
+GitHub Actions workflows in `.github/workflows` gate pushes and pull requests
+to `develop` and `main`: tests and audits (`ci.yml`), CodeQL, dependency
+review, a full-history Gitleaks scan, and a container workflow that builds the
+image, scans it with Trivy, and smoke tests the Compose stack. Actions are
+pinned to commit SHAs, images to digests, and downloaded tools to SHA-256
+checksums. See [ADR-0007](adr/0007-ci-and-container-supply-chain.md).
+
 ## Development direction
 
 New code is grouped by product capability. A capability starts with direct,

@@ -101,6 +101,22 @@ version has been released.
   that keeps the token in the URL fragment.
 - Administrator-only access to member management and GitHub repository
   configuration, enforced by URL rules and in the service.
+- A two-stage `Dockerfile` that runs the application on a digest-pinned
+  Temurin 21 JRE UBI minimal image as UID `65534`, with a health check on
+  `GET /api/status`.
+- `docker-compose.demo.yml` with the application and PostgreSQL 17, required
+  secrets, a loopback-only application port, and an unpublished database
+  port, plus a placeholder-only `.env.example`.
+- GitHub Actions workflows for Conventional PR titles, actionlint, npm audit,
+  Maven verification, CodeQL, dependency review, a full-history Gitleaks scan,
+  and a Trivy image scan with a Compose smoke test.
+- Checksum-verified installers for actionlint, Gitleaks, and Trivy, and weekly
+  Dependabot updates targeting `develop`.
+
+### Security
+
+- Tomcat is pinned to 11.0.25 to fix CVE-2026-65182, CVE-2026-65905, and
+  CVE-2026-68525 until the Spring Boot parent manages a fixed version.
 
 ### Fixed
 

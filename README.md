@@ -39,7 +39,10 @@ The application currently provides:
   REST operations;
 - the public home page and application status endpoint from the bootstrap
   slice;
-- a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme.
+- a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme;
+- a non-root container image and a Docker Compose demo stack with PostgreSQL;
+- GitHub Actions gates for tests, CodeQL, dependency review, secret scanning,
+  and container vulnerability scanning.
 
 Every slice in the current plan is implemented; external distribution and a
 public changelog are deliberately deferred. See the
@@ -90,6 +93,28 @@ connected once per Organization, while different Organizations may connect the
 same repository.
 
 `GET /api/status` remains public.
+
+## Run with Docker Compose
+
+`docker-compose.demo.yml` builds the application image and runs it with
+PostgreSQL 17 for local evaluation; it is not a production deployment.
+
+```bash
+cp .env.example .env
+# Replace every REPLACE_ME value. Generate the master key with:
+#   openssl rand -base64 32
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Compose refuses to start until `RELEASEFLOW_DB_PASSWORD` and
+`RELEASEFLOW_CREDENTIAL_MASTER_KEY` are set. The application listens on
+`http://127.0.0.1:8080` (change it with `RELEASEFLOW_HTTP_PORT`); the database
+port is not published. The container runs as UID `65534`, and its health check
+calls `GET /api/status`. `docker compose -f docker-compose.demo.yml down --volumes`
+removes the demo data.
+
+The `Dockerfile` can also be built on its own with `docker build .`. The image
+reads the same `RELEASEFLOW_*` environment variables as `./mvnw spring-boot:run`.
 
 ## Members and invitations
 
@@ -323,8 +348,32 @@ PATH="$PWD/node:$PATH" ./node/npm run watch
 ```
 
 The application receives GitHub webhooks but never calls the GitHub API, so it
-does not import history or validate repositories with GitHub. There is also no
-AI service, container image, CI workflow, or published artifact.
+does not import history or validate repositories with GitHub. No image or
+release artifact is published.
+
+## Continuous integration
+
+GitHub Actions runs these checks on every push and pull request to `develop`
+and `main`:
+
+| Workflow | Checks |
+| --- | --- |
+| `CI` | Conventional pull request title, actionlint, `npm audit --audit-level=high`, `./mvnw clean verify` |
+| `CodeQL` | Java and JavaScript analysis (also weekly) |
+| `Dependency Review` | Fails pull requests that add high or critical vulnerabilities |
+| `Secret Scan` | Gitleaks over the complete Git history (also weekly) |
+| `Container` | Image build, Trivy high/critical scan, Compose smoke test |
+
+Actions are pinned to commit SHAs and images to digests; Dependabot proposes
+weekly updates to `develop`. The pinned tools in `scripts/ci/` verify their
+checksums, so the scans can be reproduced locally, for example:
+
+```bash
+./scripts/ci/install-gitleaks.sh "$HOME/.local/bin"
+gitleaks git . --redact
+```
+
+See [ADR-0007](docs/adr/0007-ci-and-container-supply-chain.md).
 
 ## Contributing
 
