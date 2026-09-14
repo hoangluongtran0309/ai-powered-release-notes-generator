@@ -42,19 +42,19 @@ public class RegistrationService {
                 request.getOrganizationName().strip(),
                 createdAt
         );
-        AppUser owner = new AppUser(
+        AppUser admin = new AppUser(
                 UUID.randomUUID(),
                 organization.getId(),
                 canonicalEmail,
                 passwordEncoder.encode(request.getPassword()),
                 request.getDisplayName().strip(),
-                AppUserRole.OWNER,
+                AppUserRole.ADMIN,
                 createdAt
         );
 
         organizationRepository.save(organization);
         try {
-            appUserRepository.saveAndFlush(owner);
+            appUserRepository.saveAndFlush(admin);
         } catch (DataIntegrityViolationException exception) {
             throw new DuplicateEmailException();
         }
@@ -62,10 +62,10 @@ public class RegistrationService {
         return new RegistrationResult(
                 organization.getId(),
                 organization.getName(),
-                owner.getId(),
-                owner.getEmail(),
-                owner.getDisplayName(),
-                owner.getRole()
+                admin.getId(),
+                admin.getEmail(),
+                admin.getDisplayName(),
+                admin.getRole()
         );
     }
 }

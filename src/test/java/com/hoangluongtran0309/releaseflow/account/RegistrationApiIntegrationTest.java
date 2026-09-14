@@ -47,7 +47,7 @@ class RegistrationApiIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.organizationName").value("Acme"))
                 .andExpect(jsonPath("$.email").value("owner@example.com"))
                 .andExpect(jsonPath("$.displayName").value("Owner"))
-                .andExpect(jsonPath("$.role").value("OWNER"))
+                .andExpect(jsonPath("$.role").value("ADMIN"))
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
 

@@ -8,7 +8,7 @@ packaged as one executable JAR. The implemented capabilities are `status`,
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
-GET  /register                -> owner registration form
+GET  /register                -> administrator registration form
 POST /register                -> RegistrationService
 POST /api/registrations       -> RegistrationService
 POST /login                   -> Spring Security authentication
@@ -44,9 +44,31 @@ POST /api/projects/{id}/releases/{releaseId}/publish -> ReleaseService
 REST and Thymeleaf registration call the same transactional application
 service. Project REST and UI controllers likewise call the same Project and
 GitHub integration services. One short registration transaction creates an
-Organization and its OWNER AppUser.
+Organization and its ADMIN AppUser.
 Passwords are encoded with BCrypt before persistence; neither the hash nor the
 submitted password is returned.
+
+## Roles and invitations
+
+Registration creates an `ADMIN`. Accepting an invitation creates a `MEMBER` in
+the invitation's Organization. Only administrators may use `/members`,
+`/api/members`, `/api/invitations/**`, and the GitHub integration `POST`
+endpoints. `SecurityConfiguration` enforces this, and `InvitationService`
+checks the principal's role again. Members can use every other workspace
+feature.
+
+`InvitationService` issues a 32-byte base64url token, stores only its SHA-256
+hash, and returns the raw token once with `Cache-Control: no-store`. An
+invitation expires after `releaseflow.invitations.ttl` (seven days by default),
+works once, and can be reissued or revoked. A pending invitation past its
+expiry is reported as expired and recorded as such when touched again.
+
+The acceptance link keeps the token in the URL fragment. `/accept-invite` is a
+server-rendered form that a small script fills from the fragment; the review
+step shows the Organization and email, and the accept step locks the
+invitation row, creates the member account, and marks the invitation accepted.
+Every unusable token receives the same error. See
+[ADR-0006](adr/0006-organization-roles-and-invitations.md).
 
 ## Persistence and tenant boundary
 
@@ -66,7 +88,15 @@ app_users
   email (canonical, globally unique)
   password_hash
   display_name
-  role (OWNER)
+  role (ADMIN | MEMBER)
+
+organization_invitations
+  id (UUID PK)
+  organization_id
+  email (canonical), token_hash (SHA-256 hex, unique)
+  status (PENDING | ACCEPTED | REVOKED | EXPIRED; one PENDING per email)
+  expires_at, created_by / accepted_by (composite FKs -> app_users)
+  created_at, updated_at, accepted_at, revoked_at
   created_at
 
 projects

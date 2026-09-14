@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Invitation link</title>
+</head>
+<body>
+<p layout:fragment="page-title">Members</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">Invitation created</p>
+            <h1 class="page-heading">Send this link to the invitee now</h1>
+            <p class="page-subtitle">ReleaseFlow stores only a hash of the link, so it cannot be shown again.</p>
+        </div>
+    </header>
+
+    <article class="surface-card max-w-3xl p-6">
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+            <p class="text-sm font-semibold text-emerald-900">
+                <span>Invitation for</span> <span th:text="${invitation.email}">teammate@example.com</span>
+            </p>
+            <p class="mt-1 text-xs text-emerald-800">
+                The link works once and expires on
+                <time th:datetime="${invitation.expiresAt}"
+                      th:text="|${#temporals.format(invitation.expiresAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">18 Sep 2026, 09:14 UTC</time>.
+                Reissue it from the Members page if it is lost.
+            </p>
+        </div>
+
+        <div class="mt-6" x-data="copyText()">
+            <p class="text-sm text-slate-500">Invitation link</p>
+            <div class="join mt-1 w-full">
+                <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
+                       autocomplete="off" spellcheck="false" th:value="${acceptanceUrl}" aria-label="Invitation link">
+                <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
+            </div>
+        </div>
+
+        <a class="btn btn-primary mt-6" th:href="@{/members}">I have sent the link</a>
+    </article>
+</div>
+</body>
+</html>

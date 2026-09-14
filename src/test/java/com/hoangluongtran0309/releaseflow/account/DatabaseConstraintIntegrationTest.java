@@ -58,8 +58,8 @@ class DatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest {
                 organizationId,
                 email,
                 "bcrypt-hash",
-                "Owner",
-                "OWNER",
+                "Admin",
+                "ADMIN",
                 Timestamp.from(Instant.now())
         );
     }

@@ -4,7 +4,8 @@
 
 - One Java 21, Spring Boot 4.1.1 Maven application.
 - JSON status endpoint and server-rendered home page.
-- Organization plus OWNER AppUser registration through REST and Thymeleaf.
+- Organization plus administrator AppUser registration through REST and
+  Thymeleaf.
 - PostgreSQL persistence and Flyway `V1`, with Hibernate schema validation.
 - Flyway `V2` for tenant-scoped Projects and GitHub integrations.
 - Canonical unique emails, BCrypt password hashes, and atomic registration.
@@ -53,10 +54,13 @@
   versions per Project, and Flyway `V8` triggers that reject any change to
   published releases, their changes, and their notes.
 
+- Administrator and member roles with single-use, hashed, expiring member
+  invitations through Thymeleaf and REST, a Members page, and Flyway `V9`.
+
 ## In progress
 
-- Nothing. The Release Note publication slice is complete and awaiting
-  review.
+- Nothing. The organization roles and invitations slice is complete and
+  awaiting review.
 
 ## Planned
 
@@ -65,7 +69,7 @@ deliberately deferred list below, one reviewed slice at a time.
 
 ## Deliberately deferred
 
-- Invitation and organization member management.
+- Role changes and member removal.
 - Additional source and AI providers, automatic AI classification, and AI
   retries.
 - Historical imports, polling, schedulers, queues, and automatic retries.

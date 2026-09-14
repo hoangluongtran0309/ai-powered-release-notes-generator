@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.configuration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -51,8 +52,16 @@ public class SecurityConfiguration {
                                 "/svg/**",
                                 "/webjars/**",
                                 "/favicon.ico",
-                                "/error"
+                                "/error",
+                                "/accept-invite",
+                                "/accept-invite/**",
+                                "/api/public/invitations/**"
                         ).permitAll()
+                        .requestMatchers("/members", "/members/**", "/api/members", "/api/invitations/**")
+                        .hasRole("ADMIN")
+                        // Configuring a repository creates its webhook signing secret.
+                        .requestMatchers(HttpMethod.POST, "/projects/*/github-integration", "/api/projects/*/github-integration")
+                        .hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

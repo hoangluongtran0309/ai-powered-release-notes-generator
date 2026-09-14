@@ -13,7 +13,7 @@ version has been released.
 - Startup, REST, and Thymeleaf smoke tests.
 - Architecture and implementation-status documentation for the runnable
   baseline.
-- Atomic Organization owner registration through REST and Thymeleaf.
+- Atomic Organization administrator registration through REST and Thymeleaf.
 - PostgreSQL persistence with Flyway migration `V1` for organizations and app
   users.
 - Canonical unique email enforcement and BCrypt password hashing.
@@ -94,6 +94,13 @@ version has been released.
 - Flyway migration `V8` for publication columns, `release_notes`,
   case-insensitive version uniqueness per Project, and triggers that reject
   changes to published releases, their changes, and their notes.
+- Administrator and member roles; the registration account and existing
+  `OWNER` accounts become administrators through Flyway migration `V9`.
+- Single-use member invitations with hashed 256-bit tokens, a seven-day
+  expiry, reissue and revoke, a Members page, and a three-step acceptance flow
+  that keeps the token in the URL fragment.
+- Administrator-only access to member management and GitHub repository
+  configuration, enforced by URL rules and in the service.
 
 ### Fixed
 
