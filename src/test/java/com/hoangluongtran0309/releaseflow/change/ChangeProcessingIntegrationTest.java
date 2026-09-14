@@ -86,7 +86,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         GITHUB.reset();
-        jdbcTemplate.execute("TRUNCATE release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");

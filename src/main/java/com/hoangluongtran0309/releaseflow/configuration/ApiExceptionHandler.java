@@ -31,11 +31,14 @@ import com.hoangluongtran0309.releaseflow.project.GitHubUnavailableException;
 import com.hoangluongtran0309.releaseflow.project.ProjectApiController;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.release.ChangeNotReleasableException;
-import com.hoangluongtran0309.releaseflow.release.DraftReleaseExistsException;
+import com.hoangluongtran0309.releaseflow.release.ClassificationChangedException;
+import com.hoangluongtran0309.releaseflow.release.InvalidReleaseScheduleException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseApiController;
 import com.hoangluongtran0309.releaseflow.release.ReleaseEmptyException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseNotFoundException;
 import com.hoangluongtran0309.releaseflow.release.ReleasePublishedException;
+import com.hoangluongtran0309.releaseflow.release.ReleaseReviewIncompleteException;
+import com.hoangluongtran0309.releaseflow.release.ReleaseStatusException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseVersionTakenException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -236,13 +239,43 @@ public class ApiExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(DraftReleaseExistsException.class)
-    ResponseEntity<ProblemDetail> draftReleaseExists(DraftReleaseExistsException exception) {
+    @ExceptionHandler(ReleaseStatusException.class)
+    ResponseEntity<ProblemDetail> releaseStatusConflict(ReleaseStatusException exception) {
         return response(problem(
                 HttpStatus.CONFLICT,
-                "Draft release exists",
+                "Release status conflict",
                 exception.getMessage(),
-                "draft_release_exists"
+                "release_status_conflict"
+        ));
+    }
+
+    @ExceptionHandler(ReleaseReviewIncompleteException.class)
+    ResponseEntity<ProblemDetail> releaseReviewIncomplete(ReleaseReviewIncompleteException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Release review incomplete",
+                exception.getMessage(),
+                "release_review_incomplete"
+        ));
+    }
+
+    @ExceptionHandler(ClassificationChangedException.class)
+    ResponseEntity<ProblemDetail> classificationChanged(ClassificationChangedException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Classification changed",
+                exception.getMessage(),
+                "classification_changed"
+        ));
+    }
+
+    @ExceptionHandler(InvalidReleaseScheduleException.class)
+    ResponseEntity<ProblemDetail> invalidReleaseSchedule(InvalidReleaseScheduleException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid release schedule",
+                exception.getMessage(),
+                "invalid_release_schedule"
         ));
     }
 

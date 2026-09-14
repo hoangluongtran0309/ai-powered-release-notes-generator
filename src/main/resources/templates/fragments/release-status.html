@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="badge(status)" th:switch="${status.name()}">
+    <span th:case="'IN_REVIEW'" class="badge badge-warning badge-soft font-semibold" th:text="${status.label}">In review</span>
+    <span th:case="'APPROVED'" class="badge badge-info badge-soft font-semibold" th:text="${status.label}">Approved</span>
+    <span th:case="'PUBLISHED'" class="badge badge-success badge-soft font-semibold" th:text="${status.label}">Published</span>
+    <span th:case="*" class="badge badge-ghost font-semibold" th:text="${status.label}">Draft</span>
+</th:block>
+</body>
+</html>

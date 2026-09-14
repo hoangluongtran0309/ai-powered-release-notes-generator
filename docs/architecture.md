@@ -32,16 +32,20 @@ POST /projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificati
 POST /api/projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
 POST /projects/{id}/changes/{changeId}/review -> ChangeReviewService
 POST /api/projects/{id}/changes/{changeId}/review -> ChangeReviewService
-GET  /releases                -> ReleaseService (Releases UI)
-POST /projects/{id}/releases[/{releaseId}[/discard|/changes|/changes/{changeId}/remove]] -> ReleaseService
-GET  /projects/{id}/releases/{releaseId} -> ReleaseService (draft page)
+GET  /releases                -> ReleaseService (Releases UI, ?project=&status=)
+POST /projects/{id}/releases[/{releaseId}[/schedule|/discard|/changes|/changes/{changeId}/remove]] -> ReleaseService
+POST /projects/{id}/releases/{releaseId}/{request-review|approve|return-to-draft|publish} -> ReleaseService
+POST /projects/{id}/releases/{releaseId}/changes/{changeId}/decision -> ReleaseService
+GET  /projects/{id}/releases/{releaseId} -> ReleaseService (release page)
 GET|POST /api/projects/{id}/releases -> ReleaseService
 GET|PUT|DELETE /api/projects/{id}/releases/{releaseId} -> ReleaseService
+PUT  /api/projects/{id}/releases/{releaseId}/schedule -> ReleaseService
 GET  /api/projects/{id}/releases/{releaseId}/available-changes -> ReleaseService
 POST /api/projects/{id}/releases/{releaseId}/changes -> ReleaseService
 DELETE /api/projects/{id}/releases/{releaseId}/changes/{changeId} -> ReleaseService
-POST /projects/{id}/releases/{releaseId}/publish -> ReleaseService
-POST /api/projects/{id}/releases/{releaseId}/publish -> ReleaseService
+POST /api/projects/{id}/releases/{releaseId}/{request-review|approve|return-to-draft|publish} -> ReleaseService
+PUT  /api/projects/{id}/releases/{releaseId}/changes/{changeId}/decision -> ReleaseService
+GET  /api/projects/{id}/release-assignments -> ReleaseService
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -136,9 +140,10 @@ releases
   id (UUID PK)
   organization_id, project_id (composite FK -> projects)
   version, summary
-  status (DRAFT | PUBLISHED; at most one DRAFT per Project)
+  status (DRAFT | IN_REVIEW | APPROVED | PUBLISHED)
   version unique per Project, ignoring case
-  created_at, updated_at
+  created_at, updated_at, planned_release_at
+  approved_at, approved_by (composite FK -> app_users), approver_name
   published_at, published_by (composite FK -> app_users), publisher_name
 
 release_changes
@@ -146,6 +151,12 @@ release_changes
   (release_id, organization_id, project_id) FK -> releases, ON DELETE CASCADE
   (change_id, organization_id, project_id) FK -> changes
   added_at
+
+release_change_reviews
+  release_id + change_id (PK)
+  (release_id, change_id, organization_id, project_id) FK -> release_changes, ON DELETE CASCADE
+  action (APPROVE | EDIT), note
+  reviewer_id (composite FK with organization_id -> app_users), reviewer_name, decided_at
 
 release_notes (immutable)
   release_id (PK; composite FK with organization_id, project_id -> releases)
@@ -387,47 +398,87 @@ Unknown, so it is never eligible for AI classification. The inbox `status`
 filter distinguishes `needs-review`, `classified` (settled without a person),
 and `reviewed`.
 
-## Draft Releases
+## Release lifecycle
 
 The `release` capability reads changes only through the public
-`ChangeInboxService.settledChanges` and `ChangeInboxService.changes` methods,
-both scoped by Organization and Project. `change` does not depend on
+`ChangeInboxService.releasableChanges` and `ChangeInboxService.changes`
+methods, both scoped by Organization and Project, and records reviews through
+the public `ChangeReviewService.review`. `change` does not depend on
 `release`. `ReleaseService` looks a Project up through `ProjectService.get` and
 a release by ID, Organization ID, and Project ID.
 
-A Project has at most one draft (`releases_one_draft_per_project`, a partial
-unique index). Only settled changes, those with `needs_review = false`, can be
-added. No path returns a settled change to review, so a draft never contains
-work that still needs review. `release_changes_change_unique` keeps each
-change in one release. The composite foreign keys on
-`(id, organization_id, project_id)` make the database reject a change joining
-a release of another Project or tenant. Discarding a draft deletes it, and the
-cascade makes its changes available again.
+A release moves `DRAFT -> IN_REVIEW -> APPROVED -> PUBLISHED`; see
+[ADR-0010](adr/0010-release-review-lifecycle.md). `Release` owns the status
+checks and the service checks the release's changes and decisions.
+
+| Operation | Allowed in | Also requires |
+| --- | --- | --- |
+| Edit version or summary, add changes | `DRAFT` | a processed change that is in no other release |
+| Remove a change (reject during review) | `DRAFT`, `IN_REVIEW` | |
+| Request review | `DRAFT` | at least one change |
+| Record a decision | `IN_REVIEW` | a change of this release |
+| Approve | `IN_REVIEW` | a decision on every change |
+| Return to draft | `IN_REVIEW`, `APPROVED` | |
+| Schedule, discard | any status before `PUBLISHED` | a future time, or none |
+| Publish | `APPROVED` | |
+
+A Project may prepare several releases at once. Any change that finished
+processing can be added, including one that still needs review.
+`release_changes_change_unique` keeps each change in one release. The
+composite foreign keys on `(id, organization_id, project_id)` make the
+database reject a change joining a release of another Project or tenant.
+
+A decision is `APPROVE` or `EDIT` and carries the category and breaking flag
+the reviewer saw. `APPROVE` must match the change's current classification
+(`409 classification_changed` otherwise) and cannot confirm an Unknown
+change. Both actions call `ChangeReviewService.review`, so the change records
+the reviewer exactly as an Inbox review does, and a `release_change_reviews`
+row records the release's decision, the reviewer, an optional note, and the
+time. A later decision on the same change replaces the row. Rejecting a
+change removes it from the release, and the cascade removes its decision.
+Approval records the approver and time and requires a decision on every
+change, so no approved release contains a change that still needs review.
+Returning to draft deletes the decisions and the approval; the reviews on the
+changes stay. Discarding deletes the release, and the cascade makes its changes
+available again.
+
+Flyway `V12` enforces the lifecycle in PostgreSQL too. Rows are added to
+`release_changes` only while the release is a draft, are never updated, and
+are deleted only before approval. Decisions are written only while the release
+is in review and deleted only before approval. The triggers skip a release
+that no longer exists, so discarding an approved release still cascades.
+`releases_approval_recorded` keeps the approval columns together, requires
+them on `APPROVED`, and forbids them on `DRAFT` and `IN_REVIEW`. Releases
+published before `V12` have no approval.
+
+The planned release time is optional and must lie in the future. REST clients
+send an ISO-8601 instant with an offset; the page's `datetime-local` input
+sends a local time that is read as UTC, and pages show times in UTC.
 
 `ReleaseNotePreview` builds the preview on every read. Breaking changes are
 listed first and only there; the rest follow in the order Features, Fixes,
 Performance, Documentation, Maintenance, sorted by merge time. Titles drop a
-leading Conventional Commit prefix.
+leading Conventional Commit prefix. Unknown changes do not appear in the
+preview; review gives them a category before approval.
 
 ## Release Note publication
 
-`ReleaseService.publish` runs in one transaction. It requires a draft with at
-least one change and a version unused in the Project. It then builds the
-sections from the current changes, renders Markdown with `ReleaseNoteMarkdown`
-(escaping Markdown syntax in titles and the summary), inserts the
-`release_notes` snapshot, and marks the release `PUBLISHED` with the
-publisher's ID, name, and time. Reads of a published release use the stored
-sections and Markdown, so reclassifying an included change afterwards never
-changes what was published. See
+`ReleaseService.publish` runs in one transaction. It requires an approved
+release. It builds the sections from the current changes, renders Markdown
+with `ReleaseNoteMarkdown` (escaping Markdown syntax in titles and the
+summary), inserts the `release_notes` snapshot, and marks the release
+`PUBLISHED` with the publisher's ID, name, and time. Reads of a published
+release use the stored sections and Markdown, so reclassifying an included
+change afterwards never changes what was published. See
 [ADR-0005](adr/0005-immutable-release-note-snapshots.md).
 
-Immutability is enforced twice. The service rejects edit, discard, add,
-remove, and a second publish with `409 release_published`. PostgreSQL
-triggers reject UPDATE or DELETE on `release_notes`, UPDATE or DELETE on a
-`PUBLISHED` release, and any write to `release_changes` of a published
-release. `releases_publication_recorded` keeps status, time, and publisher
-consistent. `releases_project_version_unique` prevents a later draft from
-reusing a published version.
+Immutability is enforced twice. The service rejects every operation on a
+published release with `409 release_published`. PostgreSQL triggers reject
+UPDATE or DELETE on `release_notes`, UPDATE or DELETE on a `PUBLISHED`
+release, and writes to its `release_changes` and `release_change_reviews`.
+`releases_publication_recorded` keeps status, time, and publisher consistent.
+`releases_project_version_unique` prevents a later release from reusing a
+published version.
 
 ## User interface
 

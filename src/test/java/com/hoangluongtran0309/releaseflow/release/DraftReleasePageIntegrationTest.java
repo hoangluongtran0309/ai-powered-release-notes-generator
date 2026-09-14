@@ -46,7 +46,7 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
@@ -73,7 +73,8 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(view().name("releases"))
                 .andExpect(content().string(matchesPattern(
                         "(?s).*class=\"app-nav-link is-active\"[^>]*aria-current=\"page\".*Releases.*")))
-                .andExpect(content().string(containsString("Create a draft release")));
+                .andExpect(content().string(containsString("Create a release")))
+                .andExpect(content().string(containsString("No releases yet.")));
 
         MvcResult created = mockMvc.perform(post("/projects/{projectId}/releases", projectId)
                         .session(owner.session())
@@ -87,11 +88,14 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
 
         mockMvc.perform(get(draftPath).session(owner.session()))
                 .andExpect(status().isOk())
-                .andExpect(view().name("release-draft"))
+                .andExpect(view().name("release"))
                 .andExpect(content().string(containsString("No changes yet.")))
                 .andExpect(content().string(containsString("name=\"changeIds\" value=\"" + feature + "\"")))
-                .andExpect(content().string(not(containsString("Tidy the exporter"))))
-                .andExpect(content().string(containsString("Add all available")));
+                .andExpect(content().string(matchesPattern("(?s).*Tidy the exporter.*Needs review.*")))
+                .andExpect(content().string(containsString("Add all available")))
+                .andExpect(content().string(containsString("<li class=\"step step-primary\" aria-current=\"step\">Draft</li>")))
+                .andExpect(content().string(containsString("<button type=\"submit\" class=\"btn btn-primary btn-sm\" disabled=\"disabled\">Request review</button>")))
+                .andExpect(content().string(not(containsString("id=\"breaking-warning\""))));
 
         mockMvc.perform(post(draftPath + "/changes")
                         .session(owner.session())
@@ -105,7 +109,9 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(matchesPattern(
                         "(?s).*aria-label=\"Release note preview\".*Exports and a faster inbox\\..*"
                                 + "<h3 class=\"font-bold\">Breaking changes</h3>.*rename config keys.*\\(Fix\\).*"
-                                + "<h3 class=\"font-bold\">Features</h3>.*add the inbox.*")));
+                                + "<h3 class=\"font-bold\">Features</h3>.*add the inbox.*")))
+                .andExpect(content().string(containsString("id=\"breaking-warning\"")))
+                .andExpect(content().string(containsString("<button type=\"submit\" class=\"btn btn-primary btn-sm\">Request review</button>")));
 
         mockMvc.perform(post(draftPath + "/changes")
                         .session(owner.session())
@@ -124,10 +130,9 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(redirectedUrl(draftPath));
 
         mockMvc.perform(get("/releases").session(owner.session()))
-                .andExpect(content().string(containsString(">1.5.0</h2>")))
-                .andExpect(content().string(containsString("2 changes")))
-                .andExpect(content().string(containsString("href=\"" + draftPath + "\"")))
-                .andExpect(content().string(not(containsString("Create a draft release"))));
+                .andExpect(content().string(containsString("href=\"" + draftPath + "\">1.5.0</a>")))
+                .andExpect(content().string(containsString("3 changes")))
+                .andExpect(content().string(containsString("Create a release")));
 
         mockMvc.perform(post(draftPath + "/discard")
                         .session(owner.session())
@@ -136,7 +141,7 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(redirectedUrl("/releases?project=" + projectId));
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM release_changes", Long.class)).isZero();
         mockMvc.perform(get("/releases").session(owner.session()))
-                .andExpect(content().string(containsString("Create a draft release")));
+                .andExpect(content().string(containsString("No releases yet.")));
     }
 
     @Test
@@ -161,9 +166,17 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(post("/projects/{projectId}/releases", projectId)
                         .session(owner.session())
                         .with(csrf())
-                        .param("version", "2.0.0"))
+                        .param("version", "1.0.0"))
                 .andExpect(status().isConflict())
-                .andExpect(content().string(containsString("already has a draft release")));
+                .andExpect(content().string(containsString("already has a release with this version")));
+        mockMvc.perform(post("/projects/{projectId}/releases", projectId)
+                        .session(owner.session())
+                        .with(csrf())
+                        .param("version", "2.0.0")
+                        .param("plannedReleaseAt", "2020-01-01T09:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(view().name("releases"))
+                .andExpect(content().string(containsString("The planned release time must be in the future.")));
 
         String draftPath = "/projects/" + projectId + "/releases/"
                 + jdbcTemplate.queryForObject("SELECT id FROM releases", UUID.class);
@@ -176,7 +189,7 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(get("/releases").session(other.session()).param("project", projectId.toString()))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string(containsString("Project was not found.")))
-                .andExpect(content().string(not(containsString("Create a draft release"))));
+                .andExpect(content().string(not(containsString("Create a release"))));
     }
 
     private UUID createProject(Owner owner) throws Exception {

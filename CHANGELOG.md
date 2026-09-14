@@ -140,9 +140,30 @@ version has been released.
   `PUT /api/organization/output-language`.
 - Flyway migration `V11` for the output language, neutral summaries, the AI
   provider, and the `CLASSIFYING` and `FALLBACK_REQUIRED` job states.
+- A release review lifecycle (ADR-0010): `DRAFT -> IN_REVIEW -> APPROVED ->
+  PUBLISHED`, with request-review, per-change `APPROVE`/`EDIT` decisions that
+  review the change itself, rejection that removes a change during review,
+  approval that records the approver, and return to draft.
+- A planned release time per release, set at creation or with
+  `PUT /api/projects/{projectId}/releases/{releaseId}/schedule`.
+- `GET /api/projects/{projectId}/release-assignments`, listing the release of
+  each assigned change.
+- A release page with a four-step progress indicator, a breaking-change
+  warning, review progress, Changes and Review tabs, and scheduling; status
+  filters with counts on the Releases page.
+- Error codes `release_status_conflict`, `release_review_incomplete`,
+  `classification_changed`, and `invalid_release_schedule`.
+- Flyway migration `V12` for the new statuses, schedule and approval columns,
+  and `release_change_reviews`, with triggers that fix a release's changes and
+  decisions once it is approved.
 
 ### Changed
 
+- A Project may prepare several releases at once, and a change that still
+  needs review may join a draft; `409 draft_release_exists` is removed.
+- Publishing requires an approved release; publishing a draft returns
+  `409 release_status_conflict` instead of publishing it.
+- A release can be scheduled or discarded until it is published.
 - AI results may settle a change (ADR-0009, superseding ADR-0004), but never
   replace a category the rules chose, clear a breaking flag, or settle an
   Unknown or triggered change.

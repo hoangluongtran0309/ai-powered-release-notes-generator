@@ -17,6 +17,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,7 +63,7 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
@@ -77,13 +80,16 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
                 "feat(ui): add the inbox", "FEATURE", false, false, null);
         TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 2,
                 "fix!: rename config keys", "FIX", true, false, owner.userId());
-        UUID releaseId = draftWithAllChanges(owner, projectId, "1.4.0");
+        UUID releaseId = approvedRelease(owner, projectId, "1.4.0");
 
         publish(owner, projectId, releaseId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLISHED"))
                 .andExpect(jsonPath("$.publishedAt", notNullValue()))
                 .andExpect(jsonPath("$.publisherName").value("Mai Tran"))
+                .andExpect(jsonPath("$.approverName").value("Mai Tran"))
+                .andExpect(jsonPath("$.approvedAt", notNullValue()))
+                .andExpect(jsonPath("$.decisions.length()").value(2))
                 .andExpect(jsonPath("$.markdown").value(EXPECTED_MARKDOWN))
                 .andExpect(jsonPath("$.preview[0].title").value("Breaking changes"))
                 .andExpect(jsonPath("$.preview[1].items[0].title").value("add the inbox"));
@@ -120,7 +126,7 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
         UUID projectId = createProject(owner);
         UUID included = TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1,
                 "feat: add the inbox", "FEATURE", false, false, null);
-        UUID releaseId = draftWithAllChanges(owner, projectId, "1.4.0");
+        UUID releaseId = approvedRelease(owner, projectId, "1.4.0");
         publish(owner, projectId, releaseId).andExpect(status().isOk());
         UUID later = TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 2,
                 "fix: handle empty tables", "FIX", false, false, null);
@@ -139,15 +145,33 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
                         projectId, releaseId, included)
                 .session(owner.session())
                 .with(csrf())));
+        for (String action : new String[]{"request-review", "approve", "return-to-draft"}) {
+            expectPublished(mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/" + action, projectId, releaseId)
+                    .session(owner.session())
+                    .with(csrf())));
+        }
+        expectPublished(mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}/schedule", projectId, releaseId)
+                .session(owner.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"plannedReleaseAt\":\"2099-01-01T00:00:00Z\"}")));
+        expectPublished(mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decision",
+                        projectId, releaseId, included)
+                .session(owner.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"APPROVE\",\"category\":\"feature\",\"breaking\":false}")));
 
         mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
                         .session(owner.session()))
                 .andExpect(jsonPath("$.version").value("1.4.0"))
-                .andExpect(jsonPath("$.changes.length()").value(1));
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.changes.length()").value(1))
+                .andExpect(jsonPath("$.decisions.length()").value(1));
     }
 
     @Test
-    void refusesEmptyDraftsAndReusedVersions() throws Exception {
+    void publishesOnlyApprovedReleasesAndRefusesReusedVersions() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
         UUID projectId = createProject(owner);
         UUID emptyDraft = createDraft(owner, projectId, "1.4.0");
@@ -155,10 +179,12 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
         publish(owner, projectId, emptyDraft)
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.code").value("release_empty"));
+                .andExpect(jsonPath("$.code").value("release_status_conflict"))
+                .andExpect(jsonPath("$.detail").value("Approve this release before publishing it."));
 
         TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1, "feat: add the inbox", "FEATURE", false, false, null);
         addChanges(owner, projectId, emptyDraft, "{\"allAvailable\":true}").andExpect(status().isOk());
+        approve(owner, projectId, emptyDraft);
         publish(owner, projectId, emptyDraft).andExpect(status().isOk());
 
         mockMvc.perform(post("/api/projects/{projectId}/releases", projectId)
@@ -180,7 +206,9 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$[0].version").value("1.5.0"))
                 .andExpect(jsonPath("$[0].status").value("DRAFT"))
                 .andExpect(jsonPath("$[1].version").value("1.4.0"))
-                .andExpect(jsonPath("$[1].status").value("PUBLISHED"));
+                .andExpect(jsonPath("$[1].status").value("PUBLISHED"))
+                .andExpect(jsonPath("$[1].reviewedCount").value(1))
+                .andExpect(jsonPath("$[1].approvedAt", notNullValue()));
     }
 
     @Test
@@ -189,7 +217,7 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
         Owner other = registerAndLogin("other@example.com", "Other Owner");
         UUID projectId = createProject(owner);
         TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1, "feat: add the inbox", "FEATURE", false, false, null);
-        UUID releaseId = draftWithAllChanges(owner, projectId, "1.4.0");
+        UUID releaseId = approvedRelease(owner, projectId, "1.4.0");
 
         publish(other, projectId, releaseId)
                 .andExpect(status().isNotFound())
@@ -199,7 +227,7 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
                         .session(owner.session()))
-                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.status").value("APPROVED"))
                 .andExpect(jsonPath("$.markdown").doesNotExist());
     }
 
@@ -230,6 +258,37 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
         UUID releaseId = createDraft(owner, projectId, version);
         addChanges(owner, projectId, releaseId, "{\"allAvailable\":true}").andExpect(status().isOk());
         return releaseId;
+    }
+
+    private UUID approvedRelease(Owner owner, UUID projectId, String version) throws Exception {
+        UUID releaseId = draftWithAllChanges(owner, projectId, version);
+        approve(owner, projectId, releaseId);
+        return releaseId;
+    }
+
+    // Requests review, approves every change as shown, and approves the release.
+    private void approve(Owner owner, UUID projectId, UUID releaseId) throws Exception {
+        String inReview = mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/request-review", projectId, releaseId)
+                        .session(owner.session())
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<Map<String, Object>> changes = JsonPath.read(inReview, "$.changes");
+        for (Map<String, Object> change : changes) {
+            mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decision",
+                            projectId, releaseId, change.get("id"))
+                            .session(owner.session())
+                            .with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"action\":\"APPROVE\",\"category\":\"%s\",\"breaking\":%s}".formatted(
+                                    change.get("category").toString().toLowerCase(Locale.ROOT), change.get("breaking"))))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/approve", projectId, releaseId)
+                        .session(owner.session())
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
     }
 
     private ResultActions addChanges(Owner owner, UUID projectId, UUID releaseId, String body) throws Exception {

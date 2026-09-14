@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V9`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V12`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -39,10 +39,11 @@ The application currently provides:
   administrators;
 - human review of any change, recording who confirmed or corrected its
   category and breaking flag;
-- one Draft Release per Project, assembled from settled changes, with a live
-  release note preview;
-- publication of a draft as an immutable Release Note snapshot with copyable
-  Markdown;
+- releases that move from draft through a per-change review and approval to
+  publication, with several drafts per Project, a planned release time, and a
+  live release note preview;
+- publication of an approved release as an immutable Release Note snapshot
+  with copyable Markdown;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
@@ -384,60 +385,100 @@ It returns the updated change, `400 invalid_change_review` for `unknown` or an
 unsupported category, `400 validation_failed` when a field is missing, and
 `404 change_not_found` for another Organization's change.
 
-## Draft Releases
+## Releases
 
-Open **Releases** to prepare a Project's next release. A Project has at most
-one draft at a time. A draft has a version (up to 50 characters) and an
-optional summary. Only settled changes can be added, meaning changes that no
-longer need review; each change belongs to at most one release. The draft
-page lists the included changes, the available settled changes (with **Add
-selected** and **Add all available**), and a preview of the release note:
-breaking changes first, then Features, Fixes, Performance, Documentation, and
-Maintenance, with Conventional Commit prefixes removed from titles.
-Discarding a draft deletes it and makes its changes available again.
+Open **Releases** to prepare a Project's releases. The page creates a release
+with a version (up to 50 characters), an optional summary, and an optional
+planned release time in UTC, and lists the Project's releases with status
+filters and counts. A Project can prepare several releases at once, and each
+change belongs to at most one release.
+
+A release moves through four steps, shown at the top of its page:
+
+1. **Draft.** Add changes that have finished processing, by hand or with
+   **Add all available**. A change that still needs review can be added; the
+   release's review settles it. Edit the version and summary, remove changes,
+   then **Request review**, which needs at least one change.
+2. **In review.** The change list is fixed except for rejections. On the
+   **Review** tab, each change gets a decision: **Approve as shown** confirms
+   its category and breaking flag, **Edit classification** corrects them, and
+   **Reject** removes the change from the release so it becomes available for
+   another one. Approving and editing record the reviewer on the change itself,
+   exactly like a review in the Change Inbox, with an optional note. An Unknown
+   change must be edited. **Approve release** becomes available once every
+   change has a decision.
+3. **Approved.** The approver and time are recorded. **Publish release**
+   freezes the release note.
+4. **Published.** See [Publishing](#publishing).
+
+Until it is published, a release can be scheduled or unscheduled, returned to
+draft (from review or approval, clearing its decisions and approval but not
+the reviews on its changes), or discarded (its changes become available
+again). The preview lists breaking changes first, then Features, Fixes,
+Performance, Documentation, and Maintenance, with Conventional Commit prefixes
+removed from titles. See
+[ADR-0010](docs/adr/0010-release-review-lifecycle.md).
 
 REST clients use the same rules:
 
 ```text
 GET    /api/projects/{projectId}/releases
-POST   /api/projects/{projectId}/releases                                {"version", "summary"}
+POST   /api/projects/{projectId}/releases                                {"version", "summary", "plannedReleaseAt"}
 GET    /api/projects/{projectId}/releases/{releaseId}
 PUT    /api/projects/{projectId}/releases/{releaseId}                    {"version", "summary"}
 DELETE /api/projects/{projectId}/releases/{releaseId}
+PUT    /api/projects/{projectId}/releases/{releaseId}/schedule           {"plannedReleaseAt"} (null clears it)
 GET    /api/projects/{projectId}/releases/{releaseId}/available-changes
 POST   /api/projects/{projectId}/releases/{releaseId}/changes            {"changeIds": [...]} or {"allAvailable": true}
-DELETE /api/projects/{projectId}/releases/{releaseId}/changes/{changeId}
+DELETE /api/projects/{projectId}/releases/{releaseId}/changes/{changeId} (remove, or reject during review)
+POST   /api/projects/{projectId}/releases/{releaseId}/request-review
+PUT    /api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decision
+                                                                         {"action": "APPROVE" | "EDIT", "category", "breaking", "note"}
+POST   /api/projects/{projectId}/releases/{releaseId}/approve
+POST   /api/projects/{projectId}/releases/{releaseId}/return-to-draft
+POST   /api/projects/{projectId}/releases/{releaseId}/publish
+GET    /api/projects/{projectId}/release-assignments
 ```
 
-A second draft returns `409 draft_release_exists`. A change that still needs
-review returns `409 change_not_releasable`. An unknown or foreign change
-returns `404 change_not_found`, and an unknown or foreign release returns
-`404 release_not_found`.
+`plannedReleaseAt` is an ISO-8601 instant such as `2026-10-01T09:00:00Z`; a
+value without an offset is read as UTC. A release returns its `changes`, its
+`decisions` (`changeId`, `action`, `reviewerName`, `note`, `decidedAt`),
+`reviewedCount`, `plannedReleaseAt`, `approvedAt`, and `approverName`.
+`release-assignments` lists which release, by ID, version, and status, each
+of the Project's changes belongs to. Errors:
+
+| Situation | Response |
+| --- | --- |
+| The operation does not fit the release's status | `409 release_status_conflict` |
+| Review requested or approval attempted with no changes | `409 release_empty` |
+| Approval attempted before every change has a decision | `409 release_review_incomplete` |
+| `APPROVE` sent with a classification other than the change's current one | `409 classification_changed` |
+| `unknown` or an unsupported category in a decision | `400 invalid_change_review` |
+| An unreadable or past planned release time | `400 invalid_release_schedule` |
+| A change still processing or already in another release | `409 change_not_releasable` |
+| The version is already used in this Project | `409 release_version_taken` |
+| An unknown or foreign change | `404 change_not_found` |
+| An unknown or foreign release | `404 release_not_found` |
 
 ## Publishing
 
-On a draft page, open **Publish release**. Publishing requires at least one
-change and a version that no other release of the Project uses, ignoring case.
-It stores an immutable snapshot of the release note as sections and Markdown,
-together with who published it and when. The page then becomes read-only and
-offers the Markdown with a **Copy** button for GitHub Releases or a changelog.
-Published releases are listed on **Releases**, and a new draft can be started.
+On an approved release's page, open **Publish release**. Publishing stores an
+immutable snapshot of the release note as sections and Markdown, together with
+who published it and when. The page then becomes read-only, shows who approved
+and published the release, and offers the Markdown with a **Copy** button for
+GitHub Releases or a changelog.
 
-A published release cannot be edited, discarded, unpublished, or changed in
-content. Its changes can still be corrected in the Change Inbox, but the
-published note keeps what was published. PostgreSQL triggers enforce this even
-for direct SQL. See
+A published release cannot be edited, scheduled, reviewed, discarded,
+unpublished, or changed in content. Its changes can still be corrected in the
+Change Inbox, but the published note keeps what was published. PostgreSQL
+triggers enforce this even for direct SQL. See
 [ADR-0005](docs/adr/0005-immutable-release-note-snapshots.md).
 
 REST clients call `POST /api/projects/{projectId}/releases/{releaseId}/publish`.
 It returns the release with `status`, `publishedAt`, `publisherName`,
-`markdown`, and the snapshot sections in `preview`. Errors:
-
-| Situation | Response |
-| --- | --- |
-| The draft has no changes | `409 release_empty` |
-| The version is already used in this Project | `409 release_version_taken` |
-| The release is already published (publish, edit, discard, add, remove) | `409 release_published` |
+`markdown`, and the snapshot sections in `preview`. Publishing a release that
+is not approved returns `409 release_status_conflict`; any operation on a
+published release returns `409 release_published`.
 
 ## Verify
 

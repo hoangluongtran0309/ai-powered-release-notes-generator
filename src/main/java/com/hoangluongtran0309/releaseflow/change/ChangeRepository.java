@@ -19,9 +19,10 @@ interface ChangeRepository extends JpaRepository<Change, UUID> {
 
     Optional<Change> findByIdAndOrganizationIdAndProjectId(UUID id, UUID organizationId, UUID projectId);
 
-    List<Change> findAllByOrganizationIdAndProjectIdAndNeedsReviewFalseOrderByMergedAtAscIdAsc(
+    List<Change> findAllByOrganizationIdAndProjectIdAndProcessingStatusOrderByMergedAtAscIdAsc(
             UUID organizationId,
-            UUID projectId
+            UUID projectId,
+            ProcessingStatus processingStatus
     );
 
     List<Change> findAllByOrganizationIdAndProjectIdAndIdInOrderByMergedAtAscIdAsc(
