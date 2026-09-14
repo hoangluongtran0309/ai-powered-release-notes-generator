@@ -96,7 +96,10 @@ class ReleaseNotePreviewTest {
                 ProcessingStatus.COMPLETED,
                 ChangedFileStatus.COLLECTED,
                 List.of(),
-                List.of()
+                List.of(),
+                null,
+                null,
+                null
         );
     }
 }

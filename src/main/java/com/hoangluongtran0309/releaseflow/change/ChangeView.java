@@ -32,7 +32,10 @@ public record ChangeView(
         ProcessingStatus processingStatus,
         ChangedFileStatus changedFileStatus,
         List<ChangedFile> changedFiles,
-        List<ReviewTrigger> reviewTriggers
+        List<ReviewTrigger> reviewTriggers,
+        NeutralSummary neutralSummary,
+        String contentLanguage,
+        AiProvider aiProvider
 ) {
 
     public boolean processing() {
@@ -67,7 +70,10 @@ public record ChangeView(
                 change.getProcessingStatus(),
                 change.getChangedFileStatus(),
                 change.getChangedFiles(),
-                change.getReviewTriggers()
+                change.getReviewTriggers(),
+                change.getNeutralSummary(),
+                change.getContentLanguage(),
+                change.getAiProvider()
         );
     }
 }

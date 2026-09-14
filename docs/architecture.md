@@ -230,29 +230,41 @@ Unknown, and in review, together with a `PENDING` row in
 ## Change processing
 
 `ChangeProcessingWorker` runs every second on the scheduler and drains due
-jobs. Each step is its own short transaction, and the GitHub call happens
-between them:
+jobs. Each step is its own short transaction, and the GitHub and AI calls
+happen between them:
 
-1. Jobs left `ENRICHING` for more than ten minutes return to `PENDING`.
-2. One due `PENDING` job is locked with `FOR UPDATE SKIP LOCKED`, marked
-   `ENRICHING`, its attempt counted, and its claim time recorded, so several
-   workers never take the same job.
+1. Jobs left `ENRICHING` for more than ten minutes return to `PENDING`; jobs
+   left `CLASSIFYING` become `FALLBACK_REQUIRED`.
+2. One due `PENDING` or `FALLBACK_REQUIRED` job is locked with
+   `FOR UPDATE SKIP LOCKED`. A `FALLBACK_REQUIRED` job is completed at once
+   from the recorded files, with the rules and a `CLASSIFIER_FALLBACK`
+   trigger, never asking the AI again. A `PENDING` job is marked `ENRICHING`,
+   its attempt counted, and its claim time recorded, so several workers never
+   take the same job.
 3. Without a transaction, `GitHubRepositoryAccess` supplies the repository and
    token, and `GitHubApiClient.pullRequestFiles` lists the files, 100 per page
    for at most five pages. A full fifth page, a refused or missing token, or an
    invalid response is final. Timeouts, network errors, rate limits, and 5xx
    responses are retried after 2 and 4 seconds, up to three attempts.
-4. The rules classify the change with the result, and the change and job are
-   completed together, but only if the job still carries this worker's claim.
-   A claim that went stale and was taken over is discarded.
+4. The rules classify the change with the result. Without an AI provider, the
+   change and job are completed together. With one, the files are recorded on
+   the change and the job becomes `CLASSIFYING`; then, with no transaction
+   open, the AI is asked once in the Organization's output language; finally
+   `ChangeAiMerge` combines the answer (or failure) with the rules and the
+   change and job are completed. Every write checks that the job still carries
+   this worker's claim, so a claim that went stale and was taken over is
+   discarded.
 
-An unexpected failure reschedules the job rather than skipping it, so the
-change stays visibly Processing. Changes recorded before Flyway `V10` were
+An unexpected failure while collecting files reschedules the job rather than
+skipping it, so the change stays visibly Processing. Once the job is
+`CLASSIFYING` it is never rescheduled; if it stalls, the stale recovery
+completes it without AI. Changes recorded before Flyway `V10` were
 marked `COMPLETED` and are never processed.
 
 The database protects the outcome. `changes_processing_unsettled` keeps a
-`PROCESSING` change Unknown, in review, unreviewed, and without files or
-triggers, so it cannot be released, reviewed, or sent to AI. The service layer
+`PROCESSING` change Unknown, in review, unreviewed, without triggers, an AI
+result, or a summary (it may carry its recorded files), so it cannot be
+released, reviewed, or sent to AI. The service layer
 also rejects such a review with `409 change_processing`.
 `changes_triggers_require_review` allows review triggers only on changes that
 need or have received review.
@@ -298,37 +310,56 @@ page defaults to the first Project and uses a plain GET form for filters.
 
 ## AI classification
 
-OpenAI is the only AI provider, and it is optional: `OpenAiChangeClassifier`
-is enabled only when both `RELEASEFLOW_OPENAI_API_KEY` and
-`RELEASEFLOW_OPENAI_MODEL` are set, and startup fails if only one is. A person
-requests a suggestion for one change at a time. Only a change with
-`category = UNKNOWN` and `classification_source = RULES` is eligible. See
+AI is optional. `AiClassifierConfiguration` builds exactly one
+`AiChangeClassifier` from `RELEASEFLOW_AI_PROVIDER`, or none:
+
+- `OpenAiCompatibleClassifier` serves `openai` (Chat Completions with a strict
+  JSON Schema and `store: false`) and `deepseek` (the same API with
+  `json_object` and the schema in the prompt), through `RestClient`;
+- `AnthropicChangeClassifier` serves `anthropic` through the official Java SDK,
+  with Structured Outputs (`output_config.format`) and SDK retries disabled.
+
+All three share `AiClassificationPrompt` (instructions, response schema, and
+the user JSON) and `AiClassificationParser`, which rejects an incomplete or
+mistyped answer as a whole. Every provider refuses to run inside a transaction
+and turns timeouts, HTTP errors, refusals, truncation, and invalid JSON into a
+fixed message that never contains a key or a response body. See
+[ADR-0009](adr/0009-automatic-ai-classification.md), which supersedes
 [ADR-0004](adr/0004-openai-classification-as-reviewed-suggestion.md).
 
-`ChangeAiClassificationService` is not transactional. It uses a
-`TransactionTemplate` for two short transactions, with the network call
-between them:
+The change worker calls the AI automatically (see Change processing).
+`ChangeAiMerge` combines the rules with the answer:
 
-1. Load the change by ID, Organization ID, and Project ID, and check that it
-   is eligible.
-2. With no transaction open, call `POST {base-url}/chat/completions` through
-   `RestClient`. The request has `store: false`, a strict JSON Schema for the
-   category, breaking flag, and rationale, and only the title, labels, target
-   branch, and a truncated description. The client refuses to run inside an
-   active transaction.
-3. Reload the change and record the outcome only if it is still eligible, so
-   a concurrent request's result is kept.
+- the rules' category is kept unless it is Unknown;
+- `breaking` is the rules' flag OR the AI's;
+- `needs_review` is set when the change is breaking, Unknown, has any review
+  trigger, or the AI asked for review;
+- otherwise the AI's answer settles the change, and the source is `AI` only
+  when the AI chose the category.
 
-A suggestion sets the category, adds the rationale as a reason, can only set
-the breaking flag (never clear it), and keeps `needs_review = true`. A
-timeout, connection error, non-2xx status, refusal, incomplete answer, or
-invalid JSON becomes `ai_status = FAILED` with a fixed message that never
-contains the API key or a response body; the change stays Unknown. The
-`changes_ai_state_consistent` constraint keeps source, status, model, failure,
-and attempt time consistent, and requires review for every AI suggestion. The
-REST endpoint reports a stored failure as `502 ai_classification_failed`; the
-UI redirects back to the inbox card, which shows the failure and a retry
-button.
+A failure keeps the rule result and adds a `CLASSIFIER_FALLBACK` trigger. The
+change stores `neutral_summary` (JSONB), `content_language`, `ai_provider`,
+and `ai_model`. `changes_neutral_summary_consistent`,
+`changes_ai_provider_recorded`, and `changes_ai_state_consistent` keep them
+coherent.
+
+`ChangeAiClassificationService` lets a person retry. It is limited to a
+completed, unreviewed change whose AI attempt failed, or an Unknown change
+recorded before automatic AI. Like the worker, it reads in one short
+transaction, calls the provider with none open, and records the result in a
+second transaction only if the change is still eligible. Existing triggers are
+kept, so a change that needed review still does. The REST endpoint reports a
+stored failure as `502 ai_classification_failed`.
+
+## Output language
+
+`organizations.output_language` holds a canonical BCP 47 tag.
+`OutputLanguage.parse` accepts any tag whose primary language is an ISO 639
+code, turns `_` into `-`, and limits the result to 16 characters.
+`OutputLanguageService` serves registration, the Projects page form, and
+`GET|PUT /api/organization/output-language`. Changing the tag is
+administrator-only by URL rule. The worker reads the tag once per change and
+records it as the summary's `content_language`.
 
 ## Human review
 
@@ -445,7 +476,7 @@ checksums. See [ADR-0007](adr/0007-ci-and-container-supply-chain.md).
 New code is grouped by product capability. A capability starts with direct,
 readable classes and gains internal layers only when implemented behavior needs
 them. Connecting a repository and receiving webhooks make no provider call,
-and there is no historical import. Outbound calls are a person-initiated OpenAI request,
+and there is no historical import. Outbound calls are the configured AI provider,
 the GitHub access-token check, and the changed-file listing made by the one
 background worker. There is no separately deployed frontend; the compiled
 stylesheet ships inside the application JAR.

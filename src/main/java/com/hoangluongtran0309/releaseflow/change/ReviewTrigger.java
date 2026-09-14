@@ -23,11 +23,16 @@ public record ReviewTrigger(ReviewTriggerType type, String detail) {
         return new ReviewTrigger(ReviewTriggerType.CHANGED_FILES_UNAVAILABLE, null);
     }
 
+    static ReviewTrigger classifierFallback() {
+        return new ReviewTrigger(ReviewTriggerType.CLASSIFIER_FALLBACK, null);
+    }
+
     // Not a getter, so it is never written into the stored JSON.
     public String describe() {
         return switch (type) {
             case SENSITIVE_PATH -> "Sensitive file " + detail;
             case CHANGED_FILES_UNAVAILABLE -> "Changed files unavailable";
+            case CLASSIFIER_FALLBACK -> "AI classification failed";
         };
     }
 }

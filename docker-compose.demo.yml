@@ -20,9 +20,14 @@ services:
       RELEASEFLOW_DB_PASSWORD: ${RELEASEFLOW_DB_PASSWORD:?set RELEASEFLOW_DB_PASSWORD in .env}
       RELEASEFLOW_CREDENTIAL_MASTER_KEY: ${RELEASEFLOW_CREDENTIAL_MASTER_KEY:?set RELEASEFLOW_CREDENTIAL_MASTER_KEY in .env (openssl rand -base64 32)}
       RELEASEFLOW_SESSION_COOKIE_SECURE: ${RELEASEFLOW_SESSION_COOKIE_SECURE:-false}
-      # Optional; leave both empty to run without AI suggestions.
+      # Optional AI classification; leave the provider empty to use the rules only.
+      RELEASEFLOW_AI_PROVIDER: ${RELEASEFLOW_AI_PROVIDER:-}
       RELEASEFLOW_OPENAI_API_KEY: ${RELEASEFLOW_OPENAI_API_KEY:-}
       RELEASEFLOW_OPENAI_MODEL: ${RELEASEFLOW_OPENAI_MODEL:-}
+      RELEASEFLOW_ANTHROPIC_API_KEY: ${RELEASEFLOW_ANTHROPIC_API_KEY:-}
+      RELEASEFLOW_ANTHROPIC_MODEL: ${RELEASEFLOW_ANTHROPIC_MODEL:-}
+      RELEASEFLOW_DEEPSEEK_API_KEY: ${RELEASEFLOW_DEEPSEEK_API_KEY:-}
+      RELEASEFLOW_DEEPSEEK_MODEL: ${RELEASEFLOW_DEEPSEEK_MODEL:-}
       # Other optional settings, including RELEASEFLOW_SENSITIVE_PATHS, are
       # deliberately not forwarded: Compose turns an unset variable into an empty
       # string, which would replace the default in application.properties (an

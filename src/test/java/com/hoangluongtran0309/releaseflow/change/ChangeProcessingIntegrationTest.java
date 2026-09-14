@@ -329,7 +329,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                         .session(repository.session())
                         .with(csrf()))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("change_not_eligible_for_ai"));
+                .andExpect(jsonPath("$.code").value("change_processing"));
 
         MvcResult release = mockMvc.perform(post("/api/projects/{projectId}/releases", repository.projectId())
                         .session(repository.session())

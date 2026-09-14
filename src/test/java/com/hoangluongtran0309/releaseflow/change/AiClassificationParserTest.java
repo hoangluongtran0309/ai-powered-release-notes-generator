@@ -1,0 +1,61 @@
+package com.hoangluongtran0309.releaseflow.change;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import tools.jackson.databind.ObjectMapper;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class AiClassificationParserTest {
+
+    private final AiClassificationParser parser = new AiClassificationParser(new ObjectMapper());
+
+    @Test
+    void parsesAValidAnswerAndIgnoresExtraFields() {
+        AiClassification answer = parser.parse("""
+                {"category":"fix","breaking_change":true,"needs_human_review":false,"confidence":0.4,
+                 "neutral_core":{"what_changed":"  Trims input.  ","why_changed":"","technical_detail":"Strip()",
+                 "migration_step":"","narratives":{"end_user":"ignored"}}}
+                """);
+
+        assertThat(answer).isEqualTo(new AiClassification(
+                ChangeCategory.FIX,
+                true,
+                false,
+                new NeutralSummary("Trims input.", "", "Strip()", "")
+        ));
+    }
+
+    @Test
+    void shortensOverlongSummaryFields() {
+        String answer = """
+                {"category":"fix","breaking_change":false,"needs_human_review":false,
+                 "neutral_core":{"what_changed":"%s","why_changed":"","technical_detail":"","migration_step":""}}
+                """.formatted("w".repeat(3000));
+
+        assertThat(parser.parse(answer).summary().whatChanged())
+                .hasSize(AiClassificationParser.SUMMARY_FIELD_LIMIT)
+                .endsWith("…");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "",
+            "not json",
+            "[]",
+            "{\"category\":\"security\",\"breaking_change\":false,\"needs_human_review\":false,\"neutral_core\":{\"what_changed\":\"x\",\"why_changed\":\"\",\"technical_detail\":\"\",\"migration_step\":\"\"}}",
+            "{\"category\":\"fix\",\"breaking_change\":\"no\",\"needs_human_review\":false,\"neutral_core\":{\"what_changed\":\"x\",\"why_changed\":\"\",\"technical_detail\":\"\",\"migration_step\":\"\"}}",
+            "{\"category\":\"fix\",\"breaking_change\":false,\"neutral_core\":{\"what_changed\":\"x\",\"why_changed\":\"\",\"technical_detail\":\"\",\"migration_step\":\"\"}}",
+            "{\"category\":\"fix\",\"breaking_change\":false,\"needs_human_review\":false}",
+            "{\"category\":\"fix\",\"breaking_change\":false,\"needs_human_review\":false,\"neutral_core\":{\"what_changed\":\"x\",\"why_changed\":\"\",\"technical_detail\":\"\"}}",
+            "{\"category\":\"fix\",\"breaking_change\":false,\"needs_human_review\":false,\"neutral_core\":{\"what_changed\":\"  \",\"why_changed\":\"\",\"technical_detail\":\"\",\"migration_step\":\"\"}}",
+            "{\"category\":\"fix\",\"breaking_change\":false,\"needs_human_review\":false,\"neutral_core\":{\"what_changed\":\"x\",\"why_changed\":null,\"technical_detail\":\"\",\"migration_step\":\"\"}}"
+    })
+    void rejectsIncompleteOrMistypedAnswers(String content) {
+        assertThatThrownBy(() -> parser.parse(content))
+                .isInstanceOf(AiClassificationException.class)
+                .hasMessage(AiClassificationParser.INVALID);
+    }
+}

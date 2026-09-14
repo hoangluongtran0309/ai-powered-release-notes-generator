@@ -1,5 +1,8 @@
 package com.hoangluongtran0309.releaseflow.project;
 
+import com.hoangluongtran0309.releaseflow.account.InvalidOutputLanguageException;
+import com.hoangluongtran0309.releaseflow.account.OutputLanguageRequest;
+import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -21,10 +24,16 @@ public class ProjectPageController {
 
     private final ProjectService projectService;
     private final GitHubIntegrationService integrationService;
+    private final OutputLanguageService outputLanguageService;
 
-    ProjectPageController(ProjectService projectService, GitHubIntegrationService integrationService) {
+    ProjectPageController(
+            ProjectService projectService,
+            GitHubIntegrationService integrationService,
+            OutputLanguageService outputLanguageService
+    ) {
         this.projectService = projectService;
         this.integrationService = integrationService;
+        this.outputLanguageService = outputLanguageService;
     }
 
     @GetMapping("/projects")
@@ -121,6 +130,28 @@ public class ProjectPageController {
         return "projects";
     }
 
+    // The Organization's output language is shown with its Projects; administrators change it here.
+    @PostMapping("/organization/output-language")
+    String changeOutputLanguage(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @Valid @ModelAttribute("outputLanguageRequest") OutputLanguageRequest request,
+            BindingResult bindingResult,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (!bindingResult.hasErrors()) {
+            try {
+                outputLanguageService.change(principal.organizationId(), request.getOutputLanguage());
+                return "redirect:/projects?languageSaved";
+            } catch (InvalidOutputLanguageException exception) {
+                response.setStatus(HttpStatus.BAD_REQUEST.value());
+                bindingResult.rejectValue("outputLanguage", "outputLanguage.invalid", exception.getMessage());
+            }
+        }
+        addPageModel(principal, model);
+        return "projects";
+    }
+
     private void addPageModel(ReleaseFlowPrincipal principal, Model model) {
         if (!model.containsAttribute("projectRequest")) {
             model.addAttribute("projectRequest", new ProjectRequest());
@@ -130,6 +161,12 @@ public class ProjectPageController {
         }
         if (!model.containsAttribute("githubTokenRequest")) {
             model.addAttribute("githubTokenRequest", new GitHubTokenRequest());
+        }
+        model.addAttribute("outputLanguage", outputLanguageService.settings(principal.organizationId()));
+        if (!model.containsAttribute("outputLanguageRequest")) {
+            OutputLanguageRequest languageRequest = new OutputLanguageRequest();
+            languageRequest.setOutputLanguage(outputLanguageService.outputLanguage(principal.organizationId()).tag());
+            model.addAttribute("outputLanguageRequest", languageRequest);
         }
         model.addAttribute("projects", projectService.list(principal.organizationId()));
     }

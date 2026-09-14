@@ -94,7 +94,7 @@ public class ChangeInboxPageController {
     ) {
         try {
             aiClassificationService.classify(principal.organizationId(), projectId, changeId);
-        } catch (AiClassificationFailedException | ChangeNotEligibleForAiException exception) {
+        } catch (AiClassificationFailedException | ChangeNotEligibleForAiException | ChangeProcessingException exception) {
             // The card shows the recorded failure, or the classification that already exists.
         } catch (ChangeNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());

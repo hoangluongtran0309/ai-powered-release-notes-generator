@@ -31,7 +31,7 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
         clearDatabase();
         organization = UUID.randomUUID();
         project = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at) VALUES (?, 'Acme', now())", organization);
+        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, 'Acme', now(), 'en')", organization);
         jdbcTemplate.update(
                 "INSERT INTO projects (id, organization_id, name, created_at) VALUES (?, ?, 'Project', now())",
                 project,
@@ -55,7 +55,10 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
 
         assertThatThrownBy(() -> insertChange(2, "PROCESSING", "FEATURE", false, null, null, "[]"))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> insertChange(3, "PROCESSING", "UNKNOWN", true, "COLLECTED", ONE_FILE, "[]"))
+        // Files are recorded before the AI call (V11), so a Processing change may carry them.
+        assertThatCode(() -> insertChange(3, "PROCESSING", "UNKNOWN", true, "COLLECTED", ONE_FILE, "[]"))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> insertChange(6, "PROCESSING", "FEATURE", true, null, null, "[]"))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(() -> insertChange(4, "PROCESSING", "UNKNOWN", true, null, null, SENSITIVE_TRIGGER))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -96,7 +99,7 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
     void processingJobsStayInsideTheirChangesTenantAndState() {
         UUID change = insertChange(1, "PROCESSING", "UNKNOWN", true, null, null, "[]");
         UUID otherOrganization = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at) VALUES (?, 'Other', now())", otherOrganization);
+        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, 'Other', now(), 'en')", otherOrganization);
 
         assertThatThrownBy(() -> insertJob(change, otherOrganization, "PENDING", null, null))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -109,6 +112,37 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
         assertThatCode(() -> insertJob(change, organization, "ENRICHING", Instant.now(), null))
                 .doesNotThrowAnyException();
         assertThatThrownBy(() -> insertJob(change, organization, "PENDING", null, null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void aiResultsAreRecordedConsistently() {
+        String summary = "{\"whatChanged\":\"Adds export.\",\"whyChanged\":\"\",\"technicalDetail\":\"\",\"migrationStep\":\"\"}";
+        assertThatCode(() -> insertAiChange(1, "COMPLETED", "RULES", "SUCCEEDED", "openai", "gpt", null, summary, "vi", false))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertAiChange(2, "COMPLETED", "AI", "SUCCEEDED", "anthropic", "claude", null, summary, "en", false))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertAiChange(3, "COMPLETED", "RULES", "FAILED", "deepseek", "ds", "DeepSeek returned HTTP 500.", null, null, true))
+                .doesNotThrowAnyException();
+
+        // A summary needs a successful attempt and a language.
+        assertThatThrownBy(() -> insertAiChange(4, "COMPLETED", "RULES", "FAILED", "openai", "gpt", "Failed.", summary, "en", true))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertAiChange(5, "COMPLETED", "RULES", "SUCCEEDED", "openai", "gpt", null, summary, null, false))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // The provider is recorded exactly when the AI was asked.
+        assertThatThrownBy(() -> insertAiChange(6, "COMPLETED", "RULES", "SUCCEEDED", null, "gpt", null, null, null, false))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertAiChange(7, "COMPLETED", "RULES", "SUCCEEDED", "gemini", "g", null, null, null, false))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // An AI category requires a successful attempt.
+        assertThatThrownBy(() -> insertAiChange(8, "COMPLETED", "AI", "FAILED", "openai", "gpt", "Failed.", null, null, true))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // A Processing change has not been sent to AI yet.
+        assertThatThrownBy(() -> insertAiChange(9, "PROCESSING", "RULES", "SUCCEEDED", "openai", "gpt", null, summary, "en", true))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // The Organization's output language cannot be blank.
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE organizations SET output_language = ' ' WHERE id = ?", organization))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -161,6 +195,51 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
                 reviewTriggers
         );
         return id;
+    }
+
+    private void insertAiChange(
+            int number,
+            String processingStatus,
+            String source,
+            String aiStatus,
+            String provider,
+            String model,
+            String failure,
+            String summary,
+            String language,
+            boolean needsReview
+    ) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO changes
+                            (id, organization_id, project_id, pull_request_number, title, author_login, labels,
+                             target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
+                             category, breaking, needs_review, classification_reasons,
+                             classification_source, ai_status, ai_provider, ai_model, ai_failure, ai_attempted_at,
+                             processing_status, changed_file_status, changed_files, review_triggers,
+                             neutral_summary, content_language)
+                        VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main',
+                                '0123456789abcdef0123456789abcdef01234567', now(),
+                                'https://github.com/acme/releaseflow/pull/1', ?, now(),
+                                'FEATURE', false, ?, '{"Seeded"}', ?, ?, ?, ?, ?, now(), ?, 'COLLECTED',
+                                CAST(? AS jsonb), '[]', CAST(? AS jsonb), ?)
+                        """,
+                UUID.randomUUID(),
+                organization,
+                project,
+                number,
+                UUID.randomUUID(),
+                needsReview,
+                source,
+                aiStatus,
+                provider,
+                model,
+                failure,
+                processingStatus,
+                ONE_FILE,
+                summary,
+                language
+        );
     }
 
     private void insertJob(UUID changeId, UUID organizationId, String status, Instant claimedAt, Instant completedAt) {

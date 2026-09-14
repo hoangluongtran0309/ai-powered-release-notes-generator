@@ -177,7 +177,7 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
 
     private UUID insertOrganization() {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at) VALUES (?, 'Organization', now())", id);
+        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, 'Organization', now(), 'en')", id);
         return id;
     }
 

@@ -86,8 +86,9 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 .doesNotThrowAnyException();
     }
 
+    // Since ADR-0009 an AI result may settle a change, and may accompany a category the rules chose.
     @Test
-    void keepsAiStateConsistentAndAiSuggestionsInReview() {
+    void keepsAiStateConsistent() {
         UUID organization = insertOrganization("First");
         UUID project = insertProject(organization);
         Instant now = Instant.now();
@@ -97,12 +98,12 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         assertThatCode(() -> insertChange(organization, project, 2, "Title", VALID_SHA, "UNKNOWN", false, true,
                 "RULES", "FAILED", null, "OpenAI returned HTTP 500.", now)).doesNotThrowAnyException();
 
-        assertThatThrownBy(() -> insertChange(organization, project, 3, "Title", VALID_SHA, "FIX", false, false,
-                "AI", "SUCCEEDED", "test-model", null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> insertChange(organization, project, 3, "Title", VALID_SHA, "FIX", false, false,
+                "AI", "SUCCEEDED", "test-model", null, now)).doesNotThrowAnyException();
         assertThatThrownBy(() -> insertChange(organization, project, 4, "Title", VALID_SHA, "FIX", false, true,
                 "AI", "SUCCEEDED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> insertChange(organization, project, 5, "Title", VALID_SHA, "FIX", false, true,
-                "RULES", "SUCCEEDED", "test-model", null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> insertChange(organization, project, 5, "Title", VALID_SHA, "FIX", false, true,
+                "RULES", "SUCCEEDED", "test-model", null, now)).doesNotThrowAnyException();
         assertThatThrownBy(() -> insertChange(organization, project, 6, "Title", VALID_SHA, "UNKNOWN", false, true,
                 "RULES", "FAILED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(() -> insertChange(organization, project, 7, "Title", VALID_SHA, "UNKNOWN", false, true,
@@ -215,11 +216,11 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
                              category, breaking, needs_review, classification_reasons,
-                             classification_source, ai_status, ai_model, ai_attempted_at,
+                             classification_source, ai_status, ai_provider, ai_model, ai_attempted_at,
                              reviewed_by, reviewer_name, reviewed_at, processing_status, review_triggers)
                         VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main', ?, now(),
                                 'https://github.com/acme/releaseflow/pull/1', ?, now(),
-                                ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, 'Reviewer', now(), 'COMPLETED', '[]')
+                                ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, ?, 'Reviewer', now(), 'COMPLETED', '[]')
                         """,
                 UUID.randomUUID(),
                 organizationId,
@@ -232,6 +233,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 needsReview,
                 source,
                 aiStatus,
+                "NOT_REQUESTED".equals(aiStatus) ? null : "openai",
                 aiModel,
                 "NOT_REQUESTED".equals(aiStatus) ? null : Timestamp.from(Instant.now()),
                 reviewer
@@ -241,7 +243,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     private UUID insertOrganization(String name) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
-                "INSERT INTO organizations (id, name, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, ?, ?, 'en')",
                 id,
                 name,
                 Timestamp.from(Instant.now())
@@ -300,10 +302,10 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
                              category, breaking, needs_review, classification_reasons,
-                             classification_source, ai_status, ai_model, ai_failure, ai_attempted_at,
+                             classification_source, ai_status, ai_provider, ai_model, ai_failure, ai_attempted_at,
                              processing_status, review_triggers)
                         VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}',
-                                ?, ?, ?, ?, ?, 'COMPLETED', '[]')
+                                ?, ?, ?, ?, ?, ?, 'COMPLETED', '[]')
                         """,
                 UUID.randomUUID(),
                 organizationId,
@@ -320,6 +322,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 needsReview,
                 source,
                 aiStatus,
+                "NOT_REQUESTED".equals(aiStatus) ? null : "openai",
                 aiModel,
                 aiFailure,
                 aiAttemptedAt == null ? null : Timestamp.from(aiAttemptedAt)

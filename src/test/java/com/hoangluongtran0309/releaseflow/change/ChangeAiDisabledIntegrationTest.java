@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@TestPropertySource(properties = {"releaseflow.openai.api-key=", "releaseflow.openai.model="})
+@TestPropertySource(properties = {"releaseflow.ai.provider=", "releaseflow.openai.api-key=", "releaseflow.openai.model="})
 class ChangeAiDisabledIntegrationTest extends PostgreSqlIntegrationTest {
 
     @Autowired
@@ -84,7 +84,7 @@ class ChangeAiDisabledIntegrationTest extends PostgreSqlIntegrationTest {
 
         mockMvc.perform(get("/changes").session(session))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("RELEASEFLOW_OPENAI_API_KEY")))
+                .andExpect(content().string(containsString("RELEASEFLOW_AI_PROVIDER")))
                 .andExpect(content().string(not(containsString("Classify with AI"))));
         mockMvc.perform(post("/api/projects/{projectId}/changes/{changeId}/ai-classification", projectId, changeId)
                         .session(session)

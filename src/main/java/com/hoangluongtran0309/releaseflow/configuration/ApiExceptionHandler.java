@@ -1,11 +1,13 @@
 package com.hoangluongtran0309.releaseflow.configuration;
 
 import com.hoangluongtran0309.releaseflow.account.DuplicateEmailException;
+import com.hoangluongtran0309.releaseflow.account.InvalidOutputLanguageException;
 import com.hoangluongtran0309.releaseflow.account.InvalidInvitationException;
 import com.hoangluongtran0309.releaseflow.account.InvitationAlreadyPendingException;
 import com.hoangluongtran0309.releaseflow.account.InvitationEmailUnavailableException;
 import com.hoangluongtran0309.releaseflow.account.InvitationNotFoundException;
 import com.hoangluongtran0309.releaseflow.account.OrganizationMemberApiController;
+import com.hoangluongtran0309.releaseflow.account.OutputLanguageApiController;
 import com.hoangluongtran0309.releaseflow.account.PublicInvitationApiController;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
@@ -53,6 +55,7 @@ import java.util.Map;
         RegistrationApiController.class,
         SessionApiController.class,
         OrganizationMemberApiController.class,
+        OutputLanguageApiController.class,
         PublicInvitationApiController.class,
         ProjectApiController.class,
         GitHubWebhookController.class,
@@ -96,6 +99,16 @@ public class ApiExceptionHandler {
                 "Email already registered",
                 exception.getMessage(),
                 "email_already_registered"
+        ));
+    }
+
+    @ExceptionHandler(InvalidOutputLanguageException.class)
+    ResponseEntity<ProblemDetail> invalidOutputLanguage(InvalidOutputLanguageException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid output language",
+                exception.getMessage(),
+                "output_language_invalid"
         ));
     }
 

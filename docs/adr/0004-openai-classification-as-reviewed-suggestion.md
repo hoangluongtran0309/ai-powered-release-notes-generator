@@ -1,6 +1,6 @@
 # ADR-0004: OpenAI classification as a reviewed suggestion
 
-- Status: Accepted
+- Status: Superseded by [ADR-0009](0009-automatic-ai-classification.md)
 - Date: 2026-09-11
 
 ## Context

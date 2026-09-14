@@ -21,13 +21,21 @@ public class Organization {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "output_language", nullable = false, length = OutputLanguage.MAX_LENGTH)
+    private String outputLanguage;
+
     protected Organization() {
     }
 
-    Organization(UUID id, String name, Instant createdAt) {
+    Organization(UUID id, String name, OutputLanguage outputLanguage, Instant createdAt) {
         this.id = id;
         this.name = name;
+        this.outputLanguage = outputLanguage.tag();
         this.createdAt = createdAt;
+    }
+
+    void changeOutputLanguage(OutputLanguage outputLanguage) {
+        this.outputLanguage = outputLanguage.tag();
     }
 
     public UUID getId() {
@@ -40,5 +48,9 @@ public class Organization {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public OutputLanguage getOutputLanguage() {
+        return new OutputLanguage(outputLanguage);
     }
 }

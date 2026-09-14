@@ -54,10 +54,11 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
 
     @DynamicPropertySource
     static void openAiProperties(DynamicPropertyRegistry registry) {
+        registry.add("releaseflow.ai.provider", () -> "openai");
+        registry.add("releaseflow.ai.timeout", () -> "PT2S");
         registry.add("releaseflow.openai.base-url", OPENAI::baseUrl);
         registry.add("releaseflow.openai.api-key", () -> "sk-integration-test");
         registry.add("releaseflow.openai.model", () -> "test-model");
-        registry.add("releaseflow.openai.timeout", () -> "PT2S");
     }
 
     @AfterAll
@@ -78,7 +79,8 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
     }
 
     @Test
-    void storesTheAiSuggestionAndKeepsTheChangeInReview() throws Exception {
+    // A change recorded before automatic AI can still be sent once; under ADR-0009 the AI may settle it.
+    void aPersonCanClassifyAnUnknownChangeRecordedBeforeAutomaticAi() throws Exception {
         Owner owner = registerAndLogin("owner@example.com");
         UUID projectId = createProject(owner.session());
         UUID changeId = seedChange(owner, projectId, 1, "Tidy the exporter", List.of());
@@ -88,15 +90,17 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.category").value("FIX"))
                 .andExpect(jsonPath("$.breaking").value(false))
-                .andExpect(jsonPath("$.needsReview").value(true))
+                .andExpect(jsonPath("$.needsReview").value(false))
                 .andExpect(jsonPath("$.classificationSource").value("AI"))
                 .andExpect(jsonPath("$.aiStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.aiProvider").value("OPENAI"))
                 .andExpect(jsonPath("$.aiModel").value("test-model"))
                 .andExpect(jsonPath("$.aiFailure", nullValue()))
                 .andExpect(jsonPath("$.aiEligible").value(false))
+                .andExpect(jsonPath("$.neutralSummary.whatChanged").value("It corrects how empty tables are exported."))
+                .andExpect(jsonPath("$.contentLanguage").value("en"))
                 .andExpect(jsonPath("$.reasons[0]").value("No category rule matched"))
-                .andExpect(jsonPath("$.reasons[1]")
-                        .value("AI suggestion (test-model): It corrects how empty tables are exported."));
+                .andExpect(jsonPath("$.reasons[1]").value("Category from AI (OpenAI test-model)"));
 
         Change stored = changeRepository.findById(changeId).orElseThrow();
         assertThat(stored.getClassificationSource()).isEqualTo(ClassificationSource.AI);
@@ -128,6 +132,7 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$[0].classificationSource").value("RULES"))
                 .andExpect(jsonPath("$[0].aiStatus").value("FAILED"))
                 .andExpect(jsonPath("$[0].aiFailure").value("OpenAI returned HTTP 500."))
+                .andExpect(jsonPath("$[0].reviewTriggers[0].type").value("CLASSIFIER_FALLBACK"))
                 .andExpect(jsonPath("$[0].aiEligible").value(true));
 
         OPENAI.respondWithClassification("maintenance", false, "It restructures storage internals.");
@@ -137,7 +142,9 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.breaking").value(true))
                 .andExpect(jsonPath("$.needsReview").value(true))
                 .andExpect(jsonPath("$.aiStatus").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.aiFailure", nullValue()));
+                .andExpect(jsonPath("$.aiFailure", nullValue()))
+                // The failed attempt stays on record, so a person still reviews the change.
+                .andExpect(jsonPath("$.reviewTriggers[0].type").value("CLASSIFIER_FALLBACK"));
     }
 
     @Test
@@ -181,7 +188,7 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(containsString(
                         "action=\"/projects/" + projectId + "/changes/" + unknown + "/ai-classification\"")))
                 .andExpect(content().string(containsString("Classify with AI")))
-                .andExpect(content().string(not(containsString("RELEASEFLOW_OPENAI_API_KEY"))));
+                .andExpect(content().string(not(containsString("RELEASEFLOW_AI_PROVIDER"))));
 
         OPENAI.respond(503, "{}");
         mockMvc.perform(post("/projects/{projectId}/changes/{changeId}/ai-classification", projectId, unknown)
@@ -203,9 +210,11 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/changes?project=" + projectId + "#change-" + unknown));
         mockMvc.perform(get("/changes").session(owner.session()))
-                .andExpect(content().string(containsString("AI suggestion")))
-                .andExpect(content().string(containsString("title=\"Suggested by test-model\"")))
-                .andExpect(content().string(containsString("AI suggestion (test-model): It only edits the README.")))
+                .andExpect(content().string(containsString("AI category")))
+                .andExpect(content().string(containsString("title=\"Category chosen by OpenAI test-model\"")))
+                .andExpect(content().string(containsString("Category from AI (OpenAI test-model)")))
+                .andExpect(content().string(containsString("Summary (en)")))
+                .andExpect(content().string(containsString("It only edits the README.")))
                 .andExpect(content().string(not(containsString("Classify with AI"))))
                 .andExpect(content().string(not(containsString("AI classification failed:"))));
 

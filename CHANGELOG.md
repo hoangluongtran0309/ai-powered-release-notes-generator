@@ -128,8 +128,29 @@ version has been released.
 - Flyway migration `V10` for access tokens, processing state, changed files,
   review triggers, and `change_processing_jobs`, with constraints that keep
   Processing changes unsettled and triggered changes in review.
+- Automatic AI classification in the change worker with OpenAI, Anthropic
+  (official Java SDK, Structured Outputs), or DeepSeek, selected with
+  `RELEASEFLOW_AI_PROVIDER`: one request per change, a neutral summary (what,
+  why, technical detail, migration step) in the Organization's language, shown
+  in the Change Inbox and returned as `neutralSummary`.
+- A `CLASSIFIER_FALLBACK` review trigger for failed or unusable AI answers,
+  stale-claim completion without a second AI request, and a manual retry.
+- An Organization output language chosen at registration, shown on the
+  Projects page, and changed by administrators or with
+  `PUT /api/organization/output-language`.
+- Flyway migration `V11` for the output language, neutral summaries, the AI
+  provider, and the `CLASSIFYING` and `FALLBACK_REQUIRED` job states.
 
 ### Changed
+
+- AI results may settle a change (ADR-0009, superseding ADR-0004), but never
+  replace a category the rules chose, clear a breaking flag, or settle an
+  Unknown or triggered change.
+- AI configuration now starts with `RELEASEFLOW_AI_PROVIDER`;
+  `RELEASEFLOW_OPENAI_TIMEOUT` is replaced by `RELEASEFLOW_AI_TIMEOUT`
+  (default `PT60S`). OpenAI keys without a provider stop startup.
+- The manual AI action is now a retry for failed attempts and for Unknown
+  changes recorded before automatic AI.
 
 - Classification now runs after the changed files are known instead of inside
   the webhook request; a change cannot be reviewed, sent to AI, or released
