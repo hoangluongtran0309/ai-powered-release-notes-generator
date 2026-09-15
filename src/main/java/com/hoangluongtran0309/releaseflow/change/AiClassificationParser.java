@@ -7,6 +7,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,8 @@ final class AiClassificationParser {
 
     static final int SUMMARY_FIELD_LIMIT = 2000;
     static final int SUGGESTION_NAME_LIMIT = 120;
+    static final int CONTEXT_REASON_LIMIT = 5;
+    static final int CONTEXT_REASON_LENGTH = 120;
     static final String INVALID = "The AI returned an invalid classification.";
 
     private final ObjectMapper objectMapper;
@@ -58,6 +61,10 @@ final class AiClassificationParser {
         if (whatChanged.isBlank()) {
             throw invalid();
         }
+        JsonNode context = result.path("context_sufficiency");
+        if (!context.isObject() || !context.path("score").isNumber()) {
+            throw invalid();
+        }
         return new AiClassification(
                 category,
                 breaking.booleanValue(),
@@ -69,8 +76,26 @@ final class AiClassificationParser {
                         text(core, "migration_step")
                 ),
                 narratives(result.path("narratives"), request.audienceCodes()),
-                category.isUnknown() ? suggestion(result.path("suggested_category"), request) : null
+                category.isUnknown() ? suggestion(result.path("suggested_category"), request) : null,
+                (int) Math.clamp(Math.round(context.path("score").doubleValue()), 0, 100),
+                contextReasons(context.path("reasons"))
         );
+    }
+
+    private static List<String> contextReasons(JsonNode reasons) {
+        List<String> kept = new ArrayList<>();
+        if (!reasons.isArray()) {
+            return kept;
+        }
+        for (JsonNode reason : reasons) {
+            if (kept.size() == CONTEXT_REASON_LIMIT) {
+                break;
+            }
+            if (reason.isString() && !reason.stringValue().isBlank()) {
+                kept.add(cut(reason.stringValue().strip(), CONTEXT_REASON_LENGTH));
+            }
+        }
+        return kept;
     }
 
     private static CategorySuggestionDraft suggestion(JsonNode node, AiClassificationRequest request) {

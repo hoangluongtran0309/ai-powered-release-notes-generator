@@ -7,6 +7,7 @@ import com.hoangluongtran0309.releaseflow.category.CategorySuggestionDraft;
 import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -20,7 +21,7 @@ class ChangeAiMergeTest {
     void withoutAiTheRulesStandAlone() {
         ChangeClassification rules = rules(TestCategories.FEATURE, false, List.of());
 
-        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(rules, null);
+        ChangeAiMerge.ClassifiedChange merged = merge(rules, null);
 
         assertThat(merged.classification()).isEqualTo(rules);
         assertThat(merged.source()).isEqualTo(ClassificationSource.RULES);
@@ -31,9 +32,9 @@ class ChangeAiMergeTest {
     void aProposedCategoryKeepsTheChangeUnknownAndAddsATrigger() {
         CategorySuggestionDraft draft = new CategorySuggestionDraft("SECURITY", "Security", CategoryGroup.FIX, "None fits.");
 
-        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange merged = merge(
                 rules(TestCategories.UNKNOWN, false, List.of()),
-                answer(new AiClassification(TestCategories.UNKNOWN, false, false, SUMMARY, Map.of(), draft))
+                answer(new AiClassification(TestCategories.UNKNOWN, false, false, SUMMARY, Map.of(), draft, 90, List.of()))
         );
 
         assertThat(merged.classification().category()).isEqualTo(TestCategories.UNKNOWN);
@@ -44,12 +45,48 @@ class ChangeAiMergeTest {
     }
 
     @Test
+    void insufficientContextAddsOneTriggerAndForcesReview() {
+        ContextAssessment context = new ContextAssessment(30, ContextStatus.INSUFFICIENT,
+                List.of("NO_TICKET", "DESCRIPTION_MISSING"));
+
+        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(
+                rules(TestCategories.FEATURE, false, List.of()), succeeded(TestCategories.FEATURE, false, false), context);
+
+        assertThat(merged.classification().needsReview()).isTrue();
+        assertThat(merged.classification().triggers())
+                .containsExactly(new ReviewTrigger(ReviewTriggerType.CONTEXT_INSUFFICIENT, "NO_TICKET, DESCRIPTION_MISSING"));
+        assertThat(merged.context()).isEqualTo(context);
+    }
+
+    @Test
+    void contextIsAssessedOnlyForASuccessfulAnswer() {
+        MergedPullRequest pullRequest = new MergedPullRequest(7, "fix", null, "octocat", List.of(), "main",
+                "a".repeat(40), Instant.parse("2026-09-10T09:14:22Z"), "https://github.com/acme/app/pull/7");
+        ChangeClassification rules = rules(TestCategories.FIX, false, List.of());
+
+        ChangeAiMerge.ClassifiedChange answered = ChangeAiMerge.merge(
+                rules, succeeded(TestCategories.FIX, false, false), pullRequest, 60);
+        ChangeAiMerge.ClassifiedChange withoutAi = ChangeAiMerge.merge(rules, null, pullRequest, 60);
+        ChangeAiMerge.ClassifiedChange failed = ChangeAiMerge.merge(
+                rules, new AiOutcome(AiProvider.OPENAI, "gpt-test", null, null, "OpenAI returned HTTP 500."), pullRequest, 60);
+
+        assertThat(answered.context().score()).isEqualTo(30);
+        assertThat(answered.classification().triggers()).extracting(ReviewTrigger::type)
+                .containsExactly(ReviewTriggerType.CONTEXT_INSUFFICIENT);
+        assertThat(withoutAi.context()).isNull();
+        assertThat(withoutAi.classification().needsReview()).isFalse();
+        assertThat(failed.context()).isNull();
+        assertThat(failed.classification().triggers()).extracting(ReviewTrigger::type)
+                .containsExactly(ReviewTriggerType.CLASSIFIER_FALLBACK);
+    }
+
+    @Test
     void aProposalIsIgnoredWhenTheRulesChoseTheCategory() {
         CategorySuggestionDraft draft = new CategorySuggestionDraft("SECURITY", "Security", CategoryGroup.FIX, "");
 
-        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange merged = merge(
                 rules(TestCategories.FEATURE, false, List.of()),
-                answer(new AiClassification(TestCategories.UNKNOWN, false, false, SUMMARY, Map.of(), draft))
+                answer(new AiClassification(TestCategories.UNKNOWN, false, false, SUMMARY, Map.of(), draft, 90, List.of()))
         );
 
         assertThat(merged.classification().category()).isEqualTo(TestCategories.FEATURE);
@@ -59,7 +96,7 @@ class ChangeAiMergeTest {
 
     @Test
     void theRulesCategoryIsNeverReplaced() {
-        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange merged = merge(
                 rules(TestCategories.FEATURE, false, List.of()),
                 succeeded(TestCategories.FIX, false, false)
         );
@@ -72,7 +109,7 @@ class ChangeAiMergeTest {
 
     @Test
     void theAiMaySettleAChangeTheRulesLeftUnknown() {
-        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange merged = merge(
                 rules(TestCategories.UNKNOWN, false, List.of()),
                 succeeded(TestCategories.FIX, false, false)
         );
@@ -86,7 +123,7 @@ class ChangeAiMergeTest {
 
     @Test
     void anUnknownAnswerStillNeedsReview() {
-        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange merged = merge(
                 rules(TestCategories.UNKNOWN, false, List.of()),
                 succeeded(TestCategories.UNKNOWN, false, false)
         );
@@ -98,7 +135,7 @@ class ChangeAiMergeTest {
 
     @Test
     void theAiCanAddCautionButNeverRemoveIt() {
-        ChangeAiMerge.ClassifiedChange aiBreaking = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange aiBreaking = merge(
                 rules(TestCategories.FEATURE, false, List.of()),
                 succeeded(TestCategories.FEATURE, true, false)
         );
@@ -106,21 +143,21 @@ class ChangeAiMergeTest {
         assertThat(aiBreaking.classification().needsReview()).isTrue();
         assertThat(aiBreaking.classification().reasons()).contains("AI marked it breaking");
 
-        ChangeAiMerge.ClassifiedChange rulesBreaking = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange rulesBreaking = merge(
                 rules(TestCategories.FEATURE, true, List.of()),
                 succeeded(TestCategories.FEATURE, false, false)
         );
         assertThat(rulesBreaking.classification().breaking()).isTrue();
         assertThat(rulesBreaking.classification().needsReview()).isTrue();
 
-        ChangeAiMerge.ClassifiedChange askedForReview = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange askedForReview = merge(
                 rules(TestCategories.FEATURE, false, List.of()),
                 succeeded(TestCategories.FEATURE, false, true)
         );
         assertThat(askedForReview.classification().needsReview()).isTrue();
         assertThat(askedForReview.classification().reasons()).contains("AI asked for human review");
 
-        ChangeAiMerge.ClassifiedChange triggered = ChangeAiMerge.merge(
+        ChangeAiMerge.ClassifiedChange triggered = merge(
                 rules(TestCategories.UNKNOWN, false, List.of(ReviewTrigger.sensitivePath("db/migration/V2.sql"))),
                 succeeded(TestCategories.FIX, false, false)
         );
@@ -132,7 +169,7 @@ class ChangeAiMergeTest {
     void aFailureKeepsTheRulesAndForcesReview() {
         AiOutcome failed = new AiOutcome(AiProvider.ANTHROPIC, "claude-test", null, null, "Anthropic returned HTTP 500.");
 
-        ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(rules(TestCategories.FEATURE, false, List.of()), failed);
+        ChangeAiMerge.ClassifiedChange merged = merge(rules(TestCategories.FEATURE, false, List.of()), failed);
 
         assertThat(merged.classification().category()).isEqualTo(TestCategories.FEATURE);
         assertThat(merged.classification().needsReview()).isTrue();
@@ -152,7 +189,11 @@ class ChangeAiMergeTest {
     }
 
     private static AiOutcome succeeded(CategoryRef category, boolean breaking, boolean needsReview) {
-        return answer(new AiClassification(category, breaking, needsReview, SUMMARY, Map.of(), null));
+        return answer(new AiClassification(category, breaking, needsReview, SUMMARY, Map.of(), null, 90, List.of()));
+    }
+
+    private static ChangeAiMerge.ClassifiedChange merge(ChangeClassification rules, AiOutcome ai) {
+        return ChangeAiMerge.merge(rules, ai, null);
     }
 
     private static AiOutcome answer(AiClassification classification) {

@@ -32,7 +32,8 @@ public class ChangeInboxService {
                         projectId,
                         filter.category(),
                         filter.needsReview(),
-                        filter.reviewed()
+                        filter.reviewed(),
+                        filter.insufficientContext()
                 )
                 .stream()
                 .map(ChangeView::from)

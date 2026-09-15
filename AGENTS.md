@@ -7,8 +7,9 @@ plus GitHub configuration, signed GitHub merged-pull-request intake,
 deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
-changed-file review, audience release note, and category catalog slices: one
-Spring Boot application, PostgreSQL/Flyway V1-V14, administrator
+changed-file review, audience release note, category catalog, and review
+signal slices: one Spring Boot application, PostgreSQL/Flyway V1-V15,
+administrator
 registration, member
 invitations with administrator and member roles, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
@@ -82,6 +83,9 @@ Read `README.md`, `docs/architecture.md`, and
   snapshot of its category. A category the AI proposes is never added to the
   catalog without an administrator's decision, and a change that takes it still
   needs a person's review. The Unknown system category is never archived.
+- Context sufficiency and possible duplicates are review evidence only: they add
+  triggers but never settle, merge, or remove a change. Context is assessed only
+  from an AI answer, and a duplicate decision is recorded once.
 - An Organization always has at least one audience. Rendering a release note
   never calls AI; notes are written at approval from a snapshot of each
   audience's template and are frozen at publication.

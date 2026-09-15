@@ -215,6 +215,7 @@ class ReleaseNoteDigestTest {
                 null,
                 narratives,
                 null,
+                null,
                 null
         );
     }

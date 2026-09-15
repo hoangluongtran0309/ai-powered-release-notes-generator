@@ -154,6 +154,17 @@ class Change {
     @Column(name = "summary_edited_at")
     private Instant summaryEditedAt;
 
+    @Column(name = "context_score")
+    private Integer contextScore;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "context_status", length = 20)
+    private ContextStatus contextStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "context_reasons", columnDefinition = "jsonb")
+    private List<String> contextReasons;
+
     protected Change() {
     }
 
@@ -273,6 +284,10 @@ class Change {
         this.aiProvider = ai.provider().getValue();
         this.aiModel = ai.model();
         this.aiAttemptedAt = at;
+        ContextAssessment context = outcome.context();
+        this.contextScore = context == null ? null : context.score();
+        this.contextStatus = context == null ? null : context.status();
+        this.contextReasons = context == null ? null : new ArrayList<>(context.reasons());
         if (ai.succeeded()) {
             this.aiStatus = AiStatus.SUCCEEDED;
             this.aiFailure = null;
@@ -325,6 +340,22 @@ class Change {
         reasons.add("Category from an approved suggestion");
         this.classificationReasons = reasons.toArray(String[]::new);
         return true;
+    }
+
+    /**
+     * Adds review triggers found after classification, such as a possible duplicate.
+     * They only ever add a need for review.
+     */
+    void addReviewTriggers(List<ReviewTrigger> added) {
+        List<ReviewTrigger> triggers = new ArrayList<>(reviewTriggers);
+        added.stream().filter(trigger -> !triggers.contains(trigger)).forEach(triggers::add);
+        if (triggers.size() == reviewTriggers.size()) {
+            return;
+        }
+        this.reviewTriggers = triggers;
+        if (reviewedAt == null) {
+            this.needsReview = true;
+        }
     }
 
     private void setCategory(CategoryRef value) {
@@ -496,6 +527,11 @@ class Change {
 
     Instant getSummaryEditedAt() {
         return summaryEditedAt;
+    }
+
+    /** The context assessment of the AI answer, or null when none was made. */
+    ContextAssessment getContext() {
+        return contextStatus == null ? null : new ContextAssessment(contextScore, contextStatus, contextReasons);
     }
 
     AiProvider getAiProvider() {

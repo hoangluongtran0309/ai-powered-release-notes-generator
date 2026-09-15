@@ -7,6 +7,7 @@ import com.hoangluongtran0309.releaseflow.support.GitHubStub;
 import com.hoangluongtran0309.releaseflow.support.OpenAiStub;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
 import com.hoangluongtran0309.releaseflow.support.TestCategories;
+import com.hoangluongtran0309.releaseflow.support.TestChanges;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -42,6 +43,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
@@ -451,6 +453,140 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                 .isZero();
     }
 
+    @Test
+    void aPullRequestThatSaysTooLittleNeedsReview() throws Exception {
+        Repository repository = connect();
+        GITHUB.respondWithFiles("src/main/java/Login.java");
+        OPENAI.respondWithClassification("fix", false, false, "Fixes the login redirect.");
+
+        deliver(repository, 41, "fix", "");
+        deliver(repository, 42, "Stream large table exports", "Exports stream rows so large tables no longer time out.");
+        assertThat(worker.processOne()).isTrue();
+        assertThat(worker.processOne()).isTrue();
+
+        Change thin = change(41);
+        assertThat(thin.getContext()).isEqualTo(new ContextAssessment(30, ContextStatus.INSUFFICIENT,
+                List.of("DESCRIPTION_MISSING", "TITLE_TOO_SHORT", "GENERIC_TITLE")));
+        assertThat(thin.isNeedsReview()).isTrue();
+        assertThat(thin.getReviewTriggers()).containsExactly(new ReviewTrigger(ReviewTriggerType.CONTEXT_INSUFFICIENT,
+                "DESCRIPTION_MISSING, TITLE_TOO_SHORT, GENERIC_TITLE"));
+        assertThat(change(42).getContext().status()).isEqualTo(ContextStatus.SUFFICIENT);
+        assertThat(change(42).isNeedsReview()).isFalse();
+        assertThat(userMessage(OPENAI.requests().getFirst()).path("context_threshold").intValue()).isEqualTo(60);
+
+        mockMvc.perform(get("/api/projects/{projectId}/changes", repository.projectId())
+                        .session(repository.session()).param("context", "insufficient"))
+                .andExpect(jsonPath("$[*].pullRequestNumber").value(org.hamcrest.Matchers.contains(41)))
+                .andExpect(jsonPath("$[0].context.score").value(30));
+        mockMvc.perform(get("/api/projects/{projectId}/changes", repository.projectId())
+                        .session(repository.session()).param("context", "thin"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_change_filter"));
+        mockMvc.perform(get("/changes").session(repository.session())
+                        .param("project", repository.projectId().toString()).param("context", "insufficient"))
+                .andExpect(content().string(containsString("Needs more context")))
+                .andExpect(content().string(containsString("Context score 30 of 100")))
+                .andExpect(content().string(containsString("Not enough context: DESCRIPTION_MISSING")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Stream large table exports"))));
+    }
+
+    @Test
+    void aChangeThatLooksLikeAnEarlierOneIsFlaggedAndDecidedOnce() throws Exception {
+        Repository repository = connect();
+        GITHUB.respondWithFiles("src/main/java/Export.java");
+        OPENAI.respondWithClassification("feature", false, false, "Large table exports stream rows.");
+        String description = "Exports stream rows so large tables no longer time out.";
+
+        deliver(repository, 51, "Stream large table exports", description);
+        assertThat(worker.processOne()).isTrue();
+        deliver(repository, 52, "Stream large table exports again", description);
+        assertThat(worker.processOne()).isTrue();
+
+        Change earlier = change(51);
+        Change later = change(52);
+        assertThat(earlier.getReviewTriggers()).isEmpty();
+        assertThat(earlier.isNeedsReview()).isFalse();
+        assertThat(later.getReviewTriggers()).containsExactly(ReviewTrigger.duplicateCandidate(earlier.getId()));
+        assertThat(later.isNeedsReview()).isTrue();
+
+        String candidates = mockMvc.perform(get("/api/projects/{projectId}/duplicate-candidates", repository.projectId())
+                        .session(repository.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].changeId").value(later.getId().toString()))
+                .andExpect(jsonPath("$[0].duplicateOfId").value(earlier.getId().toString()))
+                .andExpect(jsonPath("$[0].duplicateOfPullRequestNumber").value(51))
+                .andExpect(jsonPath("$[0].evidence.content").value(1.0))
+                .andExpect(jsonPath("$[0].evidence.paths").value(1.0))
+                .andExpect(jsonPath("$[0].status").value("OPEN"))
+                .andReturn().getResponse().getContentAsString();
+        String candidateId = JsonPath.read(candidates, "$[0].id");
+        mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
+                .andExpect(content().string(containsString("Possible duplicate of")))
+                .andExpect(content().string(containsString("A later change may duplicate this one:")))
+                .andExpect(content().string(containsString("Confirm duplicate")));
+
+        decideDuplicate(repository, candidateId, "{\"decision\":\"OPEN\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+        mockMvc.perform(post("/projects/{projectId}/duplicate-candidates/{id}/decision", repository.projectId(), candidateId)
+                        .session(repository.session())
+                        .with(csrf())
+                        .param("decision", "CONFIRMED")
+                        .param("changeId", later.getId().toString())
+                        .param("returnContext", ""))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl(
+                        "/changes?project=" + repository.projectId() + "#change-" + later.getId()));
+        mockMvc.perform(get("/api/projects/{projectId}/duplicate-candidates", repository.projectId())
+                        .session(repository.session()).param("status", "CONFIRMED"))
+                .andExpect(jsonPath("$[0].deciderName").value("Owner"));
+        decideDuplicate(repository, candidateId, "{\"decision\":\"DISMISSED\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_candidate_decided"));
+        decideDuplicate(repository, UUID.randomUUID().toString(), "{\"decision\":\"DISMISSED\"}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("duplicate_candidate_not_found"));
+        assertThat(change(52).isNeedsReview()).isTrue();
+        assertThat(changeRepository.count()).isEqualTo(2);
+        mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
+                .andExpect(content().string(containsString("Confirmed by Owner")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Confirm duplicate"))));
+    }
+
+    @Test
+    void duplicatesAreSoughtOnlyAmongRecentChangesOfTheSameProject() throws Exception {
+        Repository repository = connect();
+        UUID organizationId = jdbcTemplate.queryForObject("SELECT id FROM organizations", UUID.class);
+        UUID otherProject = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO projects (id, organization_id, name, created_at) VALUES (?, ?, 'Other', now())",
+                otherProject, organizationId);
+        String description = "Exports stream rows so large tables no longer time out.";
+        UUID elsewhere = TestChanges.insert(jdbcTemplate, organizationId,
+                otherProject, 60, "Stream large table exports", "FEATURE", false, false, null);
+        UUID old = TestChanges.insert(jdbcTemplate, organizationId,
+                repository.projectId(), 61, "Stream large table exports", "FEATURE", false, false, null);
+        jdbcTemplate.update("UPDATE changes SET description = ? WHERE id IN (?, ?)", description, elsewhere, old);
+        jdbcTemplate.update("UPDATE changes SET received_at = now() - interval '181 days' WHERE id = ?", old);
+        GITHUB.respondWithFiles("src/main/java/Export.java");
+        OPENAI.respondWithClassification("feature", false, false, "Large table exports stream rows.");
+
+        deliver(repository, 62, "Stream large table exports", description);
+        assertThat(worker.processOne()).isTrue();
+
+        assertThat(change(62).getReviewTriggers()).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM duplicate_candidates", Long.class)).isZero();
+    }
+
+    private ResultActions decideDuplicate(Repository repository, String candidateId, String body) throws Exception {
+        return mockMvc.perform(post("/api/projects/{projectId}/duplicate-candidates/{id}/decision",
+                        repository.projectId(), candidateId)
+                .session(repository.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
     private ResultActions decide(Repository repository, String suggestionId, String body) throws Exception {
         return mockMvc.perform(post("/api/category-suggestions/{id}/decision", suggestionId)
                 .session(repository.session())
@@ -488,14 +624,22 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(deliverRaw(repository, number, title)).contains("recorded");
     }
 
+    private void deliver(Repository repository, int number, String title, String description) throws Exception {
+        assertThat(deliverRaw(repository, number, title, description)).contains("recorded");
+    }
+
     private String deliverRaw(Repository repository, int number, String title) throws Exception {
+        return deliverRaw(repository, number, title, "Details.");
+    }
+
+    private String deliverRaw(Repository repository, int number, String title, String description) throws Exception {
         String body = """
-                {"action":"closed","number":%d,"pull_request":{"number":%d,"title":"%s","body":"Details.",\
+                {"action":"closed","number":%d,"pull_request":{"number":%d,"title":"%s","body":"%s",\
                 "merged":true,"merged_at":"2026-09-10T09:14:22Z",\
                 "merge_commit_sha":"0123456789abcdef0123456789abcdef01234567",\
                 "html_url":"https://github.com/acme/releaseflow/pull/%d","user":{"login":"mai-dev"},\
                 "base":{"ref":"main"},"labels":[]},"repository":{"full_name":"acme/releaseflow"}}"""
-                .formatted(number, number, title, number);
+                .formatted(number, number, title, description, number);
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(repository.secret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
         String signature = "sha256=" + HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));

@@ -64,6 +64,14 @@
   sections and Markdown, the publisher and time, a read-only page with
   copyable Markdown, unique versions per Project, and Flyway `V8` triggers that
   reject any change to published releases, their changes, and their notes.
+- Context sufficiency and possible duplicates (ADR-0013), with Flyway `V15`:
+  - an AI context score, lowered by fixed caps, with a review trigger below a
+    configurable threshold;
+  - an Inbox filter for insufficient context;
+  - trigram and changed-file similarity against the Project's recent changes,
+    with a trigger on the newer change;
+  - evidence on both cards;
+  - one-time decisions by any member through Thymeleaf and REST.
 - A category catalog per Organization (ADR-0012), with Flyway `V14`:
   - administrator-managed categories with fixed codes and six groups, which
     can be archived and restored;
@@ -114,7 +122,8 @@
 
 ## In progress
 
-- Nothing. The category catalog slice is complete and awaiting review.
+- Nothing. The context sufficiency and duplicate candidate slice is complete
+  and awaiting review.
 
 ## Planned
 
@@ -124,8 +133,7 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Additional source providers, context sufficiency, duplicate detection, and
-  automatic AI retries.
+- Additional source providers and automatic AI retries.
 - Historical imports, polling, and queues or retries for work other than
   changed-file collection.
 - Validating a repository with GitHub when it is connected, per-Project

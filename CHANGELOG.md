@@ -181,6 +181,22 @@ version has been released.
   `audience_last`, `audience_in_use`, `audience_not_preset`,
   `audience_not_found`, `release_note_render_failed`, `release_notes_missing`,
   and `release_note_not_found`.
+- Context sufficiency (ADR-0013):
+  - an AI context score from 0 to 100 with reasons, lowered by fixed caps for
+    empty descriptions and short or generic titles;
+  - a `Not enough context` review trigger below `RELEASEFLOW_CONTEXT_THRESHOLD`
+    (default 60);
+  - scores in the Change Inbox and a `context=insufficient` filter.
+- Possible duplicates (ADR-0013):
+  - trigram and changed-file similarity against the Project's recent changes
+    at or above `RELEASEFLOW_DUPLICATE_THRESHOLD` (default 0.82);
+  - a `Possible duplicate` review trigger on the newer change;
+  - evidence on both cards;
+  - one-time Confirm or Not a duplicate decisions through the Change Inbox and
+    `/api/projects/{projectId}/duplicate-candidates`.
+- Error codes `duplicate_candidate_not_found` and `duplicate_candidate_decided`.
+- Flyway migration `V15` for context columns on changes and
+  `duplicate_candidates`.
 - A category catalog per Organization (ADR-0012), managed by administrators
   on a Categories page and through `/api/categories`:
   - codes that are fixed once created, display names, and six groups;

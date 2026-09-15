@@ -19,15 +19,18 @@ public class ChangeApiController {
     private final ChangeInboxService inboxService;
     private final ChangeAiClassificationService aiClassificationService;
     private final ChangeReviewService reviewService;
+    private final DuplicateCandidateService duplicateService;
 
     ChangeApiController(
             ChangeInboxService inboxService,
             ChangeAiClassificationService aiClassificationService,
-            ChangeReviewService reviewService
+            ChangeReviewService reviewService,
+            DuplicateCandidateService duplicateService
     ) {
         this.inboxService = inboxService;
         this.aiClassificationService = aiClassificationService;
         this.reviewService = reviewService;
+        this.duplicateService = duplicateService;
     }
 
     @GetMapping("/api/projects/{projectId}/changes")
@@ -35,9 +38,30 @@ public class ChangeApiController {
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) String status
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String context
     ) {
-        return inboxService.list(principal.organizationId(), projectId, ChangeFilter.parse(category, status));
+        return inboxService.list(principal.organizationId(), projectId, ChangeFilter.parse(category, status, context));
+    }
+
+    @GetMapping("/api/projects/{projectId}/duplicate-candidates")
+    List<DuplicateCandidateView> duplicates(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @RequestParam(required = false) DuplicateCandidateStatus status
+    ) {
+        return duplicateService.list(principal.organizationId(), projectId, status);
+    }
+
+    // Records a person's conclusion; the changes themselves are never merged or reviewed.
+    @PostMapping("/api/projects/{projectId}/duplicate-candidates/{candidateId}/decision")
+    DuplicateCandidateView decideDuplicate(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID candidateId,
+            @Valid @RequestBody DuplicateDecisionRequest request
+    ) {
+        return duplicateService.decide(principal, projectId, candidateId, request);
     }
 
     @PostMapping("/api/projects/{projectId}/changes/{changeId}/review")

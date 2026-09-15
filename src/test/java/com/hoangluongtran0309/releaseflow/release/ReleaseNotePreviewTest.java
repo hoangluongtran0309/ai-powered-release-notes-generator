@@ -107,6 +107,7 @@ class ReleaseNotePreviewTest {
                 null,
                 Map.of(),
                 null,
+                null,
                 null
         );
     }
