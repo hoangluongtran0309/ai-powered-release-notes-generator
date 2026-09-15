@@ -44,12 +44,13 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -118,7 +119,12 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(containsString("aria-current=\"step\">Approved</li>")))
                 .andExpect(content().string(matchesPattern("(?s).*Approved by <span class=\"font-semibold\">Mai Tran</span>.*")))
                 .andExpect(content().string(containsString("Publish 1.4.0")))
-                .andExpect(content().string(not(containsString("Approve as shown"))));
+                .andExpect(content().string(not(containsString("Approve as shown"))))
+                .andExpect(content().string(matchesPattern(
+                        "(?s).*id=\"release-notes\".*id=\"note-contributor\".*id=\"note-end_user\".*id=\"note-operator\".*")))
+                .andExpect(content().string(containsString(">Automatic</span>")))
+                .andExpect(content().string(containsString("Edit Markdown")))
+                .andExpect(content().string(containsString("Saving makes this note manual")));
 
         mockMvc.perform(post(releasePath + "/publish").session(owner.session()).with(csrf()))
                 .andExpect(status().isFound())
@@ -128,10 +134,13 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(view().name("release-note"))
                 .andExpect(content().string(matchesPattern("(?s).*Published by <span class=\"font-semibold\">Mai Tran</span>.*")))
                 .andExpect(content().string(matchesPattern("(?s).*Approved by <span class=\"font-semibold\">Mai Tran</span>.*")))
-                .andExpect(content().string(containsString("<h3 class=\"font-bold\">Features</h3>")))
-                .andExpect(content().string(containsString("<h3 class=\"font-bold\">Maintenance</h3>")))
-                .andExpect(content().string(containsString("add the *inbox*")))
-                .andExpect(content().string(containsString("# 1.4.0\n\nExports and clearer config.\n\n## Features\n\n- add the \\*inbox\\*")))
+                .andExpect(content().string(containsString("<h2>✨ New Features</h2>")))
+                .andExpect(content().string(containsString("<h2>🔧 Maintenance</h2>")))
+                .andExpect(content().string(containsString("<strong>add the *inbox*</strong>")))
+                .andExpect(content().string(containsString("# Release 1.4.0\n\nExports and clearer config.\n\n## What")))
+                .andExpect(content().string(containsString("- **add the \\*inbox\\*** ([#1](")))
+                .andExpect(content().string(containsString("/notes/")))
+                .andExpect(content().string(containsString(">Download</a>")))
                 .andExpect(content().string(containsString("x-data=\"copyText()\"")))
                 .andExpect(content().string(not(containsString("Save details"))))
                 .andExpect(content().string(not(containsString("Discard this release"))))

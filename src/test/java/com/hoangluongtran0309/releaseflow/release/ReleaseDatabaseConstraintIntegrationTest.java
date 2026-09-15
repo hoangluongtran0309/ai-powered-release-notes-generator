@@ -24,11 +24,12 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -211,6 +212,114 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
         )).isInstanceOf(DataIntegrityViolationException.class);
         UUID outsider = insertUser(insertOrganization());
         assertThatThrownBy(() -> publish(draft, outsider)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void writesAudienceNotesOnlyWhileApprovedAndFreezesThemOncePublished() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID user = insertUser(organization);
+        UUID audience = insertAudience(organization, "operator");
+        UUID release = insertRelease(organization, project, "1.0.0");
+
+        assertThatThrownBy(() -> insertNote(release, organization, project, audience))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        setStatus(release, "IN_REVIEW");
+        assertThatThrownBy(() -> insertNote(release, organization, project, audience))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        approve(release, user);
+        UUID note = insertNote(release, organization, project, audience);
+
+        assertThatThrownBy(() -> insertNote(release, organization, project, audience))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        UUID foreignAudience = insertAudience(insertOrganization(), "operator");
+        assertThatThrownBy(() -> insertNote(release, organization, project, foreignAudience))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(
+                """
+                        UPDATE release_audience_notes
+                        SET content = '# Edited', auto_rerender = false, last_edited_by = ?, last_editor_name = 'Editor'
+                        WHERE id = ?
+                        """,
+                user, note
+        )).doesNotThrowAnyException();
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE release_audience_notes SET auto_rerender = true WHERE id = ?", note))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE release_audience_notes SET content = '  ' WHERE id = ?", note))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        for (String column : new String[]{"audience_code = 'other'", "language = 'vi'", "template_body_snapshot = 'x'"}) {
+            assertThatThrownBy(() -> jdbcTemplate.update("UPDATE release_audience_notes SET " + column + " WHERE id = ?", note))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
+        assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM audience_definitions WHERE id = ?", audience))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        publish(release, user);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE release_audience_notes SET content = '# Later' WHERE id = ?", note))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM release_audience_notes WHERE id = ?", note))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbcTemplate.queryForObject("SELECT content FROM release_audience_notes WHERE id = ?", String.class, note))
+                .isEqualTo("# Edited");
+    }
+
+    @Test
+    void discardingAnApprovedReleaseRemovesItsNotes() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID release = insertRelease(organization, project, "1.0.0");
+        approve(release, insertUser(organization));
+        insertNote(release, organization, project, insertAudience(organization, "operator"));
+
+        assertThatCode(() -> jdbcTemplate.update("DELETE FROM releases WHERE id = ?", release)).doesNotThrowAnyException();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM release_audience_notes", Long.class)).isZero();
+    }
+
+    @Test
+    void keepsAudienceCodesValidAndUniqueWithinAnOrganization() {
+        UUID organization = insertOrganization();
+        insertAudience(organization, "operator");
+
+        assertThatThrownBy(() -> insertAudience(organization, "operator")).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> insertAudience(insertOrganization(), "operator")).doesNotThrowAnyException();
+        for (String code : new String[]{"Operator", "9lives", "end-user", ""}) {
+            assertThatThrownBy(() -> insertAudience(organization, code)).isInstanceOf(DataIntegrityViolationException.class);
+        }
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                        INSERT INTO audience_definitions (id, organization_id, code, display_name, communication_intent,
+                            template_body, preset, created_at, updated_at)
+                        VALUES (?, ?, 'blank', 'Blank', '', '   ', false, now(), now())
+                        """,
+                UUID.randomUUID(), organization
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private UUID insertAudience(UUID organizationId, String code) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO audience_definitions (id, organization_id, code, display_name, communication_intent,
+                            template_body, preset, created_at, updated_at)
+                        VALUES (?, ?, ?, 'Audience', '', '{{whatChanged}}', false, now(), now())
+                        """,
+                id, organizationId, code
+        );
+        return id;
+    }
+
+    private UUID insertNote(UUID releaseId, UUID organizationId, UUID projectId, UUID audienceId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO release_audience_notes (id, release_id, organization_id, project_id, audience_id,
+                            audience_code, audience_name, language, template_body_snapshot, content, auto_rerender,
+                            created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 'operator', 'Operator', 'en', '{{whatChanged}}', '# Note', true, now(), now())
+                        """,
+                id, releaseId, organizationId, projectId, audienceId
+        );
+        return id;
     }
 
     private void publish(UUID releaseId, UUID publisher) {

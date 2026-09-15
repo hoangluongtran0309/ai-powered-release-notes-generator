@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.support;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -16,11 +18,19 @@ public abstract class PostgreSqlIntegrationTest {
 
     private static final String TEST_MASTER_KEY = generateTestMasterKey();
 
+    @Autowired
+    private JdbcTemplate supportJdbcTemplate;
+
     @DynamicPropertySource
     static void credentialProperties(DynamicPropertyRegistry registry) {
         registry.add("releaseflow.credentials.master-key", () -> TEST_MASTER_KEY);
         // Tests drive the change worker explicitly instead of racing its schedule.
         registry.add("releaseflow.processing.enabled", () -> "false");
+    }
+
+    /** Every Organization owns audiences, which must go before the Organization itself. */
+    protected void deleteAudiences() {
+        supportJdbcTemplate.update("DELETE FROM audience_definitions");
     }
 
     private static String generateTestMasterKey() {

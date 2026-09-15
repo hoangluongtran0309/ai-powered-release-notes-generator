@@ -1,9 +1,12 @@
 package com.hoangluongtran0309.releaseflow.release;
 
+import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.audience.AudienceService;
 import com.hoangluongtran0309.releaseflow.change.ChangeCategory;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
+import com.hoangluongtran0309.releaseflow.change.ChangeSummaryRequest;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
@@ -31,10 +34,19 @@ public class ReleasePageController {
 
     private final ProjectService projectService;
     private final ReleaseService releaseService;
+    private final AudienceService audienceService;
+    private final OutputLanguageService outputLanguageService;
 
-    ReleasePageController(ProjectService projectService, ReleaseService releaseService) {
+    ReleasePageController(
+            ProjectService projectService,
+            ReleaseService releaseService,
+            AudienceService audienceService,
+            OutputLanguageService outputLanguageService
+    ) {
         this.projectService = projectService;
         this.releaseService = releaseService;
+        this.audienceService = audienceService;
+        this.outputLanguageService = outputLanguageService;
     }
 
     @GetMapping("/releases")
@@ -215,6 +227,42 @@ public class ReleasePageController {
                 () -> releaseService.returnToDraft(principal.organizationId(), projectId, releaseId));
     }
 
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/changes/{changeId}/summary")
+    String editSummary(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID changeId,
+            @Valid @ModelAttribute("summaryRequest") ChangeSummaryRequest request,
+            BindingResult bindingResult,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (bindingResult.hasErrors()) {
+            return renderInvalid(principal, projectId, releaseId, bindingResult, model, response);
+        }
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.editSummary(principal, projectId, releaseId, changeId, request));
+    }
+
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/notes/{noteId}")
+    String editNote(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID noteId,
+            @Valid @ModelAttribute("noteRequest") ReleaseNoteRequest request,
+            BindingResult bindingResult,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (bindingResult.hasErrors()) {
+            return renderInvalid(principal, projectId, releaseId, bindingResult, model, response);
+        }
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.editNote(principal, projectId, releaseId, noteId, request));
+    }
+
     @PostMapping("/projects/{projectId}/releases/{releaseId}/publish")
     String publish(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
@@ -252,7 +300,7 @@ public class ReleasePageController {
             action.run();
         } catch (ReleaseNotFoundException exception) {
             return renderRelease(principal, projectId, releaseId, model, response);
-        } catch (ChangeNotFoundException exception) {
+        } catch (ChangeNotFoundException | ReleaseNoteNotFoundException exception) {
             return renderReleaseWithError(principal, projectId, releaseId, HttpStatus.NOT_FOUND, exception, model, response);
         } catch (InvalidReleaseScheduleException | InvalidChangeReviewException exception) {
             return renderReleaseWithError(principal, projectId, releaseId, HttpStatus.BAD_REQUEST, exception, model, response);
@@ -263,7 +311,9 @@ public class ReleasePageController {
                  | ReleaseVersionTakenException
                  | ClassificationChangedException
                  | ChangeNotReleasableException
-                 | ChangeProcessingException exception) {
+                 | ChangeProcessingException
+                 | ReleaseNotesMissingException
+                 | ReleaseNoteRenderException exception) {
             return renderReleaseWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
         }
         return "redirect:" + successPath;
@@ -343,6 +393,9 @@ public class ReleasePageController {
                 return "release-note";
             }
             model.addAttribute("categories", ChangeCategory.values());
+            model.addAttribute("audiences", audienceService.list(principal.organizationId()));
+            model.addAttribute("language", outputLanguageService.outputLanguage(principal.organizationId()).tag());
+            model.addAttribute("notePreviews", notePreviews(principal, projectId, release, model));
             model.addAttribute("availableChanges", release.status() == ReleaseStatus.DRAFT
                     ? releaseService.availableChanges(principal.organizationId(), projectId, releaseId)
                     : List.of());
@@ -357,6 +410,40 @@ public class ReleasePageController {
             model.addAttribute("pageError", exception.getMessage());
         }
         return "release";
+    }
+
+    // A template that cannot render only hides the preview; approval reports it as an error.
+    private List<AudienceNotePreview> notePreviews(
+            ReleaseFlowPrincipal principal,
+            UUID projectId,
+            ReleaseView release,
+            Model model
+    ) {
+        if (release.status() == ReleaseStatus.APPROVED) {
+            return List.of();
+        }
+        try {
+            return releaseService.previewNotes(principal.organizationId(), projectId, release.id());
+        } catch (ReleaseNoteRenderException exception) {
+            if (!model.containsAttribute("pageError")) {
+                model.addAttribute("pageError", exception.getMessage());
+            }
+            return List.of();
+        }
+    }
+
+    // A form failed validation: its first message is shown above the page.
+    private String renderInvalid(
+            ReleaseFlowPrincipal principal,
+            UUID projectId,
+            UUID releaseId,
+            BindingResult bindingResult,
+            Model model,
+            HttpServletResponse response
+    ) {
+        response.setStatus(HttpStatus.BAD_REQUEST.value());
+        model.addAttribute("pageError", bindingResult.getAllErrors().getFirst().getDefaultMessage());
+        return renderRelease(principal, projectId, releaseId, model, response);
     }
 
     private String renderReleaseWithError(

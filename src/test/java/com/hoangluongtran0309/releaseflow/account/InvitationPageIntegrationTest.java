@@ -50,6 +50,7 @@ class InvitationPageIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 

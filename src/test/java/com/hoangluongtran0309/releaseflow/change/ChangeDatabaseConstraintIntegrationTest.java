@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestChanges;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +36,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -137,6 +139,39 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 "HUMAN", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(() -> insertChange(organization, project, 8, "Title", VALID_SHA, "FIX", true, false,
                 "RULES", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void recordsWhoWroteASummaryAndKeepsNarrativesWithTheirSummary() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        UUID editor = insertUser(organization, "editor@example.com");
+        UUID outsider = insertUser(insertOrganization("Second"), "outsider@example.com");
+        UUID change = TestChanges.insert(jdbcTemplate, organization, project, 1, "feat: a", "FEATURE", false, false, null);
+        String summary = "neutral_summary = '{\"whatChanged\":\"x\",\"whyChanged\":\"\",\"technicalDetail\":\"\","
+                + "\"migrationStep\":\"\"}', content_language = 'en'";
+        String editedBy = "summary_editor_name = 'Editor', summary_edited_at = now(), summary_edited_by = ?";
+
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET audience_narratives = '{}' WHERE id = ?", change))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET " + summary + " WHERE id = ?", change))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET " + editedBy + " WHERE id = ?", editor, change))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", summary_edited_by = ?, summary_edited_at = now() WHERE id = ?",
+                editor, change
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", " + editedBy + " WHERE id = ?", outsider, change
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", audience_narratives = '[]', " + editedBy + " WHERE id = ?", editor, change
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", audience_narratives = '{\"operator\":\"y\"}', " + editedBy + " WHERE id = ?",
+                editor, change
+        )).doesNotThrowAnyException();
     }
 
     @Test

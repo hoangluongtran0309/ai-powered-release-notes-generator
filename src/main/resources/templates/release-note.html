@@ -34,7 +34,38 @@
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">This release is published.</span></div>
 
-    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+    <section class="surface-card p-6" th:unless="${release.legacyNote()}" id="release-notes" aria-label="Release notes">
+        <span class="badge badge-success badge-soft font-semibold">Published</span>
+        <h2 class="mt-3 text-2xl font-bold">Release notes</h2>
+        <p class="section-copy">One note for each audience, frozen when the release was published.</p>
+        <div class="tabs tabs-border mt-4" role="tablist" aria-label="Audiences">
+            <th:block th:each="note, state : ${release.notes}">
+                <input type="radio" name="note-tabs" class="tab" role="tab"
+                       th:aria-label="${note.audienceName}" th:checked="${state.first}">
+                <div class="tab-content pt-4" role="tabpanel" th:id="|note-${note.audienceCode}|">
+                    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                        <article class="release-note-body" th:lang="${note.language}" th:utext="${note.html()}"></article>
+                        <div class="content-start" x-data="copyText()">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <h3 class="section-heading">Markdown</h3>
+                                <div class="flex gap-2">
+                                    <button type="button" class="btn btn-outline btn-sm" @click="copy" x-text="label">Copy</button>
+                                    <a class="btn btn-outline btn-sm"
+                                       th:href="@{/api/projects/{projectId}/releases/{releaseId}/notes/{noteId}/download(projectId=${projectId},releaseId=${release.id},noteId=${note.id})}">Download</a>
+                                </div>
+                            </div>
+                            <p class="section-copy">Paste it into GitHub Releases, a changelog, or an announcement.</p>
+                            <textarea x-ref="source" class="textarea textarea-bordered mt-4 h-80 w-full font-mono text-xs" readonly
+                                      spellcheck="false" th:aria-label="|${note.audienceName} release note Markdown|"
+                                      th:text="${note.content}"># Release 1.4.0</textarea>
+                        </div>
+                    </div>
+                </div>
+            </th:block>
+        </div>
+    </section>
+
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]" th:if="${release.legacyNote()}" id="legacy-note">
         <article class="surface-card p-6" aria-label="Release note">
             <span class="badge badge-success badge-soft font-semibold">Published</span>
             <h2 class="mt-3 text-2xl font-bold" th:text="${release.version}">1.4.0</h2>

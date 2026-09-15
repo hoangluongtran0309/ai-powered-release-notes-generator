@@ -46,12 +46,13 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -107,9 +108,9 @@ class DraftReleasePageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(matchesPattern(
                         "(?s).*id=\"included-" + feature + "\".*id=\"included-" + breaking + "\".*")))
                 .andExpect(content().string(matchesPattern(
-                        "(?s).*aria-label=\"Release note preview\".*Exports and a faster inbox\\..*"
-                                + "<h3 class=\"font-bold\">Breaking changes</h3>.*rename config keys.*\\(Fix\\).*"
-                                + "<h3 class=\"font-bold\">Features</h3>.*add the inbox.*")))
+                        "(?s).*aria-label=\"Release note preview\".*aria-label=\"Contributor\".*"
+                                + "Exports and a faster inbox\\..*<h2>⚠️ Breaking Changes</h2>.*rename config keys.*"
+                                + "<h2>✨ New Features</h2>.*add the inbox.*aria-label=\"End user\".*aria-label=\"Operator\".*")))
                 .andExpect(content().string(containsString("id=\"breaking-warning\"")))
                 .andExpect(content().string(containsString("<button type=\"submit\" class=\"btn btn-primary btn-sm\">Request review</button>")));
 

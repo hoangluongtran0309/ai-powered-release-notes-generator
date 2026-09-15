@@ -31,6 +31,7 @@ class InvitationDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationT
     void clearDatabase() {
         jdbcTemplate.update("DELETE FROM organization_invitations");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 

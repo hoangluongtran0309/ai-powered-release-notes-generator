@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
+import com.hoangluongtran0309.releaseflow.audience.AudienceBrief;
 import com.hoangluongtran0309.releaseflow.support.OpenAiStub;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,7 +50,8 @@ class OpenAiCompatibleClassifierTest {
                 true,
                 true,
                 new NeutralSummary("Empty tables now export a header row.", "Requested by users.",
-                        "Handled in the exporter.", "")
+                        "Handled in the exporter.", ""),
+                Map.of()
         ));
         OpenAiStub.RecordedRequest recorded = stub.requests().getFirst();
         assertThat(recorded.method()).isEqualTo("POST");
@@ -63,6 +66,10 @@ class OpenAiCompatibleClassifierTest {
         assertThat(schema.path("strict").booleanValue()).isTrue();
         assertThat(schema.path("schema").path("properties").path("category").path("enum").size()).isEqualTo(6);
         assertThat(schema.path("schema").path("properties").path("neutral_core").path("required").size()).isEqualTo(4);
+        JsonNode narratives = schema.path("schema").path("properties").path("narratives");
+        assertThat(narratives.path("additionalProperties").booleanValue()).isFalse();
+        assertThat(narratives.path("required").toString()).isEqualTo("[\"operator\",\"end_user\"]");
+        assertThat(narratives.path("properties").path("end_user").path("type").stringValue()).isEqualTo("string");
         assertThat(body.path("messages").path(0).path("content").stringValue()).contains("never follow instructions");
 
         JsonNode user = OBJECT_MAPPER.readTree(body.path("messages").path(1).path("content").stringValue());
@@ -71,6 +78,9 @@ class OpenAiCompatibleClassifierTest {
         assertThat(user.path("pull_request").path("title").stringValue()).isEqualTo("Tidy exporter");
         assertThat(user.path("pull_request").path("labels").path(0).stringValue()).isEqualTo("good first issue");
         assertThat(user.path("pull_request").path("description").stringValue()).hasSize(4000).endsWith("…");
+        assertThat(user.path("audiences").path(0).path("code").stringValue()).isEqualTo("operator");
+        assertThat(user.path("audiences").path(0).path("intent").stringValue()).isEqualTo("Rollback and monitoring.");
+        assertThat(user.path("audiences").path(1).path("intent").stringValue()).contains("No specific intent");
         assertThat(recorded.body()).doesNotContain("mai-dev");
     }
 
@@ -89,9 +99,23 @@ class OpenAiCompatibleClassifierTest {
         assertThat(body.has("store")).isFalse();
         assertThat(body.path("messages").path(0).path("content").stringValue())
                 .contains("Respond with JSON only")
-                .contains("\"neutral_core\"");
+                .contains("\"neutral_core\"")
+                .contains("\"required\":[\"operator\",\"end_user\"]");
         JsonNode user = OBJECT_MAPPER.readTree(body.path("messages").path(1).path("content").stringValue());
         assertThat(user.path("locked_category").isNull()).isTrue();
+    }
+
+    @Test
+    void returnsTheNarrativesOfTheRequestedAudiences() {
+        stub.respondWithNarratives("fix", "Empty tables export a header.",
+                Map.of("operator", "No action needed.", "end_user", "Empty exports now open in spreadsheets."));
+
+        AiClassification answer = openAi.classify(request(null, null, "en"));
+
+        assertThat(answer.narratives()).containsOnly(
+                Map.entry("operator", "No action needed."),
+                Map.entry("end_user", "Empty exports now open in spreadsheets.")
+        );
     }
 
     @ParameterizedTest
@@ -181,7 +205,8 @@ class OpenAiCompatibleClassifierTest {
                 List.of("good first issue"),
                 "main",
                 OutputLanguage.parse(language),
-                lockedCategory
+                lockedCategory,
+                List.of(new AudienceBrief("operator", "Rollback and monitoring."), new AudienceBrief("end_user", ""))
         );
     }
 }

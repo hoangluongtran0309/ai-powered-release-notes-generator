@@ -4,9 +4,14 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Validates an AI answer against the shared contract. Anything missing or mistyped
- * is rejected as a whole; unknown extra fields are ignored.
+ * is rejected as a whole; unknown extra fields are ignored. Narratives are optional:
+ * only the requested audiences are read, and a missing or empty one is left out.
  */
 final class AiClassificationParser {
 
@@ -19,7 +24,7 @@ final class AiClassificationParser {
         this.objectMapper = objectMapper;
     }
 
-    AiClassification parse(String content) {
+    AiClassification parse(String content, List<String> audienceCodes) {
         final JsonNode result;
         try {
             result = objectMapper.readTree(content == null ? "" : content);
@@ -53,8 +58,20 @@ final class AiClassificationParser {
                         text(core, "why_changed"),
                         text(core, "technical_detail"),
                         text(core, "migration_step")
-                )
+                ),
+                narratives(result.path("narratives"), audienceCodes)
         );
+    }
+
+    private static Map<String, String> narratives(JsonNode narratives, List<String> audienceCodes) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (String code : audienceCodes) {
+            JsonNode value = narratives.path(code);
+            if (value.isString() && !value.stringValue().isBlank()) {
+                result.put(code, limit(value.stringValue().strip()));
+            }
+        }
+        return result;
     }
 
     private static String text(JsonNode core, String field) {
@@ -62,10 +79,11 @@ final class AiClassificationParser {
         if (!value.isString()) {
             throw invalid();
         }
-        String stripped = value.stringValue().strip();
-        return stripped.length() <= SUMMARY_FIELD_LIMIT
-                ? stripped
-                : stripped.substring(0, SUMMARY_FIELD_LIMIT - 1) + "…";
+        return limit(value.stringValue().strip());
+    }
+
+    private static String limit(String value) {
+        return value.length() <= SUMMARY_FIELD_LIMIT ? value : value.substring(0, SUMMARY_FIELD_LIMIT - 1) + "…";
     }
 
     private static AiClassificationException invalid() {

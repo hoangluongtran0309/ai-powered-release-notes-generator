@@ -14,7 +14,9 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -129,6 +131,19 @@ class Change {
 
     @Column(name = "ai_provider", length = 20)
     private String aiProvider;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "audience_narratives", columnDefinition = "jsonb")
+    private Map<String, String> audienceNarratives;
+
+    @Column(name = "summary_edited_by")
+    private UUID summaryEditedBy;
+
+    @Column(name = "summary_editor_name", length = 120)
+    private String summaryEditorName;
+
+    @Column(name = "summary_edited_at")
+    private Instant summaryEditedAt;
 
     protected Change() {
     }
@@ -252,8 +267,12 @@ class Change {
         if (ai.succeeded()) {
             this.aiStatus = AiStatus.SUCCEEDED;
             this.aiFailure = null;
-            this.neutralSummary = ai.classification().summary();
-            this.contentLanguage = ai.language().tag();
+            // A summary a person wrote is never replaced by the AI.
+            if (summaryEditedAt == null) {
+                this.neutralSummary = ai.classification().summary();
+                this.audienceNarratives = new LinkedHashMap<>(ai.classification().narratives());
+                this.contentLanguage = ai.language().tag();
+            }
         } else {
             this.aiStatus = AiStatus.FAILED;
             this.aiFailure = ai.failure();
@@ -281,6 +300,31 @@ class Change {
         this.reviewedBy = reviewer;
         this.reviewerName = name;
         this.reviewedAt = at;
+    }
+
+    /**
+     * A person writes or corrects the summary and the narratives. From then on the AI
+     * never replaces them.
+     */
+    void editSummary(
+            NeutralSummary summary,
+            Map<String, String> narratives,
+            String language,
+            UUID editor,
+            String name,
+            Instant at
+    ) {
+        if (isProcessing()) {
+            throw new ChangeProcessingException();
+        }
+        this.neutralSummary = summary;
+        this.audienceNarratives = new LinkedHashMap<>(narratives);
+        if (contentLanguage == null) {
+            this.contentLanguage = language;
+        }
+        this.summaryEditedBy = editor;
+        this.summaryEditorName = name;
+        this.summaryEditedAt = at;
     }
 
     UUID getId() {
@@ -409,6 +453,18 @@ class Change {
 
     String getContentLanguage() {
         return contentLanguage;
+    }
+
+    Map<String, String> getAudienceNarratives() {
+        return audienceNarratives == null ? Map.of() : Map.copyOf(audienceNarratives);
+    }
+
+    String getSummaryEditorName() {
+        return summaryEditorName;
+    }
+
+    Instant getSummaryEditedAt() {
+        return summaryEditedAt;
     }
 
     AiProvider getAiProvider() {

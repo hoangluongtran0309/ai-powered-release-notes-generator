@@ -64,6 +64,23 @@
   sections and Markdown, the publisher and time, a read-only page with
   copyable Markdown, unique versions per Project, and Flyway `V8` triggers that
   reject any change to published releases, their changes, and their notes.
+- Audiences and a release note per audience (ADR-0011), with Flyway `V13`:
+  - administrator-managed audiences with fixed codes, communication intents,
+    and validated Mustache templates, through Thymeleaf and REST;
+  - three presets seeded at registration and by `V13`, in English or
+    Vietnamese, which can be reset;
+  - one to twenty audiences per Organization, and audiences that notes use
+    cannot be deleted;
+  - a narrative per audience in the single AI request, with a response schema
+    built for each request;
+  - one note per audience written at approval as a digest with English or
+    Vietnamese labels;
+  - note editing that makes a note manual, and summary and narrative editing
+    that records the writer and renders automatic notes again;
+  - live previews, Copy and Download, and server-side CommonMark rendering;
+  - triggers that allow note writes only while approved and freeze notes on
+    publication;
+  - a read-only legacy note for releases published before `V13`.
 
 - Administrator and member roles with single-use, hashed, expiring member
   invitations through Thymeleaf and REST, a Members page, and Flyway `V9`.
@@ -87,8 +104,7 @@
 
 ## In progress
 
-- Nothing. The release review lifecycle slice is complete and awaiting
-  review.
+- Nothing. The audience release notes slice is complete and awaiting review.
 
 ## Planned
 
@@ -98,14 +114,15 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Additional source providers, audience narratives, category suggestions,
-  context sufficiency, and automatic AI retries.
+- Additional source providers, category suggestions, context sufficiency, and
+  automatic AI retries.
 - Historical imports, polling, and queues or retries for work other than
   changed-file collection.
 - Validating a repository with GitHub when it is connected, per-Project
   sensitive-path additions, keyword review triggers, integration replacement,
   and secret or token rotation reminders.
-- Dynamic audiences, localization, translation, and template engines.
+- Localization of the UI, translation of notes into several languages,
+  per-language template variants, and asynchronous note generation.
 - Automation, distribution integrations, and a public changelog.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
   tests, production observability (Actuator, metrics, Prometheus, Grafana),
@@ -114,6 +131,5 @@ deliberately deferred list below, one reviewed slice at a time.
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
 - Review history, comments, reviewer roles, and bulk review.
-- Item reordering, editing release note text, and reminders or automation for
-  planned release times.
+- Item reordering, and reminders or automation for planned release times.
 - Unpublishing or correcting published release notes.

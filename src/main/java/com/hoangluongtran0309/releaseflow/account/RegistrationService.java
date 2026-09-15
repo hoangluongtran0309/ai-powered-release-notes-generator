@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.account;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -15,17 +16,20 @@ public class RegistrationService {
     private final OrganizationRepository organizationRepository;
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public RegistrationService(
             OrganizationRepository organizationRepository,
             AppUserRepository appUserRepository,
             PasswordEncoder passwordEncoder,
+            ApplicationEventPublisher events,
             Clock clock
     ) {
         this.organizationRepository = organizationRepository;
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -62,6 +66,7 @@ public class RegistrationService {
         } catch (DataIntegrityViolationException exception) {
             throw new DuplicateEmailException();
         }
+        events.publishEvent(new OrganizationRegistered(organization.getId(), outputLanguage));
 
         return new RegistrationResult(
                 organization.getId(),

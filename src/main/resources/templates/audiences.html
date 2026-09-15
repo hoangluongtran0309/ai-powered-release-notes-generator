@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Audiences</title>
+</head>
+<body>
+<p layout:fragment="page-title">Audiences</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">Organization administration</p>
+            <h1 class="page-heading">Audiences</h1>
+            <p class="page-subtitle">
+                Every approved release gets one release note per audience. The AI writes a short narrative for each audience,
+                following its intent, and the template turns each change into Markdown.
+            </p>
+        </div>
+        <div class="page-actions">
+            <a class="btn btn-primary btn-sm" th:href="@{/audiences/new}"
+               th:classappend="${#lists.size(audiences) >= maxAudiences} ? 'btn-disabled'"
+               th:attr="aria-disabled=${#lists.size(audiences) >= maxAudiences} ? 'true' : null">
+                <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#plus}"></use></svg>
+                <span>New audience</span>
+            </a>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Audience was not found.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.saved != null}"><span>Audience saved.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.reset != null}"><span>Audience reset to its shipped preset.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.deleted != null}"><span>Audience deleted.</span></div>
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+        <nav class="surface-card content-start p-3" aria-label="Audiences" id="audience-list">
+            <ul class="grid gap-1">
+                <li th:each="audience : ${audiences}">
+                    <a class="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm hover:bg-slate-100"
+                       th:href="@{/audiences/{id}(id=${audience.id})}"
+                       th:classappend="${selected != null and selected.id == audience.id} ? 'bg-indigo-50 font-semibold'"
+                       th:attr="aria-current=${selected != null and selected.id == audience.id} ? 'page' : null">
+                        <span class="min-w-0">
+                            <span class="block truncate" th:text="${audience.displayName}">Operator</span>
+                            <span class="block truncate font-mono text-xs text-slate-500" th:text="${audience.code}">operator</span>
+                        </span>
+                        <span class="badge badge-ghost badge-sm" th:if="${audience.preset}">Preset</span>
+                    </a>
+                </li>
+            </ul>
+            <p class="px-3 pt-3 text-xs text-slate-500"
+               th:text="|${#lists.size(audiences)} of ${maxAudiences} audiences|">3 of 20 audiences</p>
+        </nav>
+
+        <div class="grid content-start gap-6">
+            <section class="surface-card p-6" id="audience-editor" x-data="audienceEditor()">
+                <h2 class="section-heading" th:text="${selected != null} ? ${selected.displayName} : 'New audience'">Operator</h2>
+                <p class="section-copy" th:if="${selected != null and selected.preset}">
+                    A shipped audience. Its code is fixed; you can rename it, change its intent, or rewrite its template,
+                    and reset it to the shipped version at any time.
+                </p>
+                <p class="section-copy" th:if="${selected == null}">
+                    The code identifies the audience to the AI and in downloaded file names. It cannot change later.
+                </p>
+
+                <form class="mt-5 grid gap-4" method="post" th:object="${audienceForm}"
+                      th:action="${selected != null} ? @{/audiences/{id}(id=${selected.id})} : @{/audiences}"
+                      @input="dirty = true" @submit="dirty = false">
+                    <input type="hidden" name="audienceId" th:if="${selected != null}" th:value="${selected.id}">
+                    <label class="form-control" th:if="${selected == null}"><span class="label-text font-medium">Code</span>
+                        <input type="text" th:field="*{code}" maxlength="64" required pattern="[A-Za-z][A-Za-z0-9_]*"
+                               placeholder="leadership" autocomplete="off"
+                               class="input input-bordered w-full font-mono sm:max-w-xs" th:errorclass="input-error">
+                        <span class="label-text-alt">Lowercase letters, digits, and underscores, starting with a letter.</span>
+                        <span class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></span>
+                    </label>
+                    <p class="text-sm" th:if="${selected != null}">
+                        <span class="font-medium">Code</span>
+                        <code class="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs" th:text="${selected.code}">operator</code>
+                    </p>
+                    <label class="form-control"><span class="label-text font-medium">Display name</span>
+                        <input type="text" th:field="*{displayName}" maxlength="120" required
+                               class="input input-bordered w-full sm:max-w-md" th:errorclass="input-error">
+                        <span class="field-error" th:if="${#fields.hasErrors('displayName')}" th:errors="*{displayName}"></span>
+                    </label>
+                    <label class="form-control"><span class="label-text font-medium">Communication intent</span>
+                        <textarea th:field="*{communicationIntent}" maxlength="1000" rows="3"
+                                  class="textarea textarea-bordered w-full" th:errorclass="textarea-error"></textarea>
+                        <span class="label-text-alt">How this audience wants to be addressed. The AI follows it when it writes this audience's narrative.</span>
+                        <span class="field-error" th:if="${#fields.hasErrors('communicationIntent')}" th:errors="*{communicationIntent}"></span>
+                    </label>
+                    <div class="form-control">
+                        <label class="label-text font-medium" for="templateBody">Template</label>
+                        <div class="flex flex-wrap gap-1.5" role="group" aria-label="Insert a variable">
+                            <button type="button" class="btn btn-outline btn-xs font-mono" th:each="variable : ${variables}"
+                                    th:attr="data-variable=${variable}" th:text="${'{{' + variable + '}}'}"
+                                    @click="insert($el.dataset.variable)">{{whatChanged}}</button>
+                        </div>
+                        <textarea th:field="*{templateBody}" x-ref="template" rows="12" required spellcheck="false"
+                                  class="textarea textarea-bordered w-full font-mono text-xs" th:errorclass="textarea-error"></textarea>
+                        <span class="label-text-alt">
+                            Mustache renders one change as Markdown. A section such as {{#narrative}}…{{/narrative}} is left out
+                            when the value is empty.
+                        </span>
+                        <span class="field-error" th:if="${#fields.hasErrors('templateBody')}" th:errors="*{templateBody}"></span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm"
+                                th:text="${selected != null} ? 'Save audience' : 'Create audience'">Save audience</button>
+                        <button type="submit" class="btn btn-outline btn-sm" th:formaction="@{/audiences/preview}" formnovalidate>Preview</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="surface-card p-6" id="audience-preview" th:if="${preview != null}">
+                <h2 class="section-heading">Preview</h2>
+                <p class="section-copy">One sample change rendered with this template, as it appears inside a release note.</p>
+                <div class="release-note-body subtle-panel mt-4" th:utext="${preview.html()}"></div>
+                <details class="mt-3">
+                    <summary class="cursor-pointer text-sm font-semibold text-slate-600">Markdown</summary>
+                    <pre class="subtle-panel mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-xs" th:text="${preview.markdown()}">- **A safer deployment workflow is now available.**</pre>
+                </details>
+            </section>
+
+            <section class="surface-card p-6" id="audience-actions" th:if="${selected != null}">
+                <h2 class="section-heading">Manage audience</h2>
+                <details class="mt-3" th:if="${selected.preset}" id="reset-audience">
+                    <summary class="cursor-pointer font-semibold text-indigo-700">Reset to preset</summary>
+                    <p class="mt-2 text-sm text-slate-600">
+                        The name, intent, and template return to the shipped version in the Organization's output language.
+                        Notes already written keep the template they were written with.
+                    </p>
+                    <form class="mt-3" method="post" th:action="@{/audiences/{id}/reset-to-preset(id=${selected.id})}">
+                        <button type="submit" class="btn btn-outline btn-sm">Reset to preset</button>
+                    </form>
+                </details>
+                <details class="mt-3" id="delete-audience">
+                    <summary class="cursor-pointer font-semibold text-red-600">Delete audience</summary>
+                    <p class="mt-2 text-sm text-slate-600">
+                        This cannot be undone. An audience that already has release notes, or the last remaining audience,
+                        cannot be deleted.
+                    </p>
+                    <form class="mt-3" method="post" th:action="@{/audiences/{id}/delete(id=${selected.id})}">
+                        <button type="submit" class="btn btn-error btn-sm">Delete this audience</button>
+                    </form>
+                </details>
+            </section>
+        </div>
+    </div>
+</div>
+</body>
+</html>
