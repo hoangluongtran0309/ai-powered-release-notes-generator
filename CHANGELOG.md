@@ -156,9 +156,43 @@ version has been released.
 - Flyway migration `V12` for the new statuses, schedule and approval columns,
   and `release_change_reviews`, with triggers that fix a release's changes and
   decisions once it is approved.
+- Audiences (ADR-0011), managed by administrators on an Audiences page and
+  through `/api/audiences`. Each has a fixed code, a display name, a
+  communication intent, and a Mustache template validated on save. Three
+  presets (operator, contributor, end user) are seeded in the output language
+  at registration, and presets can be reset. An Organization keeps 1 to 20
+  audiences.
+- A narrative per audience in the single AI request, with a response schema
+  built from the Organization's audience codes, stored as
+  `audienceNarratives`.
+- One release note per audience, written at approval as a digest: a "What's
+  New" overview with counts, a breaking-change warning, fixed sections, and
+  demoted item headings, with English or Vietnamese labels.
+- Note editing while approved, which makes a note manual. Summary and
+  narrative editing during review or after approval, which records the writer
+  and renders the automatic notes again.
+- Live per-audience previews, Copy and Download (`<version>-<code>.md`) for
+  each note, and audience tabs on published releases.
+- Server-side Markdown rendering with CommonMark that escapes HTML, sanitizes
+  links, and turns images into links.
+- REST endpoints for note previews, notes, note edits and downloads, and
+  change summaries. Error codes `template_invalid`,
+  `template_narratives_path`, `audience_code_taken`, `audience_limit`,
+  `audience_last`, `audience_in_use`, `audience_not_preset`,
+  `audience_not_found`, `release_note_render_failed`, `release_notes_missing`,
+  and `release_note_not_found`.
+- Flyway migration `V13` for `audience_definitions` with seeded presets,
+  narratives and summary authorship on changes, and `release_audience_notes`,
+  with triggers that allow note writes only while a release is approved.
 
 ### Changed
 
+- Release notes are written per audience at approval instead of once at
+  publication. Publication freezes them, and the V8 `release_notes` table only
+  keeps notes published before V13. Releases that were approved before V13
+  return to review with their decisions kept.
+- A published release returns `notes`; `markdown` and `preview` are filled
+  only for releases published before audiences existed.
 - A Project may prepare several releases at once, and a change that still
   needs review may join a draft; `409 draft_release_exists` is removed.
 - Publishing requires an approved release; publishing a draft returns

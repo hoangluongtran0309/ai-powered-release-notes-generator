@@ -65,6 +65,27 @@
             toggle() { this.visible = !this.visible; },
         }));
 
+        // Inserts a template variable at the caret and warns before leaving with unsaved
+        // edits. The variable name comes from the button's data attribute, never from
+        // an Alpine expression.
+        Alpine.data('audienceEditor', () => ({
+            dirty: false,
+            init() {
+                window.addEventListener('beforeunload', (event) => {
+                    if (this.dirty) event.preventDefault();
+                });
+            },
+            insert(variable) {
+                const template = this.$refs.template;
+                const token = `{{${variable}}}`;
+                const start = template.selectionStart ?? template.value.length;
+                const end = template.selectionEnd ?? start;
+                template.setRangeText(token, start, end, 'end');
+                template.focus();
+                this.dirty = true;
+            },
+        }));
+
         // Reads the value from the element marked x-ref="source" so server data
         // never has to be interpolated into an Alpine expression.
         Alpine.data('copyText', () => ({

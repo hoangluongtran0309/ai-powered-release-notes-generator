@@ -110,6 +110,21 @@
     .icon { @apply h-5 w-5 shrink-0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .status-dot { @apply h-1.5 w-1.5 rounded-full bg-current; }
 
+    /* Rendered release-note Markdown. The preflight reset removes element styles. */
+    .release-note-body { @apply text-sm leading-6; overflow-wrap: anywhere; }
+    .release-note-body > * + * { @apply mt-3; }
+    .release-note-body h1 { @apply text-xl font-bold; }
+    .release-note-body h2 { @apply mt-5 text-base font-bold; }
+    .release-note-body h3, .release-note-body h4, .release-note-body h5, .release-note-body h6 { @apply font-semibold; }
+    .release-note-body ul { @apply list-disc space-y-1 pl-5; }
+    .release-note-body ol { @apply list-decimal space-y-1 pl-5; }
+    .release-note-body li > ul, .release-note-body li > ol { @apply mt-1; }
+    .release-note-body a { @apply underline; color: var(--rf-primary); }
+    .release-note-body blockquote { @apply border-l-4 pl-3; border-color: var(--rf-border-strong); color: var(--rf-text-muted); }
+    .release-note-body code { @apply rounded px-1 font-mono text-xs; background: var(--rf-surface-muted); }
+    .release-note-body pre { @apply overflow-x-auto rounded-lg p-3 font-mono text-xs; background: var(--rf-surface-muted); }
+    .release-note-body pre code { @apply p-0; background: transparent; }
+
     /* DaisyUI 4 form classes, kept on DaisyUI 5 as in the reference workspace. */
     .form-control { @apply grid w-full gap-1.5; }
     .label-text { @apply text-sm; color: var(--rf-text); }

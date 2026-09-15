@@ -1,9 +1,13 @@
 package com.hoangluongtran0309.releaseflow.release;
 
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.change.ChangeSummaryRequest;
 import com.hoangluongtran0309.releaseflow.change.ChangeView;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -157,6 +162,65 @@ public class ReleaseApiController {
             @PathVariable UUID releaseId
     ) {
         return releaseService.publish(principal, projectId, releaseId);
+    }
+
+    // A person's summary and narratives for one change, during review or after approval.
+    @PutMapping("/releases/{releaseId}/changes/{changeId}/summary")
+    ReleaseView editSummary(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID changeId,
+            @Valid @RequestBody ChangeSummaryRequest request
+    ) {
+        return releaseService.editSummary(principal, projectId, releaseId, changeId, request);
+    }
+
+    @GetMapping("/releases/{releaseId}/notes")
+    List<AudienceNoteView> notes(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId
+    ) {
+        return releaseService.notes(principal.organizationId(), projectId, releaseId);
+    }
+
+    @GetMapping("/releases/{releaseId}/note-previews")
+    List<AudienceNotePreview> notePreviews(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId
+    ) {
+        return releaseService.previewNotes(principal.organizationId(), projectId, releaseId);
+    }
+
+    @PutMapping("/releases/{releaseId}/notes/{noteId}")
+    ReleaseView editNote(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID noteId,
+            @Valid @RequestBody ReleaseNoteRequest request
+    ) {
+        return releaseService.editNote(principal, projectId, releaseId, noteId, request);
+    }
+
+    // Also linked from the release pages, so a signed-in browser downloads the file directly.
+    @GetMapping("/releases/{releaseId}/notes/{noteId}/download")
+    ResponseEntity<String> downloadNote(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID noteId
+    ) {
+        ReleaseNoteFile file = releaseService.noteFile(principal.organizationId(), projectId, releaseId, noteId);
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "markdown", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.fileName())
+                        .build()
+                        .toString())
+                .body(file.content());
     }
 
     @GetMapping("/release-assignments")

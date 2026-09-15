@@ -27,6 +27,7 @@ class DatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest {
     @BeforeEach
     void clearDatabase() {
         appUserRepository.deleteAll();
+        deleteAudiences();
         organizationRepository.deleteAll();
     }
 

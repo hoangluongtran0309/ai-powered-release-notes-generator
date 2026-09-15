@@ -39,7 +39,6 @@ final class AnthropicChangeClassifier implements AiChangeClassifier, AutoCloseab
     private final AnthropicClient client;
     private final ObjectMapper objectMapper;
     private final AiClassificationParser parser;
-    private final JsonOutputFormat.Schema schema;
 
     AnthropicChangeClassifier(String apiKey, String model, String baseUrl, Duration timeout, ObjectMapper objectMapper) {
         this.model = model;
@@ -52,14 +51,6 @@ final class AnthropicChangeClassifier implements AiChangeClassifier, AutoCloseab
                 .timeout(timeout)
                 .maxRetries(0)
                 .build();
-        Map<String, Object> schemaFields = objectMapper.readValue(
-                AiClassificationPrompt.RESPONSE_SCHEMA,
-                new TypeReference<Map<String, Object>>() {
-                }
-        );
-        JsonOutputFormat.Schema.Builder schemaBuilder = JsonOutputFormat.Schema.builder();
-        schemaFields.forEach((name, value) -> schemaBuilder.putAdditionalProperty(name, JsonValue.from(value)));
-        this.schema = schemaBuilder.build();
     }
 
     @Override
@@ -81,7 +72,7 @@ final class AnthropicChangeClassifier implements AiChangeClassifier, AutoCloseab
                 .system(AiClassificationPrompt.SYSTEM)
                 .addUserMessage(AiClassificationPrompt.userMessage(request, objectMapper))
                 .outputConfig(OutputConfig.builder()
-                        .format(JsonOutputFormat.builder().schema(schema).build())
+                        .format(JsonOutputFormat.builder().schema(schema(request)).build())
                         .build())
                 .build();
 
@@ -112,10 +103,22 @@ final class AnthropicChangeClassifier implements AiChangeClassifier, AutoCloseab
                 .findFirst()
                 .orElseThrow(() -> failure(request, INVALID));
         try {
-            return parser.parse(text);
+            return parser.parse(text, request.audienceCodes());
         } catch (AiClassificationException exception) {
             throw failure(request, INVALID);
         }
+    }
+
+    // The schema names the Organization's audiences, so it is built for each request.
+    private JsonOutputFormat.Schema schema(AiClassificationRequest request) {
+        Map<String, Object> fields = objectMapper.convertValue(
+                AiClassificationPrompt.responseSchema(request.audienceCodes(), objectMapper),
+                new TypeReference<Map<String, Object>>() {
+                }
+        );
+        JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
+        fields.forEach((name, value) -> schema.putAdditionalProperty(name, JsonValue.from(value)));
+        return schema.build();
     }
 
     @Override

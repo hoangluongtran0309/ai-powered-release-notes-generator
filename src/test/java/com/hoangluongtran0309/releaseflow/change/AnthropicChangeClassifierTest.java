@@ -62,8 +62,11 @@ class AnthropicChangeClassifierTest {
         assertThat(format.path("type").stringValue()).isEqualTo("json_schema");
         assertThat(format.path("schema").path("additionalProperties").booleanValue()).isFalse();
         assertThat(format.path("schema").path("properties").path("category").path("enum").size()).isEqualTo(6);
+        assertThat(format.path("schema").path("properties").path("narratives").path("required").toString())
+                .isEqualTo("[\"operator\",\"end_user\"]");
         JsonNode user = OBJECT_MAPPER.readTree(body.path("messages").path(0).path("content").stringValue());
         assertThat(user.path("output_language").stringValue()).isEqualTo("Vietnamese (vi)");
+        assertThat(user.path("audiences").path(1).path("code").stringValue()).isEqualTo("end_user");
         assertThat(recorded.body()).doesNotContain("mai-dev");
     }
 

@@ -2,11 +2,14 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
+import com.hoangluongtran0309.releaseflow.audience.AudienceBrief;
+import com.hoangluongtran0309.releaseflow.audience.AudienceService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,6 +24,7 @@ class ChangeAiClassificationService {
     private final AiClassifiers aiClassifiers;
     private final SensitivePathRules sensitivePaths;
     private final OutputLanguageService outputLanguageService;
+    private final AudienceService audienceService;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -29,6 +33,7 @@ class ChangeAiClassificationService {
             AiClassifiers aiClassifiers,
             SensitivePathRules sensitivePaths,
             OutputLanguageService outputLanguageService,
+            AudienceService audienceService,
             PlatformTransactionManager transactionManager,
             Clock clock
     ) {
@@ -36,6 +41,7 @@ class ChangeAiClassificationService {
         this.aiClassifiers = aiClassifiers;
         this.sensitivePaths = sensitivePaths;
         this.outputLanguageService = outputLanguageService;
+        this.audienceService = audienceService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -61,13 +67,14 @@ class ChangeAiClassificationService {
         });
         AiChangeClassifier ai = aiClassifiers.active().orElseThrow(AiClassificationUnavailableException::new);
         OutputLanguage language = outputLanguageService.outputLanguage(organizationId);
+        List<AudienceBrief> audiences = audienceService.briefs(organizationId);
 
         AiOutcome outcome;
         try {
             outcome = AiOutcome.succeeded(
                     ai,
                     ai.classify(AiClassificationRequest.of(changeId, snapshot.pullRequest(), language,
-                            snapshot.rules().category())),
+                            snapshot.rules().category(), audiences)),
                     language
             );
         } catch (AiClassificationException exception) {

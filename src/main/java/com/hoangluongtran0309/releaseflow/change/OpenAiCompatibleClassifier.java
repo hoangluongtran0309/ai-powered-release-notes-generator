@@ -115,6 +115,7 @@ final class OpenAiCompatibleClassifier implements AiChangeClassifier {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("model", model);
         String system = AiClassificationPrompt.SYSTEM;
+        ObjectNode schema = AiClassificationPrompt.responseSchema(request.audienceCodes(), objectMapper);
         if (provider == AiProvider.OPENAI) {
             body.put("store", false);
             ObjectNode jsonSchema = body.putObject("response_format")
@@ -122,10 +123,10 @@ final class OpenAiCompatibleClassifier implements AiChangeClassifier {
                     .putObject("json_schema");
             jsonSchema.put("name", "change_classification");
             jsonSchema.put("strict", true);
-            jsonSchema.set("schema", objectMapper.readTree(AiClassificationPrompt.RESPONSE_SCHEMA));
+            jsonSchema.set("schema", schema);
         } else {
             body.putObject("response_format").put("type", "json_object");
-            system = system + "\nRespond with JSON only, matching this JSON schema:\n" + AiClassificationPrompt.RESPONSE_SCHEMA;
+            system = system + "\nRespond with JSON only, matching this JSON schema:\n" + objectMapper.writeValueAsString(schema);
         }
         body.putArray("messages")
                 .add(objectMapper.createObjectNode().put("role", "system").put("content", system))
@@ -154,7 +155,7 @@ final class OpenAiCompatibleClassifier implements AiChangeClassifier {
             throw invalid(request);
         }
         try {
-            return parser.parse(content.stringValue());
+            return parser.parse(content.stringValue(), request.audienceCodes());
         } catch (AiClassificationException exception) {
             throw invalid(request);
         }

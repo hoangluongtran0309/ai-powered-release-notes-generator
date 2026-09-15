@@ -33,6 +33,7 @@ class RegistrationApiIntegrationTest extends PostgreSqlIntegrationTest {
     @BeforeEach
     void clearDatabase() {
         appUserRepository.deleteAll();
+        deleteAudiences();
         organizationRepository.deleteAll();
     }
 

@@ -59,6 +59,9 @@ public class SecurityConfiguration {
                         ).permitAll()
                         .requestMatchers("/members", "/members/**", "/api/members", "/api/invitations/**")
                         .hasRole("ADMIN")
+                        // Audiences shape every release note the Organization writes.
+                        .requestMatchers("/audiences", "/audiences/**", "/api/audiences", "/api/audiences/**")
+                        .hasRole("ADMIN")
                         // Configuring a repository creates its webhook signing secret.
                         .requestMatchers(HttpMethod.POST, "/projects/*/github-integration", "/api/projects/*/github-integration")
                         .hasRole("ADMIN")

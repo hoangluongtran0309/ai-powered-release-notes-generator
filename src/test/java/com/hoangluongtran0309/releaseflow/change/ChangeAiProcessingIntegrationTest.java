@@ -29,6 +29,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -88,11 +89,13 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
     void clearDatabase() {
         GITHUB.reset();
         OPENAI.reset();
+        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -277,6 +280,82 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(outcome).contains("duplicate");
         assertThat(OPENAI.requests()).hasSize(1);
         assertThat(changeRepository.count()).isOne();
+    }
+
+    @Test
+    void writesANarrativeForEveryAudienceIncludingOnesAddedLater() throws Exception {
+        Repository repository = connect();
+        mockMvc.perform(post("/api/audiences")
+                        .session(repository.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"leadership","displayName":"Leadership","communicationIntent":"Business impact only.",
+                                 "templateBody":"{{whatChanged}}"}
+                                """))
+                .andExpect(status().isCreated());
+        GITHUB.respondWithFiles("src/main/java/Export.java");
+        OPENAI.respondWithNarratives("feature", "Adds CSV export.", Map.of(
+                "leadership", "Customers asked for exports most.",
+                "operator", "Watch the export queue.",
+                "stranger", "Not an audience."
+        ));
+
+        deliver(repository, 7, "feat: add CSV export");
+        assertThat(worker.processOne()).isTrue();
+
+        OpenAiStub.RecordedRequest request = OPENAI.requests().getFirst();
+        JsonNode user = userMessage(request);
+        assertThat(List.of(0, 1, 2, 3).stream().map(index -> user.path("audiences").path(index).path("code").stringValue()))
+                .containsExactly("contributor", "end_user", "leadership", "operator");
+        assertThat(user.path("audiences").path(2).path("intent").stringValue()).isEqualTo("Business impact only.");
+        assertThat(OBJECT_MAPPER.readTree(request.body())
+                .path("response_format").path("json_schema").path("schema").path("properties").path("narratives")
+                .path("required").toString())
+                .isEqualTo("[\"contributor\",\"end_user\",\"leadership\",\"operator\"]");
+
+        Change change = onlyChange();
+        assertThat(change.getAudienceNarratives()).containsOnly(
+                Map.entry("leadership", "Customers asked for exports most."),
+                Map.entry("operator", "Watch the export queue.")
+        );
+        mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
+                .andExpect(content().string(containsString("For leadership")))
+                .andExpect(content().string(containsString("Customers asked for exports most.")));
+    }
+
+    @Test
+    void anAiRetryNeverReplacesASummaryAPersonWrote() throws Exception {
+        Repository repository = connect();
+        GITHUB.respondWithFiles("src/main/java/Export.java");
+        OPENAI.respond(500, "{\"error\":{\"message\":\"upstream exploded\"}}");
+        deliver(repository, 11, "feat: add CSV export");
+        assertThat(worker.processOne()).isTrue();
+        UUID changeId = onlyChange().getId();
+
+        String releases = "/api/projects/" + repository.projectId() + "/releases";
+        String release = mockMvc.perform(post(releases).session(repository.session()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":\"1.0.0\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String releasePath = releases + "/" + JsonPath.read(release, "$.id");
+        mockMvc.perform(post(releasePath + "/changes").session(repository.session()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"allAvailable\":true}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(releasePath + "/request-review").session(repository.session()).with(csrf()))
+                .andExpect(status().isOk());
+        mockMvc.perform(put(releasePath + "/changes/" + changeId + "/summary").session(repository.session()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"whatChanged\":\"Written by a person.\",\"narratives\":{\"operator\":\"By hand.\"}}"))
+                .andExpect(status().isOk());
+
+        OPENAI.respondWithNarratives("feature", "Written by the AI.", Map.of("operator", "By the AI."));
+        retry(repository, changeId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aiStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.neutralSummary.whatChanged").value("Written by a person."))
+                .andExpect(jsonPath("$.audienceNarratives.operator").value("By hand."))
+                .andExpect(jsonPath("$.summaryEditorName").value("Owner"));
     }
 
     private ResultActions retry(Repository repository, UUID changeId) throws Exception {

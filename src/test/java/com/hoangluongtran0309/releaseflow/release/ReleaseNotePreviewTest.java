@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,6 +99,9 @@ class ReleaseNotePreviewTest {
                 List.of(),
                 List.of(),
                 null,
+                null,
+                null,
+                Map.of(),
                 null,
                 null
         );

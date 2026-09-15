@@ -2,6 +2,8 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
+import com.hoangluongtran0309.releaseflow.audience.AudienceBrief;
+import com.hoangluongtran0309.releaseflow.audience.AudienceService;
 import com.hoangluongtran0309.releaseflow.github.GitHubApiClient;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
 import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAccess;
@@ -18,6 +20,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -45,6 +48,7 @@ class ChangeProcessingWorker {
     private final SensitivePathRules sensitivePaths;
     private final AiClassifiers aiClassifiers;
     private final OutputLanguageService outputLanguageService;
+    private final AudienceService audienceService;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final boolean enabled;
@@ -57,6 +61,7 @@ class ChangeProcessingWorker {
             SensitivePathRules sensitivePaths,
             AiClassifiers aiClassifiers,
             OutputLanguageService outputLanguageService,
+            AudienceService audienceService,
             PlatformTransactionManager transactionManager,
             Clock clock,
             @Value("${releaseflow.processing.enabled}") boolean enabled
@@ -68,6 +73,7 @@ class ChangeProcessingWorker {
         this.sensitivePaths = sensitivePaths;
         this.aiClassifiers = aiClassifiers;
         this.outputLanguageService = outputLanguageService;
+        this.audienceService = audienceService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.enabled = enabled;
@@ -166,12 +172,14 @@ class ChangeProcessingWorker {
     // Exactly one request per change: a failure becomes a fallback, never a retry.
     private AiOutcome askAi(AiChangeClassifier ai, Claim claim, ChangeCategory rulesCategory) {
         OutputLanguage language = outputLanguageService.outputLanguage(claim.organizationId());
+        List<AudienceBrief> audiences = audienceService.briefs(claim.organizationId());
         try {
             AiClassification answer = ai.classify(AiClassificationRequest.of(
                     claim.changeId(),
                     claim.pullRequest(),
                     language,
-                    rulesCategory
+                    rulesCategory,
+                    audiences
             ));
             return AiOutcome.succeeded(ai, answer, language);
         } catch (AiClassificationException exception) {

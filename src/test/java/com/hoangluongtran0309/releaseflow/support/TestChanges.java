@@ -58,4 +58,25 @@ public final class TestChanges {
         );
         return id;
     }
+
+    /**
+     * Records a successful AI summary with the given narratives (a JSON object keyed by
+     * audience code), as the worker would.
+     */
+    public static void summarize(JdbcTemplate jdbcTemplate, UUID changeId, String whatChanged, String narrativesJson) {
+        jdbcTemplate.update(
+                """
+                        UPDATE changes
+                        SET ai_status = 'SUCCEEDED', ai_provider = 'openai', ai_model = 'gpt-test', ai_attempted_at = now(),
+                            neutral_summary = jsonb_build_object('whatChanged', ?::text, 'whyChanged', 'Users asked.',
+                                'technicalDetail', 'Streams rows.', 'migrationStep', ''),
+                            audience_narratives = ?::jsonb,
+                            content_language = 'en'
+                        WHERE id = ?
+                        """,
+                whatChanged,
+                narrativesJson,
+                changeId
+        );
+    }
 }

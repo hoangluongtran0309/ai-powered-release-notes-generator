@@ -58,6 +58,7 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
         integrationRepository.deleteAll();
         projectRepository.deleteAll();
         appUserRepository.deleteAll();
+        deleteAudiences();
         organizationRepository.deleteAll();
     }
 

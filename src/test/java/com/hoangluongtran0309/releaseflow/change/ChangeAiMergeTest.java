@@ -4,6 +4,7 @@ import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -120,7 +121,7 @@ class ChangeAiMergeTest {
         return new AiOutcome(
                 AiProvider.OPENAI,
                 "gpt-test",
-                new AiClassification(category, breaking, needsReview, SUMMARY),
+                new AiClassification(category, breaking, needsReview, SUMMARY, Map.of()),
                 OutputLanguage.DEFAULT,
                 null
         );

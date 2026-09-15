@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V12`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V13`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -33,17 +33,23 @@ The application currently provides:
 - a per-Project Change Inbox in the UI and REST, filterable by category and
   review status;
 - optional automatic AI classification with OpenAI, Anthropic, or DeepSeek:
-  one request per change, a neutral summary in the Organization's output
-  language, and rules and review triggers that always win;
+  one request per change, a neutral summary and a narrative for each audience
+  in the Organization's output language, and rules and review triggers that
+  always win;
+- audiences managed by administrators, each with a communication intent and a
+  Mustache template; three presets (operator, contributor, end user) are
+  created with every Organization;
 - an Organization output language, chosen at registration and changed by
   administrators;
 - human review of any change, recording who confirmed or corrected its
   category and breaking flag;
 - releases that move from draft through a per-change review and approval to
   publication, with several drafts per Project, a planned release time, and a
-  live release note preview;
-- publication of an approved release as an immutable Release Note snapshot
-  with copyable Markdown;
+  live preview of each audience's note;
+- one release note per audience written at approval, editable until
+  publication, with editable change summaries that update the notes;
+- publication of an approved release that freezes every audience's note, with
+  copyable and downloadable Markdown;
 - `application/problem+json` responses with stable error codes for the current
   REST operations;
 - the public home page and application status endpoint from the bootstrap
@@ -310,12 +316,16 @@ alone.
 With a provider, the change worker asks the AI **once** for every new change,
 after its changed files are known. It sends the pull request title, labels,
 target branch, up to 4000 characters of the description, the Organization's
-output language, and the category the rules chose, if any. It does not send
-the author, and OpenAI requests set `store: false`. The answer is a category, a
-breaking flag, whether a person should review it, and a **neutral summary**
-(what changed, why, technical detail, migration step) written in the output
-language. The Change Inbox shows the summary under each change, and the changes
-API returns it as `neutralSummary` with `contentLanguage` and `aiProvider`.
+output language, the category the rules chose, if any, and the code and
+communication intent of each [audience](#audiences). It does not send the
+author, and OpenAI requests set `store: false`. The answer is a category, a
+breaking flag, whether a person should review it, a **neutral summary** (what
+changed, why, technical detail, migration step), and a **narrative** for each
+audience, all written in the output language. A missing narrative is simply
+left out. The Change Inbox shows the summary and narratives under each change,
+and the changes API returns them as `neutralSummary` and `audienceNarratives`
+with `contentLanguage` and `aiProvider`. A summary written by a person on a
+release page is never replaced by a later AI answer.
 
 The rules always win:
 
@@ -385,6 +395,59 @@ It returns the updated change, `400 invalid_change_review` for `unknown` or an
 unsupported category, `400 validation_failed` when a field is missing, and
 `404 change_not_found` for another Organization's change.
 
+## Audiences
+
+Every approved release gets one release note per **audience**. Administrators
+manage audiences on the **Audiences** page or through `/api/audiences`. Each
+Organization starts with three presets, named in its output language
+(English or Vietnamese):
+
+| Code | Writes for | Template |
+| --- | --- | --- |
+| `operator` | operational risk, rollback, what to watch | what changed with the pull request link and narrative, then why, detail, and migration |
+| `contributor` | implementation detail and code changes | as operator, with implementation instead of detail |
+| `end_user` | plain language, what people notice | what changed and the narrative only |
+
+An audience has a **code** (lowercase letters, digits, and underscores,
+starting with a letter; fixed once created), a **display name**, a
+**communication intent** that the AI follows when it writes the audience's
+narrative, and a **template**. Templates are
+[Mustache](https://mustache.github.io/mustache.5.html) and render one change as
+Markdown with the variables `whatChanged`, `whyChanged`, `technicalDetail`,
+`migrationStep`, `narrative`, `pullRequestNumber`, and `pullRequestUrl`. A
+section such as `{{#narrative}} — {{.}}{{/narrative}}` disappears when the
+value is empty. **Preview** renders a sample change. A template is checked when
+it is saved: it must compile, use only these variables, and use `{{narrative}}`
+rather than naming another audience.
+
+An Organization keeps between 1 and 20 audiences. An audience that a release
+note already uses cannot be deleted, and a preset can be reset to its shipped
+version in the current output language. See
+[ADR-0011](docs/adr/0011-audience-release-notes.md).
+
+```text
+GET    /api/audiences
+POST   /api/audiences                          {"code", "displayName", "communicationIntent", "templateBody"}
+GET    /api/audiences/{audienceId}
+PUT    /api/audiences/{audienceId}             {"displayName", "communicationIntent", "templateBody"}
+DELETE /api/audiences/{audienceId}
+POST   /api/audiences/{audienceId}/reset-to-preset
+POST   /api/audiences/preview                  {"templateBody"} -> {"markdown", "html"}
+```
+
+| Situation | Response |
+| --- | --- |
+| A member, not an administrator | `403` |
+| A missing field, or a code that is not `[a-z][a-z0-9_]*` | `400 validation_failed` |
+| A template that does not compile or uses an unknown variable | `400 template_invalid` |
+| A template naming `narratives.<code>` | `400 template_narratives_path` |
+| The code is already used | `409 audience_code_taken` |
+| The Organization already has 20 audiences | `409 audience_limit` |
+| Deleting the last audience | `409 audience_last` |
+| Deleting an audience that has release notes | `409 audience_in_use` |
+| Resetting an audience your team created | `409 audience_not_preset` |
+| An unknown or foreign audience | `404 audience_not_found` |
+
 ## Releases
 
 Open **Releases** to prepare a Project's releases. The page creates a release
@@ -407,17 +470,35 @@ A release moves through four steps, shown at the top of its page:
    exactly like a review in the Change Inbox, with an optional note. An Unknown
    change must be edited. **Approve release** becomes available once every
    change has a decision.
-3. **Approved.** The approver and time are recorded. **Publish release**
-   freezes the release note.
+3. **Approved.** The approver and time are recorded, and a release note is
+   written for every audience from its template. Check each audience's tab,
+   edit a note's Markdown if needed (the note becomes **Manual** and no longer
+   follows its template), then **Publish release**.
 4. **Published.** See [Publishing](#publishing).
 
 Until it is published, a release can be scheduled or unscheduled, returned to
 draft (from review or approval, clearing its decisions and approval but not
 the reviews on its changes), or discarded (its changes become available
-again). The preview lists breaking changes first, then Features, Fixes,
-Performance, Documentation, and Maintenance, with Conventional Commit prefixes
-removed from titles. See
-[ADR-0010](docs/adr/0010-release-review-lifecycle.md).
+again). Returning to draft also deletes the release notes; approving again
+writes new ones.
+
+Before approval, the preview shows what each audience's note would say. A note
+starts with the release title and summary and a **What's New** overview with
+counts, warns about breaking changes, and lists breaking changes first, then
+features, fixes, performance, documentation, and maintenance. Each change is
+written by the audience's template from its neutral summary and the audience's
+narrative; without a summary, the pull request title is used, with its
+Conventional Commit prefix removed. Labels are English or Vietnamese, following
+the output language.
+
+During review and after approval, **Edit summary** on the Review tab lets a
+person write or correct a change's summary and each audience's narrative. This
+works whether or not the AI wrote one. The change records who wrote it, and the
+notes of an approved release that still follow their template are rendered
+again. Notes reflect the changes at approval: to pick up a classification
+corrected later in the Change Inbox, return the release to draft and approve it
+again. See [ADR-0010](docs/adr/0010-release-review-lifecycle.md) and
+[ADR-0011](docs/adr/0011-audience-release-notes.md).
 
 REST clients use the same rules:
 
@@ -437,13 +518,22 @@ PUT    /api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decisio
 POST   /api/projects/{projectId}/releases/{releaseId}/approve
 POST   /api/projects/{projectId}/releases/{releaseId}/return-to-draft
 POST   /api/projects/{projectId}/releases/{releaseId}/publish
+PUT    /api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/summary
+                                                                         {"whatChanged", "whyChanged", "technicalDetail", "migrationStep", "narratives": {"<code>": "..."}}
+GET    /api/projects/{projectId}/releases/{releaseId}/note-previews
+GET    /api/projects/{projectId}/releases/{releaseId}/notes
+PUT    /api/projects/{projectId}/releases/{releaseId}/notes/{noteId}     {"content"}
+GET    /api/projects/{projectId}/releases/{releaseId}/notes/{noteId}/download
 GET    /api/projects/{projectId}/release-assignments
 ```
 
 `plannedReleaseAt` is an ISO-8601 instant such as `2026-10-01T09:00:00Z`; a
 value without an offset is read as UTC. A release returns its `changes`, its
 `decisions` (`changeId`, `action`, `reviewerName`, `note`, `decidedAt`),
-`reviewedCount`, `plannedReleaseAt`, `approvedAt`, and `approverName`.
+`reviewedCount`, `plannedReleaseAt`, `approvedAt`, `approverName`, and its
+`notes` (`id`, `audienceCode`, `audienceName`, `language`, `content`,
+`autoRerender`, `lastEditorName`, `updatedAt`). The download is
+`text/markdown`, named `<version>-<audience code>.md`.
 `release-assignments` lists which release, by ID, version, and status, each
 of the Project's changes belongs to. Errors:
 
@@ -457,28 +547,36 @@ of the Project's changes belongs to. Errors:
 | An unreadable or past planned release time | `400 invalid_release_schedule` |
 | A change still processing or already in another release | `409 change_not_releasable` |
 | The version is already used in this Project | `409 release_version_taken` |
+| A summary or note edit outside the allowed status | `409 release_status_conflict` |
+| An audience template that cannot render at approval | `409 release_note_render_failed` |
+| Publishing an approved release that has no notes | `409 release_notes_missing` |
+| An empty summary or note, or a field over its limit | `400 validation_failed` |
 | An unknown or foreign change | `404 change_not_found` |
 | An unknown or foreign release | `404 release_not_found` |
+| An unknown note of this release | `404 release_note_not_found` |
 
 ## Publishing
 
-On an approved release's page, open **Publish release**. Publishing stores an
-immutable snapshot of the release note as sections and Markdown, together with
-who published it and when. The page then becomes read-only, shows who approved
-and published the release, and offers the Markdown with a **Copy** button for
-GitHub Releases or a changelog.
+On an approved release's page, open **Publish release**. Publishing freezes
+every audience's note, together with who published the release and when. The
+page then becomes read-only. It shows who approved and published the release,
+and offers one tab per audience with the rendered note, its Markdown, a
+**Copy** button, and a **Download** link for GitHub Releases or a changelog.
 
 A published release cannot be edited, scheduled, reviewed, discarded,
-unpublished, or changed in content. Its changes can still be corrected in the
-Change Inbox, but the published note keeps what was published. PostgreSQL
-triggers enforce this even for direct SQL. See
-[ADR-0005](docs/adr/0005-immutable-release-note-snapshots.md).
+unpublished, or changed in content, and neither can its notes. Its changes can
+still be corrected in the Change Inbox, but the published notes keep what was
+published. PostgreSQL triggers enforce this even for direct SQL. Releases
+published before audiences existed keep their single note, which is shown as
+before. See [ADR-0005](docs/adr/0005-immutable-release-note-snapshots.md) and
+[ADR-0011](docs/adr/0011-audience-release-notes.md).
 
 REST clients call `POST /api/projects/{projectId}/releases/{releaseId}/publish`.
-It returns the release with `status`, `publishedAt`, `publisherName`,
-`markdown`, and the snapshot sections in `preview`. Publishing a release that
-is not approved returns `409 release_status_conflict`; any operation on a
-published release returns `409 release_published`.
+It returns the release with `status`, `publishedAt`, `publisherName`, and
+`notes`. For a release published before audiences existed, `markdown` and
+`preview` hold its legacy note instead. Publishing a release that is not
+approved returns `409 release_status_conflict`; any operation on a published
+release returns `409 release_published`.
 
 ## Verify
 

@@ -7,9 +7,11 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A release as shown to users. For a published release, {@code preview} and
- * {@code markdown} come from the immutable snapshot rather than from live changes.
- * {@code decisions} holds the review decision on each change that has one.
+ * A release as shown to users. {@code notes} holds the stored note of each audience,
+ * written at approval. {@code preview} groups the live changes of an unpublished
+ * release; for a release published before audiences existed, {@code preview} and
+ * {@code markdown} come from its legacy snapshot instead. {@code decisions} holds the
+ * review decision on each change that has one.
  */
 public record ReleaseView(
         UUID id,
@@ -28,13 +30,15 @@ public record ReleaseView(
         String approverName,
         Instant publishedAt,
         String publisherName,
-        String markdown
+        String markdown,
+        List<AudienceNoteView> notes
 ) {
 
     public ReleaseView {
         changes = List.copyOf(changes);
         decisions = List.copyOf(decisions);
         preview = List.copyOf(preview);
+        notes = List.copyOf(notes);
     }
 
     /** The decision on a change of this release, or {@code null} if it has none yet. */
@@ -44,6 +48,11 @@ public record ReleaseView(
 
     public boolean breaking() {
         return changes.stream().anyMatch(ChangeView::breaking);
+    }
+
+    /** A release published before audiences existed, shown from its single legacy note. */
+    public boolean legacyNote() {
+        return markdown != null;
     }
 
     public boolean fullyReviewed() {

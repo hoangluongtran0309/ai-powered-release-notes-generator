@@ -65,6 +65,11 @@ public final class OpenAiStub implements AutoCloseable {
         respond(200, completion(category, breaking, needsReview, summary));
     }
 
+    /** A valid answer that also explains the change to the given audiences. */
+    public void respondWithNarratives(String category, String summary, Map<String, String> narratives) {
+        respond(200, completionWithContent(classification(category, false, false, summary, narratives)));
+    }
+
     public List<RecordedRequest> requests() {
         return List.copyOf(requests);
     }
@@ -79,6 +84,16 @@ public final class OpenAiStub implements AutoCloseable {
     }
 
     public static String classification(String category, boolean breaking, boolean needsReview, String summary) {
+        return classification(category, breaking, needsReview, summary, Map.of());
+    }
+
+    public static String classification(
+            String category,
+            boolean breaking,
+            boolean needsReview,
+            String summary,
+            Map<String, String> narratives
+    ) {
         return OBJECT_MAPPER.writeValueAsString(Map.of(
                 "category", category,
                 "breaking_change", breaking,
@@ -88,7 +103,8 @@ public final class OpenAiStub implements AutoCloseable {
                         "why_changed", "Requested by users.",
                         "technical_detail", "Handled in the exporter.",
                         "migration_step", ""
-                )
+                ),
+                "narratives", narratives
         ));
     }
 

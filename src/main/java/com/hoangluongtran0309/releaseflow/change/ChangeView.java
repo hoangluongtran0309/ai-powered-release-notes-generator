@@ -3,7 +3,10 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.github.ChangedFile;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 public record ChangeView(
@@ -35,13 +38,27 @@ public record ChangeView(
         List<ReviewTrigger> reviewTriggers,
         NeutralSummary neutralSummary,
         String contentLanguage,
-        AiProvider aiProvider
+        AiProvider aiProvider,
+        Map<String, String> audienceNarratives,
+        String summaryEditorName,
+        Instant summaryEditedAt
 ) {
+
+    public ChangeView {
+        // Sorted by audience code so pages list narratives in a stable order.
+        audienceNarratives = audienceNarratives == null
+                ? Map.of()
+                : Collections.unmodifiableMap(new TreeMap<>(audienceNarratives));
+    }
+
+    /** What this change says to one audience, or an empty string. */
+    public String narrative(String audienceCode) {
+        return audienceNarratives.getOrDefault(audienceCode, "");
+    }
 
     public boolean processing() {
         return processingStatus == ProcessingStatus.PROCESSING;
     }
-
 
     static ChangeView from(Change change) {
         return new ChangeView(
@@ -73,7 +90,10 @@ public record ChangeView(
                 change.getReviewTriggers(),
                 change.getNeutralSummary(),
                 change.getContentLanguage(),
-                change.getAiProvider()
+                change.getAiProvider(),
+                change.getAudienceNarratives(),
+                change.getSummaryEditorName(),
+                change.getSummaryEditedAt()
         );
     }
 }

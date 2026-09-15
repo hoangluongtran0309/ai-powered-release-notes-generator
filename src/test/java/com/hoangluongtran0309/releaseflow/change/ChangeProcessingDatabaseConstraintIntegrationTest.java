@@ -45,6 +45,7 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 

@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -36,18 +37,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
 
-    private static final String EXPECTED_MARKDOWN = """
-            # 1.4.0
+    // Neither change has an AI summary, so each note uses the pull request titles.
+    private static final String OPERATOR_NOTE = """
+            # Release 1.4.0
 
             Exports and clearer config.
 
-            ## Breaking changes
+            ## What's New
 
-            - rename config keys ([#2](https://github.com/acme/releaseflow/pull/2)) — Fix
+            This release includes 2 changes: 1 breaking change and 1 new feature.
 
-            ## Features
+            > ⚠️ 1 breaking change requires action before upgrading.
 
-            - add the inbox ([#1](https://github.com/acme/releaseflow/pull/1))
+            ## ⚠️ Breaking Changes
+
+            - **rename config keys** ([#2](https://github.com/acme/releaseflow/pull/2))
+
+            ## ✨ New Features
+
+            - **add the inbox** ([#1](https://github.com/acme/releaseflow/pull/1))
             """;
 
     @Autowired
@@ -63,17 +71,18 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
+        deleteAudiences();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
     @Test
-    void publishesAnImmutableSnapshotWithMarkdownAndPublisher() throws Exception {
+    void publishesTheAudienceNotesAsAnImmutableSnapshot() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
         UUID projectId = createProject(owner);
         UUID feature = TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1,
@@ -90,34 +99,34 @@ class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.approverName").value("Mai Tran"))
                 .andExpect(jsonPath("$.approvedAt", notNullValue()))
                 .andExpect(jsonPath("$.decisions.length()").value(2))
-                .andExpect(jsonPath("$.markdown").value(EXPECTED_MARKDOWN))
-                .andExpect(jsonPath("$.preview[0].title").value("Breaking changes"))
-                .andExpect(jsonPath("$.preview[1].items[0].title").value("add the inbox"));
+                .andExpect(jsonPath("$.markdown").doesNotExist())
+                .andExpect(jsonPath("$.notes.length()").value(3))
+                .andExpect(jsonPath("$.notes[*].audienceName").value(contains("Contributor", "End user", "Operator")))
+                .andExpect(jsonPath("$.notes[2].content").value(OPERATOR_NOTE));
 
-        // A later correction of an included change must not alter the published note.
+        // A later correction of an included change must not alter the published notes.
         mockMvc.perform(post("/api/projects/{projectId}/changes/{changeId}/review", projectId, feature)
                         .session(owner.session())
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"category\":\"documentation\",\"breaking\":false}"))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
+        mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}/notes", projectId, releaseId)
                         .session(owner.session()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.markdown").value(EXPECTED_MARKDOWN))
-                .andExpect(jsonPath("$.preview[1].title").value("Features"))
-                .andExpect(jsonPath("$.preview.length()").value(2));
+                .andExpect(jsonPath("$[2].audienceCode").value("operator"))
+                .andExpect(jsonPath("$[2].content").value(OPERATOR_NOTE));
         mockMvc.perform(get("/api/projects/{projectId}/releases", projectId).session(owner.session()))
                 .andExpect(jsonPath("$[0].status").value("PUBLISHED"))
                 .andExpect(jsonPath("$[0].publishedAt", notNullValue()))
                 .andExpect(jsonPath("$[0].changeCount").value(2));
 
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT markdown FROM release_notes WHERE release_id = ?", String.class, releaseId
-        )).isEqualTo(EXPECTED_MARKDOWN);
+                "SELECT count(*) FROM release_audience_notes WHERE release_id = ?", Integer.class, releaseId
+        )).isEqualTo(3);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT sections ->> 0 IS NOT NULL FROM release_notes WHERE release_id = ?", Boolean.class, releaseId
-        )).isTrue();
+                "SELECT count(*) FROM release_notes WHERE release_id = ?", Integer.class, releaseId
+        )).isZero();
     }
 
     @Test

@@ -6,9 +6,9 @@ ReleaseFlow currently implements the bootstrap, Organization administrator, Proj
 plus GitHub configuration, signed GitHub merged-pull-request intake,
 deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
-human review, release review lifecycle, Release Note publication, and
-changed-file review slices: one Spring Boot application, PostgreSQL/Flyway
-V1-V12, administrator
+human review, release review lifecycle, Release Note publication,
+changed-file review, and audience release note slices: one Spring Boot
+application, PostgreSQL/Flyway V1-V13, administrator
 registration, member
 invitations with administrator and member roles, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
@@ -20,8 +20,9 @@ sensitive-file changes, a per-Project Change Inbox, optional automatic AI
 classification (OpenAI, Anthropic, or DeepSeek) that the rules always override,
 recorded human review of any change, releases that move from draft through a
 per-change review and approval to publication (several per Project, with a
-planned release time), immutable published Release Note snapshots, REST/UI paths,
-and Testcontainers tests. A non-root container image, a Docker Compose demo
+planned release time), administrator-managed audiences with Mustache templates
+and AI narratives, one release note per audience written at approval and
+frozen at publication, REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
@@ -76,6 +77,11 @@ Read `README.md`, `docs/architecture.md`, and
 - AI failures store fixed, safe messages, never exception text or bodies.
 - Applied Flyway migrations are immutable; add `V2` or later for schema changes.
 - Published Release Notes are immutable snapshots.
+- An Organization always has at least one audience. Rendering a release note
+  never calls AI; notes are written at approval from a snapshot of each
+  audience's template and are frozen at publication.
+- A summary or narrative written by a person is never replaced by the AI, and a
+  note a person edited never follows its template again.
 - Tenant-owned repository lookups include both resource ID and the current
   principal's Organization ID.
 - GitHub Actions stay pinned to commit SHAs, images to digests, and downloaded

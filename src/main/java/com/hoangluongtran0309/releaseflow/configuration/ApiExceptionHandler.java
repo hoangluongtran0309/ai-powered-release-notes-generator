@@ -11,6 +11,10 @@ import com.hoangluongtran0309.releaseflow.account.OutputLanguageApiController;
 import com.hoangluongtran0309.releaseflow.account.PublicInvitationApiController;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
+import com.hoangluongtran0309.releaseflow.audience.AudienceApiController;
+import com.hoangluongtran0309.releaseflow.audience.AudienceConflictException;
+import com.hoangluongtran0309.releaseflow.audience.AudienceNotFoundException;
+import com.hoangluongtran0309.releaseflow.audience.InvalidAudienceTemplateException;
 import com.hoangluongtran0309.releaseflow.change.AiClassificationFailedException;
 import com.hoangluongtran0309.releaseflow.change.AiClassificationUnavailableException;
 import com.hoangluongtran0309.releaseflow.change.ChangeApiController;
@@ -36,6 +40,9 @@ import com.hoangluongtran0309.releaseflow.release.InvalidReleaseScheduleExceptio
 import com.hoangluongtran0309.releaseflow.release.ReleaseApiController;
 import com.hoangluongtran0309.releaseflow.release.ReleaseEmptyException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseNotFoundException;
+import com.hoangluongtran0309.releaseflow.release.ReleaseNoteNotFoundException;
+import com.hoangluongtran0309.releaseflow.release.ReleaseNoteRenderException;
+import com.hoangluongtran0309.releaseflow.release.ReleaseNotesMissingException;
 import com.hoangluongtran0309.releaseflow.release.ReleasePublishedException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseReviewIncompleteException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseStatusException;
@@ -63,7 +70,8 @@ import java.util.Map;
         ProjectApiController.class,
         GitHubWebhookController.class,
         ChangeApiController.class,
-        ReleaseApiController.class
+        ReleaseApiController.class,
+        AudienceApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -406,6 +414,66 @@ public class ApiExceptionHandler {
                 "Webhook payload malformed",
                 exception.getMessage(),
                 "webhook_payload_malformed"
+        ));
+    }
+
+    @ExceptionHandler(ReleaseNoteNotFoundException.class)
+    ResponseEntity<ProblemDetail> releaseNoteNotFound(ReleaseNoteNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Release note not found",
+                exception.getMessage(),
+                "release_note_not_found"
+        ));
+    }
+
+    @ExceptionHandler(ReleaseNotesMissingException.class)
+    ResponseEntity<ProblemDetail> releaseNotesMissing(ReleaseNotesMissingException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Release notes missing",
+                exception.getMessage(),
+                "release_notes_missing"
+        ));
+    }
+
+    @ExceptionHandler(ReleaseNoteRenderException.class)
+    ResponseEntity<ProblemDetail> releaseNoteRenderFailed(ReleaseNoteRenderException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Release note could not be rendered",
+                exception.getMessage(),
+                "release_note_render_failed"
+        ));
+    }
+
+    @ExceptionHandler(AudienceNotFoundException.class)
+    ResponseEntity<ProblemDetail> audienceNotFound(AudienceNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Audience not found",
+                exception.getMessage(),
+                "audience_not_found"
+        ));
+    }
+
+    @ExceptionHandler(AudienceConflictException.class)
+    ResponseEntity<ProblemDetail> audienceConflict(AudienceConflictException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Audience conflict",
+                exception.getMessage(),
+                exception.code()
+        ));
+    }
+
+    @ExceptionHandler(InvalidAudienceTemplateException.class)
+    ResponseEntity<ProblemDetail> invalidAudienceTemplate(InvalidAudienceTemplateException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid audience template",
+                exception.getMessage(),
+                exception.code()
         ));
     }
 

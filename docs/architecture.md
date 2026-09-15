@@ -4,8 +4,8 @@
 
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
-`account`, `project`, `change`, `release`, the `github` API client shared by
-`project` and `change`, and shared `configuration`:
+`account`, `project`, `change`, `audience`, `release`, the `github` API client
+shared by `project` and `change`, and shared `configuration`:
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
@@ -45,13 +45,25 @@ POST /api/projects/{id}/releases/{releaseId}/changes -> ReleaseService
 DELETE /api/projects/{id}/releases/{releaseId}/changes/{changeId} -> ReleaseService
 POST /api/projects/{id}/releases/{releaseId}/{request-review|approve|return-to-draft|publish} -> ReleaseService
 PUT  /api/projects/{id}/releases/{releaseId}/changes/{changeId}/decision -> ReleaseService
+POST /projects/{id}/releases/{releaseId}/changes/{changeId}/summary -> ReleaseService, ChangeSummaryService
+POST /projects/{id}/releases/{releaseId}/notes/{noteId} -> ReleaseService
+PUT  /api/projects/{id}/releases/{releaseId}/changes/{changeId}/summary -> ReleaseService, ChangeSummaryService
+GET  /api/projects/{id}/releases/{releaseId}/{notes|note-previews} -> ReleaseService
+PUT  /api/projects/{id}/releases/{releaseId}/notes/{noteId} -> ReleaseService
+GET  /api/projects/{id}/releases/{releaseId}/notes/{noteId}/download -> ReleaseService
 GET  /api/projects/{id}/release-assignments -> ReleaseService
+GET  /audiences[/new|/{audienceId}] -> AudienceService (Audiences UI, administrator)
+POST /audiences[/{audienceId}[/delete|/reset-to-preset]], /audiences/preview -> AudienceService (administrator)
+GET|POST /api/audiences, GET|PUT|DELETE /api/audiences/{audienceId} -> AudienceService (administrator)
+POST /api/audiences/{audienceId}/reset-to-preset, /api/audiences/preview -> AudienceService (administrator)
 ```
 
 REST and Thymeleaf registration call the same transactional application
 service. Project REST and UI controllers likewise call the same Project and
 GitHub integration services. One short registration transaction creates an
-Organization and its ADMIN AppUser.
+Organization and its ADMIN AppUser, and publishes `OrganizationRegistered`,
+which `AudienceService` handles in the same transaction to seed the preset
+audiences.
 Passwords are encoded with BCrypt before persistence; neither the hash nor the
 submitted password is returned.
 
@@ -135,6 +147,15 @@ changes
   classification_source (RULES | AI | HUMAN), ai_status (NOT_REQUESTED | SUCCEEDED | FAILED)
   ai_model, ai_failure, ai_attempted_at
   reviewed_by (composite FK with organization_id -> app_users), reviewer_name, reviewed_at
+  neutral_summary (jsonb), content_language, audience_narratives (jsonb, keyed by audience code)
+  summary_edited_by (composite FK with organization_id -> app_users), summary_editor_name, summary_edited_at
+
+audience_definitions
+  id (UUID PK)
+  organization_id (FK -> organizations.id); (id, organization_id) unique
+  code ([a-z][a-z0-9_]*, unique per Organization, fixed), display_name
+  communication_intent, template_body (Mustache, at most 10000 characters)
+  preset, created_at, updated_at
 
 releases
   id (UUID PK)
@@ -158,7 +179,15 @@ release_change_reviews
   action (APPROVE | EDIT), note
   reviewer_id (composite FK with organization_id -> app_users), reviewer_name, decided_at
 
-release_notes (immutable)
+release_audience_notes (written while APPROVED, immutable once PUBLISHED)
+  id (UUID PK); release_id + audience_id unique
+  (release_id, organization_id, project_id) FK -> releases, ON DELETE CASCADE
+  (audience_id, organization_id) FK -> audience_definitions (blocks deleting a used audience)
+  audience_code, audience_name, language, template_body_snapshot
+  content, auto_rerender, last_edited_by (composite FK -> app_users), last_editor_name
+  created_at, updated_at
+
+release_notes (legacy, immutable; releases published before V13)
   release_id (PK; composite FK with organization_id, project_id -> releases)
   version, summary, sections (jsonb), markdown, published_at
 ```
@@ -332,7 +361,12 @@ AI is optional. `AiClassifierConfiguration` builds exactly one
 
 All three share `AiClassificationPrompt` (instructions, response schema, and
 the user JSON) and `AiClassificationParser`, which rejects an incomplete or
-mistyped answer as a whole. Every provider refuses to run inside a transaction
+mistyped answer as a whole. The request names the Organization's audiences
+(code and communication intent, from `AudienceService.briefs`), and the
+response schema is built for each request with one required narrative string
+per audience code, which OpenAI strict mode and Anthropic Structured Outputs
+enforce. The parser reads only the requested codes; a missing, empty, or
+mistyped narrative is left out without failing the answer. Every provider refuses to run inside a transaction
 and turns timeouts, HTTP errors, refusals, truncation, and invalid JSON into a
 fixed message that never contains a key or a response body. See
 [ADR-0009](adr/0009-automatic-ai-classification.md), which supersedes
@@ -349,8 +383,10 @@ The change worker calls the AI automatically (see Change processing).
   when the AI chose the category.
 
 A failure keeps the rule result and adds a `CLASSIFIER_FALLBACK` trigger. The
-change stores `neutral_summary` (JSONB), `content_language`, `ai_provider`,
-and `ai_model`. `changes_neutral_summary_consistent`,
+change stores `neutral_summary` (JSONB), `audience_narratives` (JSONB),
+`content_language`, `ai_provider`, and `ai_model`. A summary that a person
+wrote through `ChangeSummaryService` records its writer and is never replaced
+by a later AI answer. `changes_neutral_summary_consistent`,
 `changes_ai_provider_recorded`, and `changes_ai_state_consistent` keep them
 coherent.
 
@@ -403,9 +439,10 @@ and `reviewed`.
 The `release` capability reads changes only through the public
 `ChangeInboxService.releasableChanges` and `ChangeInboxService.changes`
 methods, both scoped by Organization and Project, and records reviews through
-the public `ChangeReviewService.review`. `change` does not depend on
-`release`. `ReleaseService` looks a Project up through `ProjectService.get` and
-a release by ID, Organization ID, and Project ID.
+the public `ChangeReviewService.review`, and records summaries through the
+public `ChangeSummaryService.edit`. `change` does not depend on `release`;
+both depend on `audience`. `ReleaseService` looks a Project up through
+`ProjectService.get` and a release by ID, Organization ID, and Project ID.
 
 A release moves `DRAFT -> IN_REVIEW -> APPROVED -> PUBLISHED`; see
 [ADR-0010](adr/0010-release-review-lifecycle.md). `Release` owns the status
@@ -417,10 +454,12 @@ checks and the service checks the release's changes and decisions.
 | Remove a change (reject during review) | `DRAFT`, `IN_REVIEW` | |
 | Request review | `DRAFT` | at least one change |
 | Record a decision | `IN_REVIEW` | a change of this release |
-| Approve | `IN_REVIEW` | a decision on every change |
+| Approve (writes the audience notes) | `IN_REVIEW` | a decision on every change |
+| Edit a change's summary | `IN_REVIEW`, `APPROVED` | a change of this release |
+| Edit an audience note | `APPROVED` | a note of this release |
 | Return to draft | `IN_REVIEW`, `APPROVED` | |
 | Schedule, discard | any status before `PUBLISHED` | a future time, or none |
-| Publish | `APPROVED` | |
+| Publish | `APPROVED` | its audience notes |
 
 A Project may prepare several releases at once. Any change that finished
 processing can be added, including one that still needs review.
@@ -438,8 +477,8 @@ time. A later decision on the same change replaces the row. Rejecting a
 change removes it from the release, and the cascade removes its decision.
 Approval records the approver and time and requires a decision on every
 change, so no approved release contains a change that still needs review.
-Returning to draft deletes the decisions and the approval; the reviews on the
-changes stay. Discarding deletes the release, and the cascade makes its changes
+Returning to draft deletes the decisions, the approval, and the notes; the
+reviews and summaries on the changes stay. Discarding deletes the release, and the cascade makes its changes
 available again.
 
 Flyway `V12` enforces the lifecycle in PostgreSQL too. Rows are added to
@@ -455,27 +494,88 @@ The planned release time is optional and must lie in the future. REST clients
 send an ISO-8601 instant with an offset; the page's `datetime-local` input
 sends a local time that is read as UTC, and pages show times in UTC.
 
-`ReleaseNotePreview` builds the preview on every read. Breaking changes are
-listed first and only there; the rest follow in the order Features, Fixes,
+`ReleaseNotePreview` groups an unpublished release's changes for the REST
+`preview` field: breaking changes first and only there, then Features, Fixes,
 Performance, Documentation, Maintenance, sorted by merge time. Titles drop a
-leading Conventional Commit prefix. Unknown changes do not appear in the
-preview; review gives them a category before approval.
+leading Conventional Commit prefix. Pages instead preview each audience's note
+(see Audiences and release notes).
+
+## Audiences and release notes
+
+`audience` owns the Organization's audiences and their templates; see
+[ADR-0011](adr/0011-audience-release-notes.md). `AudienceService` serves the
+REST and page controllers (administrator only by URL rule), the AI request
+(`briefs`), and the release service (`list`). Creating and deleting audiences
+lock the Organization's audience rows, so the limits of one and twenty hold
+under concurrent requests. A foreign key from `release_audience_notes` makes
+deleting a used audience fail, which is reported as `409 audience_in_use`.
+`AudiencePresets` holds the three shipped audiences, with names and template
+labels from `messages/audience-presets{,_vi}.properties`. V13 seeds the same
+values for Organizations that existed before, and a migration test compares
+them.
+
+`AudienceTemplate` wraps JMustache in standards mode with strict sections,
+empty strings as false, and no escaping, because the output is Markdown. It
+validates a template on save by compiling it and rendering sample values, and
+renders one `AudienceItem` (`whatChanged`, `whyChanged`, `technicalDetail`,
+`migrationStep`, `narrative`, `pullRequestNumber`, `pullRequestUrl`).
+`MarkdownHtml` renders Markdown for pages with CommonMark: raw HTML is
+escaped, link targets are sanitized and marked
+`rel="nofollow noopener noreferrer"`, and images become links.
+
+`ReleaseNoteDigest` is a pure function that writes one audience's note:
+
+- the title and the escaped release summary;
+- "What's New", with a count per section joined by the bundle's list pattern,
+  and a breaking warning;
+- sections in the order breaking, features, fixes, performance, documentation,
+  maintenance, other, each item rendered by the template and its headings
+  demoted two levels outside fenced code.
+
+Labels come from `messages/release-note{,_vi}.properties`, chosen by the note's
+language with an English fallback, and counts use `java.text` choice formats.
+Without a summary, what changed is the escaped pull request title.
+
+`ReleaseService` uses it as follows:
+
+- **Approval** renders one `AudienceReleaseNote` per audience from the current
+  changes, snapshots the audience's code, name, template, and the output
+  language, and inserts the notes after the release row is flushed as
+  approved. A render failure aborts approval with
+  `409 release_note_render_failed`.
+- **Editing a note** is allowed only while approved. It stores the text and the
+  editor and turns off `auto_rerender`.
+- **Editing a summary** is allowed during review or after approval, for a
+  change of the release. It calls `ChangeSummaryService.edit`, which keeps
+  narratives only for current audience codes, and then renders every automatic
+  note again from its stored template.
+- **Returning to draft** deletes the notes.
+- **Publishing** requires notes (`409 release_notes_missing`).
+- **Previews** render the current changes with the current templates and store
+  nothing.
+
+The `release_audience_notes_follow_release_status` trigger allows inserts and
+updates only while the release is approved. An update may change only the
+content and the edit record, and deletes are rejected once the release is
+published. `release_audience_notes_edit_recorded` ties `auto_rerender` to the
+editor columns.
 
 ## Release Note publication
 
 `ReleaseService.publish` runs in one transaction. It requires an approved
-release. It builds the sections from the current changes, renders Markdown
-with `ReleaseNoteMarkdown` (escaping Markdown syntax in titles and the
-summary), inserts the `release_notes` snapshot, and marks the release
-`PUBLISHED` with the publisher's ID, name, and time. Reads of a published
-release use the stored sections and Markdown, so reclassifying an included
-change afterwards never changes what was published. See
-[ADR-0005](adr/0005-immutable-release-note-snapshots.md).
+release with notes and marks it `PUBLISHED` with the publisher's ID, name, and
+time; from then on the triggers freeze its audience notes. Releases published
+before V13 have a single legacy `release_notes` snapshot of sections and
+Markdown instead, which reads fall back to. Reads of a published release use
+the stored notes, so reclassifying an included change afterwards never changes
+what was published. See [ADR-0005](adr/0005-immutable-release-note-snapshots.md)
+and [ADR-0011](adr/0011-audience-release-notes.md).
 
 Immutability is enforced twice. The service rejects every operation on a
 published release with `409 release_published`. PostgreSQL triggers reject
 UPDATE or DELETE on `release_notes`, UPDATE or DELETE on a `PUBLISHED`
-release, and writes to its `release_changes` and `release_change_reviews`.
+release, and writes to its `release_changes`, `release_change_reviews`, and
+`release_audience_notes`.
 `releases_publication_recorded` keeps status, time, and publisher consistent.
 `releases_project_version_unique` prevents a later release from reusing a
 published version.

@@ -1,10 +1,16 @@
 package com.hoangluongtran0309.releaseflow.release;
 
+import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.audience.AudienceService;
+import com.hoangluongtran0309.releaseflow.audience.AudienceTemplateRenderException;
+import com.hoangluongtran0309.releaseflow.audience.AudienceView;
 import com.hoangluongtran0309.releaseflow.change.ChangeCategory;
 import com.hoangluongtran0309.releaseflow.change.ChangeInboxService;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeReviewService;
+import com.hoangluongtran0309.releaseflow.change.ChangeSummaryRequest;
+import com.hoangluongtran0309.releaseflow.change.ChangeSummaryService;
 import com.hoangluongtran0309.releaseflow.change.ChangeView;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
@@ -16,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +34,8 @@ import java.util.stream.Collectors;
 /**
  * Releases of a Project's changes, from draft through review and approval to publication.
  * Every operation is scoped by Organization and Project; a change belongs to at most one
- * release, and a published release never changes again.
+ * release, and a published release never changes again. Approval writes one note per
+ * audience; publication freezes those notes.
  */
 @Service
 class ReleaseService {
@@ -40,10 +48,14 @@ class ReleaseService {
     private final ProjectService projectService;
     private final ChangeInboxService changeService;
     private final ChangeReviewService changeReviewService;
+    private final ChangeSummaryService changeSummaryService;
+    private final AudienceService audienceService;
+    private final OutputLanguageService outputLanguageService;
     private final ReleaseRepository releaseRepository;
     private final ReleaseChangeRepository releaseChangeRepository;
     private final ReleaseChangeReviewRepository reviewRepository;
-    private final ReleaseNoteRepository releaseNoteRepository;
+    private final AudienceReleaseNoteRepository noteRepository;
+    private final LegacyReleaseNoteRepository legacyNoteRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -51,20 +63,28 @@ class ReleaseService {
             ProjectService projectService,
             ChangeInboxService changeService,
             ChangeReviewService changeReviewService,
+            ChangeSummaryService changeSummaryService,
+            AudienceService audienceService,
+            OutputLanguageService outputLanguageService,
             ReleaseRepository releaseRepository,
             ReleaseChangeRepository releaseChangeRepository,
             ReleaseChangeReviewRepository reviewRepository,
-            ReleaseNoteRepository releaseNoteRepository,
+            AudienceReleaseNoteRepository noteRepository,
+            LegacyReleaseNoteRepository legacyNoteRepository,
             ObjectMapper objectMapper,
             Clock clock
     ) {
         this.projectService = projectService;
         this.changeService = changeService;
         this.changeReviewService = changeReviewService;
+        this.changeSummaryService = changeSummaryService;
+        this.audienceService = audienceService;
+        this.outputLanguageService = outputLanguageService;
         this.releaseRepository = releaseRepository;
         this.releaseChangeRepository = releaseChangeRepository;
         this.reviewRepository = reviewRepository;
-        this.releaseNoteRepository = releaseNoteRepository;
+        this.noteRepository = noteRepository;
+        this.legacyNoteRepository = legacyNoteRepository;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -290,14 +310,18 @@ class ReleaseService {
         if (decided != changes.size() || changes.stream().anyMatch(ChangeView::needsReview)) {
             throw new ReleaseReviewIncompleteException();
         }
-        release.approve(approver.userId(), approver.displayName(), clock.instant());
+        Instant now = clock.instant();
+        List<AudienceReleaseNote> notes = writeNotes(release, changes, now);
+        release.approve(approver.userId(), approver.displayName(), now);
+        // The database accepts notes only for an approved release.
         releaseRepository.flush();
+        noteRepository.saveAllAndFlush(notes);
         return view(release, changes);
     }
 
     /**
-     * Reopens a release in review or approved. Its decisions and approval are dropped; the
-     * reviews recorded on its changes stay.
+     * Reopens a release in review or approved. Its decisions, approval, and notes are
+     * dropped; the reviews and summaries recorded on its changes stay.
      */
     @Transactional
     ReleaseView returnToDraft(UUID organizationId, UUID projectId, UUID releaseId) {
@@ -307,37 +331,128 @@ class ReleaseService {
         // a draft again before they are removed.
         releaseRepository.flush();
         reviewRepository.deleteByReleaseIdAndOrganizationId(releaseId, organizationId);
+        noteRepository.deleteByReleaseIdAndOrganizationId(releaseId, organizationId);
         reviewRepository.flush();
         return view(release, includedChanges(release));
     }
 
     /**
-     * Freezes an approved release: its release note is rendered once from the current
-     * changes and stored as an immutable snapshot, together with who published it and when.
+     * Freezes an approved release together with its audience notes, recording who
+     * published it and when. From then on the database rejects any change to either.
      */
     @Transactional
     ReleaseView publish(ReleaseFlowPrincipal publisher, UUID projectId, UUID releaseId) {
         Release release = find(publisher.organizationId(), projectId, releaseId);
-        Instant now = clock.instant();
-        release.publish(publisher.userId(), publisher.displayName(), now);
-        List<ChangeView> changes = includedChanges(release);
-        List<ReleaseNoteSection> sections = ReleaseNotePreview.sections(changes);
-        releaseNoteRepository.save(new ReleaseNote(
-                release.getId(),
-                release.getOrganizationId(),
-                release.getProjectId(),
-                release.getVersion(),
-                release.getSummary(),
-                objectMapper.writeValueAsString(sections),
-                ReleaseNoteMarkdown.render(release.getVersion(), release.getSummary(), sections),
-                now
-        ));
+        release.requireUnpublished();
+        if (release.getStatus() == ReleaseStatus.APPROVED && notes(release).isEmpty()) {
+            throw new ReleaseNotesMissingException();
+        }
+        release.publish(publisher.userId(), publisher.displayName(), clock.instant());
         try {
             releaseRepository.flush();
         } catch (DataIntegrityViolationException exception) {
             throw translate(exception);
         }
+        return view(release, includedChanges(release));
+    }
+
+    /**
+     * Replaces one audience's note with a person's text while the release is approved.
+     * The note never follows its template again.
+     */
+    @Transactional
+    ReleaseView editNote(
+            ReleaseFlowPrincipal editor,
+            UUID projectId,
+            UUID releaseId,
+            UUID noteId,
+            ReleaseNoteRequest request
+    ) {
+        Release release = find(editor.organizationId(), projectId, releaseId);
+        release.requireUnpublished();
+        if (release.getStatus() != ReleaseStatus.APPROVED) {
+            throw new ReleaseStatusException("Release notes are written at approval and can be edited while the release is approved.");
+        }
+        AudienceReleaseNote note = noteRepository
+                .findByIdAndReleaseIdAndOrganizationId(noteId, releaseId, editor.organizationId())
+                .orElseThrow(ReleaseNoteNotFoundException::new);
+        Instant now = clock.instant();
+        note.edit(request.getContent(), editor.userId(), editor.displayName(), now);
+        release.touch(now);
+        noteRepository.flush();
+        return view(release, includedChanges(release));
+    }
+
+    /**
+     * Records a person's summary and narratives for one change of a release in review or
+     * approved. The notes of an approved release that still follow their templates are
+     * rendered again from their stored templates.
+     */
+    @Transactional
+    ReleaseView editSummary(
+            ReleaseFlowPrincipal editor,
+            UUID projectId,
+            UUID releaseId,
+            UUID changeId,
+            ChangeSummaryRequest request
+    ) {
+        Release release = find(editor.organizationId(), projectId, releaseId);
+        release.requireUnpublished();
+        if (release.getStatus() != ReleaseStatus.IN_REVIEW && release.getStatus() != ReleaseStatus.APPROVED) {
+            throw new ReleaseStatusException("Summaries are edited during review or after approval. Request review first.");
+        }
+        if (includedChanges(release).stream().noneMatch(change -> change.id().equals(changeId))) {
+            throw new ChangeNotFoundException();
+        }
+        changeSummaryService.edit(editor, projectId, changeId, request);
+        Instant now = clock.instant();
+        List<ChangeView> changes = includedChanges(release);
+        if (release.getStatus() == ReleaseStatus.APPROVED) {
+            for (AudienceReleaseNote note : notes(release)) {
+                note.rerender(render(release, changes, note.getTemplateBodySnapshot(), note.getAudienceCode(),
+                        note.getLanguage(), note.getAudienceName()), now);
+            }
+            noteRepository.flush();
+        }
+        release.touch(now);
         return view(release, changes);
+    }
+
+    @Transactional(readOnly = true)
+    List<AudienceNoteView> notes(UUID organizationId, UUID projectId, UUID releaseId) {
+        return notes(find(organizationId, projectId, releaseId)).stream().map(AudienceReleaseNote::view).toList();
+    }
+
+    /** One audience's note as a Markdown file named {@code <version>-<audience>.md}. */
+    @Transactional(readOnly = true)
+    ReleaseNoteFile noteFile(UUID organizationId, UUID projectId, UUID releaseId, UUID noteId) {
+        Release release = find(organizationId, projectId, releaseId);
+        AudienceReleaseNote note = noteRepository.findByIdAndReleaseIdAndOrganizationId(noteId, releaseId, organizationId)
+                .orElseThrow(ReleaseNoteNotFoundException::new);
+        // Anything but letters, digits, dots, dashes, and underscores in the version is replaced.
+        String name = release.getVersion().replaceAll("[^A-Za-z0-9._-]", "-") + "-" + note.getAudienceCode() + ".md";
+        return new ReleaseNoteFile(name, note.view().content());
+    }
+
+    /**
+     * What each audience's note would say if the release were approved now, from the
+     * current changes and templates. Nothing is stored; an empty release has no preview.
+     */
+    @Transactional(readOnly = true)
+    List<AudienceNotePreview> previewNotes(UUID organizationId, UUID projectId, UUID releaseId) {
+        Release release = find(organizationId, projectId, releaseId);
+        List<ChangeView> changes = includedChanges(release);
+        if (changes.isEmpty()) {
+            return List.of();
+        }
+        String language = outputLanguageService.outputLanguage(organizationId).tag();
+        return audienceService.list(organizationId).stream()
+                .map(audience -> new AudienceNotePreview(
+                        audience.code(),
+                        audience.displayName(),
+                        render(release, changes, audience.templateBody(), audience.code(), language, audience.displayName())
+                ))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -353,6 +468,55 @@ class ReleaseService {
                     return new ReleaseAssignment(item.getChangeId(), release.getId(), release.getVersion(), release.getStatus());
                 })
                 .toList();
+    }
+
+    // One note per current audience, rendered from a snapshot of its template.
+    private List<AudienceReleaseNote> writeNotes(Release release, List<ChangeView> changes, Instant now) {
+        String language = outputLanguageService.outputLanguage(release.getOrganizationId()).tag();
+        List<AudienceReleaseNote> notes = new ArrayList<>();
+        for (AudienceView audience : audienceService.list(release.getOrganizationId())) {
+            notes.add(new AudienceReleaseNote(
+                    UUID.randomUUID(),
+                    release,
+                    audience.id(),
+                    audience.code(),
+                    audience.displayName(),
+                    language,
+                    audience.templateBody(),
+                    render(release, changes, audience.templateBody(), audience.code(), language, audience.displayName()),
+                    now
+            ));
+        }
+        return notes;
+    }
+
+    private static String render(
+            Release release,
+            List<ChangeView> changes,
+            String templateBody,
+            String audienceCode,
+            String language,
+            String audienceName
+    ) {
+        try {
+            return ReleaseNoteDigest.render(
+                    release.getVersion(),
+                    release.getSummary(),
+                    changes,
+                    templateBody,
+                    audienceCode,
+                    language
+            );
+        } catch (AudienceTemplateRenderException exception) {
+            throw new ReleaseNoteRenderException(audienceName, exception);
+        }
+    }
+
+    private List<AudienceReleaseNote> notes(Release release) {
+        return noteRepository.findAllByReleaseIdAndOrganizationIdOrderByAudienceNameAscAudienceCodeAsc(
+                release.getId(),
+                release.getOrganizationId()
+        );
     }
 
     private Release find(UUID organizationId, UUID projectId, UUID releaseId) {
@@ -382,17 +546,29 @@ class ReleaseService {
                 .stream()
                 .map(ReleaseChangeReview::view)
                 .toList();
+        List<AudienceNoteView> notes = notes(release).stream().map(AudienceReleaseNote::view).toList();
         if (!release.isPublished()) {
-            return view(release, changes, decisions, ReleaseNotePreview.sections(changes), null);
+            return view(release, changes, decisions, ReleaseNotePreview.sections(changes), null, notes);
         }
-        ReleaseNote note = releaseNoteRepository
+        if (!notes.isEmpty()) {
+            return view(release, changes, decisions, List.of(), null, notes);
+        }
+        // Published before audiences existed: shown from its single legacy note.
+        LegacyReleaseNote legacy = legacyNoteRepository
                 .findByReleaseIdAndOrganizationIdAndProjectId(
                         release.getId(),
                         release.getOrganizationId(),
                         release.getProjectId()
                 )
                 .orElseThrow(() -> new IllegalStateException("Published release " + release.getId() + " has no note."));
-        return view(release, changes, decisions, objectMapper.readValue(note.getSections(), SECTIONS), note.getMarkdown());
+        return view(
+                release,
+                changes,
+                decisions,
+                objectMapper.readValue(legacy.getSections(), SECTIONS),
+                legacy.getMarkdown(),
+                List.of()
+        );
     }
 
     private static ReleaseView view(
@@ -400,7 +576,8 @@ class ReleaseService {
             List<ChangeView> changes,
             List<ReleaseDecisionView> decisions,
             List<ReleaseNoteSection> sections,
-            String markdown
+            String markdown,
+            List<AudienceNoteView> notes
     ) {
         return new ReleaseView(
                 release.getId(),
@@ -419,7 +596,8 @@ class ReleaseService {
                 release.getApproverName(),
                 release.getPublishedAt(),
                 release.getPublisherName(),
-                markdown
+                markdown,
+                notes
         );
     }
 

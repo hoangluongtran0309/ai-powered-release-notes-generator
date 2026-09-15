@@ -12,13 +12,14 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * The published snapshot of a release. It is written once; database triggers reject
- * any later update or delete.
+ * The single note of a release published before audiences existed (V8 to V12). No new
+ * rows are written; database triggers reject any update or delete. Later releases
+ * publish one {@link AudienceReleaseNote} per audience instead.
  */
 @Entity
 @Immutable
 @Table(name = "release_notes")
-class ReleaseNote {
+class LegacyReleaseNote {
 
     @Id
     @Column(name = "release_id")
@@ -46,27 +47,7 @@ class ReleaseNote {
     @Column(name = "published_at", nullable = false)
     private Instant publishedAt;
 
-    protected ReleaseNote() {
-    }
-
-    ReleaseNote(
-            UUID releaseId,
-            UUID organizationId,
-            UUID projectId,
-            String version,
-            String summary,
-            String sections,
-            String markdown,
-            Instant publishedAt
-    ) {
-        this.releaseId = releaseId;
-        this.organizationId = organizationId;
-        this.projectId = projectId;
-        this.version = version;
-        this.summary = summary;
-        this.sections = sections;
-        this.markdown = markdown;
-        this.publishedAt = publishedAt;
+    protected LegacyReleaseNote() {
     }
 
     String getVersion() {
