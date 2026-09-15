@@ -7,8 +7,9 @@ plus GitHub configuration, signed GitHub merged-pull-request intake,
 deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
-changed-file review, audience release note, category catalog, and review
-signal slices: one Spring Boot application, PostgreSQL/Flyway V1-V15,
+changed-file review, audience release note, category catalog, review
+signal, and Project sensitive path slices: one Spring Boot application,
+PostgreSQL/Flyway V1-V16,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -66,7 +67,9 @@ Read `README.md`, `docs/architecture.md`, and
   the change itself through `ChangeReviewService`.
 - Background work uses its own job table, short claim and result
   transactions, and `FOR UPDATE SKIP LOCKED`; retries stay bounded.
-- The sensitive-path list must compile and must not be empty.
+- The sensitive-path list must compile and must not be empty. A Project's
+  additions extend it and never remove any of it; they apply only to changes
+  classified afterwards.
 - `RELEASEFLOW_CREDENTIAL_MASTER_KEY` is required at startup and must decode to
   exactly 32 bytes; webhook secrets are reveal-once values.
 - AI is optional. `RELEASEFLOW_AI_PROVIDER` selects one provider, which needs

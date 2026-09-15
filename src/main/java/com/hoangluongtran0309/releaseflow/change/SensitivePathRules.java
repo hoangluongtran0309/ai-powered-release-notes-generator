@@ -1,96 +1,67 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.nio.file.FileSystems;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * File paths that force human review whatever else the classification concluded.
- * Patterns use JDK glob syntax. An invalid pattern or an empty list stops the
- * application from starting, so a typo can never silently disable the rule.
+ * The deployment's baseline of sensitive paths. Patterns use JDK glob syntax. An invalid
+ * pattern or an empty list stops the application from starting, so a typo can never
+ * silently disable the rule. A Project may add patterns but never remove these.
  */
 @Component
 final class SensitivePathRules {
 
-    private final List<CompiledRule> rules;
+    private final List<String> baseline;
+    private final SensitivePaths compiled;
 
     SensitivePathRules(@Value("${releaseflow.classification.sensitive-paths}") List<String> globs) {
-        List<CompiledRule> compiled = new ArrayList<>();
+        Set<String> patterns = new LinkedHashSet<>();
         for (String glob : globs) {
             String trimmed = glob == null ? "" : glob.strip();
             if (!trimmed.isEmpty()) {
-                compiled.add(CompiledRule.compile(trimmed));
+                patterns.add(trimmed);
             }
         }
-        if (compiled.isEmpty()) {
+        if (patterns.isEmpty()) {
             throw new IllegalStateException(
                     "releaseflow.classification.sensitive-paths must contain at least one pattern."
             );
         }
-        this.rules = List.copyOf(compiled);
-    }
-
-    /**
-     * Every changed path that matched a rule, in reported order and without duplicates.
-     * A rename is checked on both paths: moving a file out of a sensitive directory is
-     * itself a sensitive change.
-     */
-    List<String> matches(Collection<ChangedFile> files) {
-        Set<String> matched = new LinkedHashSet<>();
-        for (ChangedFile file : files) {
-            if (matchesAnyRule(file.path())) {
-                matched.add(file.path());
-            } else if (file.previousPath() != null && matchesAnyRule(file.previousPath())) {
-                matched.add(file.previousPath());
-            }
-        }
-        return List.copyOf(matched);
-    }
-
-    private boolean matchesAnyRule(String path) {
-        final Path candidate;
         try {
-            candidate = Path.of(path);
-        } catch (InvalidPathException exception) {
-            // A path that cannot be parsed is not a reason to declare the change safe.
-            return true;
+            this.compiled = SensitivePaths.compile(patterns);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException(
+                    "releaseflow.classification.sensitive-paths contains an invalid pattern: " + exception.getMessage(),
+                    exception
+            );
         }
-        return rules.stream().anyMatch(rule -> rule.matches(candidate));
+        this.baseline = List.copyOf(patterns);
     }
 
-    /**
-     * The JDK requires {@code **} to match at least one directory, so {@code **}{@code /x}
-     * would miss a top-level {@code x}. The stripped pattern is compiled alongside it so
-     * the rule means "anywhere", as its author intended.
-     */
-    private record CompiledRule(PathMatcher matcher, PathMatcher unanchoredMatcher) {
+    /** The baseline patterns, in configured order. */
+    List<String> baseline() {
+        return baseline;
+    }
 
-        static CompiledRule compile(String glob) {
-            try {
-                PathMatcher unanchored = glob.startsWith("**/")
-                        ? FileSystems.getDefault().getPathMatcher("glob:" + glob.substring(3))
-                        : null;
-                return new CompiledRule(FileSystems.getDefault().getPathMatcher("glob:" + glob), unanchored);
-            } catch (IllegalArgumentException exception) {
-                throw new IllegalStateException(
-                        "releaseflow.classification.sensitive-paths contains an invalid pattern: " + glob,
-                        exception
-                );
-            }
-        }
+    /** The baseline followed by a Project's additions, without duplicates. */
+    List<String> effective(List<String> additions) {
+        Set<String> patterns = new LinkedHashSet<>(baseline);
+        patterns.addAll(additions);
+        return List.copyOf(patterns);
+    }
 
-        boolean matches(Path candidate) {
-            return matcher.matches(candidate) || (unanchoredMatcher != null && unanchoredMatcher.matches(candidate));
+    /** The rules a Project's changes are checked against. Additions must already be valid. */
+    SensitivePaths forProject(List<String> additions) {
+        if (additions.isEmpty()) {
+            return compiled;
         }
+        List<String> extra = new ArrayList<>(additions);
+        extra.removeAll(baseline);
+        return extra.isEmpty() ? compiled : compiled.plus(SensitivePaths.compile(extra));
     }
 }

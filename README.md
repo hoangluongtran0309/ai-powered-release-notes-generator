@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V15`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V16`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -29,7 +29,7 @@ The application currently provides:
   files outside the webhook request, with bounded retries;
 - deterministic, explainable classification of every recorded change, with
   breaking, unrecognized, and sensitive-file changes always marked for human
-  review;
+  review, and sensitive-path patterns that administrators can add per Project;
 - a per-Project Change Inbox in the UI and REST, filterable by category and
   review status;
 - a category catalog per Organization, managed by administrators, with
@@ -285,6 +285,20 @@ matches at the repository root. Replace the list with the comma-separated
 `RELEASEFLOW_SENSITIVE_PATHS` (brace groups such as `{a,b}` are not
 supported). An invalid pattern or an empty list stops the application from
 starting, so the rule cannot be switched off by accident.
+
+A Project can add its own patterns to this baseline, for example
+`**/billing/**`, but can never remove any of it. Follow **Sensitive paths** on
+a Project's card, or call `GET /api/projects/{projectId}/sensitive-paths`,
+which returns the `baseline`, the Project's `additions`, the `effective` list,
+and who last changed it. Every member can read them; only administrators
+change them, one pattern per line on the page or with
+`PUT /api/projects/{projectId}/sensitive-paths` and `{"additions": [...]}`.
+Patterns are trimmed, and blank lines and repeats are dropped. A Project can
+add at most 100 patterns of at most 256 characters; a pattern that does not
+compile, or too many or too long ones, return `400 invalid_sensitive_paths`.
+New patterns apply to changes classified afterwards, including an AI retry;
+changes already classified keep their triggers. See
+[ADR-0014](docs/adr/0014-project-sensitive-paths.md).
 
 Open `/changes` to browse a Project's inbox, or call
 `GET /api/projects/{projectId}/changes`. Both accept `category` (a category

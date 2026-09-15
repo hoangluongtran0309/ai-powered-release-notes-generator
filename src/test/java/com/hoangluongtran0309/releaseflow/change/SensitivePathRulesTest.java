@@ -15,12 +15,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SensitivePathRulesTest {
 
     // The shipped baseline in application.properties.
-    private static final SensitivePathRules BASELINE = new SensitivePathRules(List.of(
+    private static final SensitivePathRules RULES = new SensitivePathRules(List.of(
             "**/security/**", "**/auth/**", "**/*Security*", "**/*Auth*", "**/*Credential*",
             "**/*Password*", "**/db/migration/**", "**/*.sql", "**/pom.xml", "**/package.json",
             "**/package-lock.json", ".github/workflows/**", "**/Dockerfile",
             "**/application*.properties", "**/*.env*"
     ));
+    private static final SensitivePaths BASELINE = RULES.forProject(List.of());
 
     @ParameterizedTest
     @ValueSource(strings = {
@@ -86,6 +87,33 @@ class SensitivePathRulesTest {
         String unparseable = "src/bad\0name.java";
 
         assertThat(BASELINE.matches(List.of(modified(unparseable)))).containsExactly(unparseable);
+    }
+
+    @Test
+    void aProjectAddsPatternsAfterTheBaselineWithoutRepeats() {
+        List<String> effective = RULES.effective(List.of("**/billing/**", "pom.xml", "**/pom.xml"));
+
+        assertThat(effective).startsWith(RULES.baseline().toArray(String[]::new));
+        assertThat(effective.subList(RULES.baseline().size(), effective.size()))
+                .containsExactly("**/billing/**", "pom.xml");
+        assertThat(RULES.effective(List.of())).isEqualTo(RULES.baseline());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"billing/Invoice.java", "src/main/java/com/acme/billing/tax/Rate.java"})
+    void anAddedPatternMatchesAtAnyDepth(String path) {
+        SensitivePaths project = RULES.forProject(List.of("**/billing/**"));
+
+        assertThat(project.matches(List.of(modified(path)))).containsExactly(path);
+        assertThat(BASELINE.matches(List.of(modified(path)))).isEmpty();
+    }
+
+    @Test
+    void additionsNeverRemoveTheBaseline() {
+        SensitivePaths project = RULES.forProject(List.of("**/billing/**"));
+
+        assertThat(project.matches(List.of(modified("pom.xml"), modified("billing/Invoice.java"))))
+                .containsExactly("pom.xml", "billing/Invoice.java");
     }
 
     @Test

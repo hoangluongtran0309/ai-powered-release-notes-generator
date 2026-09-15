@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Sensitive paths</title>
+</head>
+<body>
+<p layout:fragment="page-title">Sensitive paths</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">
+                <a class="link" th:href="@{/projects}">Projects</a>
+                <span th:if="${project != null}" th:text="|/ ${project.name}|">/ Project</span>
+            </p>
+            <h1 class="page-heading">Sensitive paths</h1>
+            <p class="page-subtitle">
+                A change that touches a file matching one of these patterns always needs review. Every project uses the
+                deployment's baseline; administrators can add patterns for this project but never remove the baseline.
+            </p>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.saved != null}"><span>Patterns saved. New changes will be checked against them.</span></div>
+
+    <div class="grid gap-6 lg:grid-cols-2" th:if="${paths != null}">
+        <section class="surface-card p-6" id="project-additions">
+            <h2 class="section-heading">Added for this project</h2>
+            <p class="section-copy" th:if="${paths.updatedAt != null}">
+                Last changed by <span th:text="${paths.updatedBy}">Mai</span> on
+                <time th:datetime="${paths.updatedAt}"
+                      th:text="|${#temporals.format(paths.updatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">15 Sep 2026, 10:02 UTC</time>.
+                Changes already classified keep their review triggers.
+            </p>
+
+            <form class="mt-5 grid gap-3" th:if="${viewer.admin}" method="post"
+                  th:action="@{/projects/{projectId}/sensitive-paths(projectId=${paths.projectId})}">
+                <div class="alert alert-error" role="alert" th:if="${additionsError != null}">
+                    <span th:text="${additionsError}">Not a valid glob pattern: [</span>
+                </div>
+                <label class="form-control">
+                    <span class="label-text font-medium">Patterns, one per line</span>
+                    <textarea name="additions" rows="10" spellcheck="false" autocomplete="off"
+                              class="textarea textarea-bordered w-full font-mono text-sm"
+                              th:classappend="${additionsError != null} ? 'textarea-error'"
+                              placeholder="**/billing/**" th:text="${additionsText}"></textarea>
+                    <span class="mt-1 text-xs text-slate-500">
+                        JDK glob syntax, matched against the file path from the repository root. At most 100 patterns
+                        of 256 characters each. A pattern starting with <code>**/</code> also matches at the top level.
+                    </span>
+                </label>
+                <button type="submit" class="btn btn-primary w-full sm:w-auto">Save patterns</button>
+            </form>
+
+            <div th:unless="${viewer.admin}">
+                <p class="section-copy" th:if="${#lists.isEmpty(paths.additions)}">No patterns have been added for this project.</p>
+                <ul class="mt-4 grid gap-1 font-mono text-sm" th:unless="${#lists.isEmpty(paths.additions)}">
+                    <li th:each="pattern : ${paths.additions}" th:text="${pattern}">**/billing/**</li>
+                </ul>
+                <p class="mt-4 text-xs text-slate-500">Only organization administrators can change these patterns.</p>
+            </div>
+        </section>
+
+        <section class="surface-card p-6" id="baseline">
+            <h2 class="section-heading">Deployment baseline</h2>
+            <p class="section-copy">Set by <code>RELEASEFLOW_SENSITIVE_PATHS</code> and applied to every project.</p>
+            <ul class="mt-4 grid gap-1 font-mono text-sm">
+                <li th:each="pattern : ${paths.baseline}" th:text="${pattern}">**/db/migration/**</li>
+            </ul>
+        </section>
+    </div>
+</div>
+</body>
+</html>

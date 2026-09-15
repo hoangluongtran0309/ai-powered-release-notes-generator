@@ -351,7 +351,7 @@ performs network I/O itself.
 | Breaking label | `breaking-change`, `breaking change`, `breaking` | Breaking |
 | Footer | A description line starting with `BREAKING CHANGE:` or `BREAKING-CHANGE:` | Breaking |
 | Files | Every changed file is in `docs/` or ends in `.md`, `.adoc`, or `.rst` | Documentation, before the title type |
-| Sensitive path | A changed or previous path matches `releaseflow.classification.sensitive-paths` | `SENSITIVE_PATH` review trigger |
+| Sensitive path | A changed or previous path matches `releaseflow.classification.sensitive-paths` or one of the Project's additions | `SENSITIVE_PATH` review trigger |
 | No file list | The files could not be listed | `CHANGED_FILES_UNAVAILABLE` review trigger |
 
 Each category rule names a group and a preferred code (the former fixed value,
@@ -370,6 +370,25 @@ the configured JDK globs at startup, also matching `**/x` patterns at the
 root, and refuses to start with an invalid pattern or an empty list. Flyway `V4`
 assigns Unknown, needs review, and the reason "Recorded before rule-based
 classification" to changes recorded before it ran.
+
+### Sensitive paths per Project
+
+ADR-0014 lets administrators add patterns for one Project. The baseline stays
+in `SensitivePathRules`; `ProjectSensitivePathService` stores a Project's
+additions in `project_sensitive_paths` (Flyway `V16`: one row per Project with
+the patterns as a JSON array of at most 100, composite foreign keys to the
+Project and to the administrator who last changed them). The worker, a job
+completed without AI, and an AI retry all ask the service for the Project's
+`SensitivePaths`, the baseline followed by the additions, so the baseline can
+never be removed, and changes classified earlier keep their triggers.
+`SensitivePathAdditions` trims the patterns, drops blank lines and repeats,
+and rejects more than 100, any longer than 256 characters, or one that does not
+compile, with `400 invalid_sensitive_paths`. Everything lives in the `change`
+package, which already depends on `project`, so the page is its own
+`/projects/{projectId}/sensitive-paths` rather than part of the Projects page.
+Members may read it and `GET /api/projects/{projectId}/sensitive-paths`;
+`SecurityConfiguration` limits the `PUT` and the page's `POST` to
+administrators. See [ADR-0014](adr/0014-project-sensitive-paths.md).
 
 ## Change Inbox
 

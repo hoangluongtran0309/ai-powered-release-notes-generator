@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ChangeClassifierTest {
 
-    private static final SensitivePathRules RULES =
-            new SensitivePathRules(List.of("**/db/migration/**", "**/*.sql", "**/security/**"));
+    private static final SensitivePaths RULES =
+            new SensitivePathRules(List.of("**/db/migration/**", "**/*.sql", "**/security/**")).forProject(List.of());
 
     @Test
     void sensitiveFileForcesReviewAndRecordsThePath() {

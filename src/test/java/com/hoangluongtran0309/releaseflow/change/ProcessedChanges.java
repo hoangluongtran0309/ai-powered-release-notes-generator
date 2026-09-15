@@ -18,7 +18,7 @@ final class ProcessedChanges {
     private static final PullRequestFiles ORDINARY_FILES = PullRequestFiles.collected(
             List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))
     );
-    private static final SensitivePathRules RULES = new SensitivePathRules(List.of("**/db/migration/**"));
+    private static final SensitivePaths RULES = new SensitivePathRules(List.of("**/db/migration/**")).forProject(List.of());
 
     private ProcessedChanges() {
     }

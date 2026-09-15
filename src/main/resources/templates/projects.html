@@ -209,6 +209,11 @@
                 </label>
                 <button type="submit" class="btn btn-primary w-full">Generate webhook credentials</button>
             </form>
+
+            <div class="mt-auto pt-5">
+                <a class="link text-sm" th:href="@{/projects/{projectId}/sensitive-paths(projectId=${project.id})}">Sensitive paths</a>
+                <span class="text-xs text-slate-500">— files whose changes always need review</span>
+            </div>
         </article>
     </div>
 </div>
