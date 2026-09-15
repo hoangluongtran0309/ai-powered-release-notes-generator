@@ -12,7 +12,8 @@ import java.util.List;
  * and review triggers still force review. The AI settles a change only when the
  * rules left it Unknown and nothing else requires a person. A category the AI proposed
  * instead of choosing one keeps the change Unknown and adds a trigger until an
- * administrator decides the proposal.
+ * administrator decides the proposal. Insufficient context adds a trigger too; context
+ * is assessed only when the AI answered.
  */
 final class ChangeAiMerge {
 
@@ -21,10 +22,11 @@ final class ChangeAiMerge {
 
     /**
      * @param ai the AI outcome, or null when no AI provider is configured
+     * @param context the assessment of a successful answer, or null
      */
-    static ClassifiedChange merge(ChangeClassification rules, AiOutcome ai) {
+    static ClassifiedChange merge(ChangeClassification rules, AiOutcome ai, ContextAssessment context) {
         if (ai == null) {
-            return new ClassifiedChange(rules, ClassificationSource.RULES, null, null);
+            return new ClassifiedChange(rules, ClassificationSource.RULES, null, null, null);
         }
         if (!ai.succeeded()) {
             List<ReviewTrigger> triggers = new ArrayList<>(rules.triggers());
@@ -33,6 +35,7 @@ final class ChangeAiMerge {
                     new ChangeClassification(rules.category(), rules.breaking(), true, rules.reasons(), triggers),
                     ClassificationSource.RULES,
                     ai,
+                    null,
                     null
             );
         }
@@ -46,6 +49,10 @@ final class ChangeAiMerge {
         if (suggestion != null) {
             triggers.add(ReviewTrigger.categorySuggestion(suggestion.code()));
             reasons.add("AI proposed a new category \"" + suggestion.code() + "\"");
+        }
+        if (context != null && context.insufficient()) {
+            triggers.add(ReviewTrigger.contextInsufficient(context.reasons()));
+            reasons.add("Context score " + context.score() + " is below the threshold");
         }
         if (aiChoseCategory) {
             reasons.add("Category from AI (" + ai.provider().getLabel() + " " + ai.model() + ")");
@@ -65,18 +72,39 @@ final class ChangeAiMerge {
                 new ChangeClassification(category, breaking, needsReview, reasons, triggers),
                 aiChoseCategory ? ClassificationSource.AI : ClassificationSource.RULES,
                 ai,
-                suggestion
+                suggestion,
+                context
         );
+    }
+
+    /** Merges an outcome, assessing the context of a successful answer against the pull request. */
+    static ClassifiedChange merge(
+            ChangeClassification rules,
+            AiOutcome ai,
+            MergedPullRequest pullRequest,
+            int contextThreshold
+    ) {
+        ContextAssessment context = ai != null && ai.succeeded()
+                ? ContextSufficiency.assess(
+                        pullRequest,
+                        ai.classification().contextScore(),
+                        ai.classification().contextReasons(),
+                        contextThreshold
+                )
+                : null;
+        return merge(rules, ai, context);
     }
 
     /**
      * @param suggestion a category the AI proposed, to be recorded for an administrator, or null
+     * @param context the context assessment of a successful answer, or null
      */
     record ClassifiedChange(
             ChangeClassification classification,
             ClassificationSource source,
             AiOutcome ai,
-            CategorySuggestionDraft suggestion
+            CategorySuggestionDraft suggestion,
+            ContextAssessment context
     ) {
     }
 }

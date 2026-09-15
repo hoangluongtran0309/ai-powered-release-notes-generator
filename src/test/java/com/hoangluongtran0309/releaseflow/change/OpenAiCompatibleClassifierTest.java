@@ -54,7 +54,9 @@ class OpenAiCompatibleClassifierTest {
                 new NeutralSummary("Empty tables now export a header row.", "Requested by users.",
                         "Handled in the exporter.", ""),
                 Map.of(),
-                null
+                null,
+                90,
+                List.of()
         ));
         OpenAiStub.RecordedRequest recorded = stub.requests().getFirst();
         assertThat(recorded.method()).isEqualTo("POST");
@@ -69,6 +71,9 @@ class OpenAiCompatibleClassifierTest {
         assertThat(schema.path("strict").booleanValue()).isTrue();
         assertThat(schema.path("schema").path("properties").path("category").path("enum").size()).isEqualTo(6);
         assertThat(schema.path("schema").path("properties").path("neutral_core").path("required").size()).isEqualTo(4);
+        assertThat(schema.path("schema").path("properties").path("context_sufficiency").path("required").toString())
+                .isEqualTo("[\"score\",\"reasons\"]");
+        assertThat(schema.path("schema").path("required").toString()).contains("\"context_sufficiency\"");
         JsonNode narratives = schema.path("schema").path("properties").path("narratives");
         assertThat(narratives.path("additionalProperties").booleanValue()).isFalse();
         assertThat(narratives.path("required").toString()).isEqualTo("[\"operator\",\"end_user\"]");
@@ -78,6 +83,7 @@ class OpenAiCompatibleClassifierTest {
         JsonNode user = OBJECT_MAPPER.readTree(body.path("messages").path(1).path("content").stringValue());
         assertThat(user.path("output_language").stringValue()).isEqualTo("Vietnamese (vi)");
         assertThat(user.path("locked_category").stringValue()).isEqualTo("FIX");
+        assertThat(user.path("context_threshold").intValue()).isEqualTo(60);
         assertThat(user.path("categories").size()).isEqualTo(6);
         assertThat(user.path("categories").path(0).path("code").stringValue()).isEqualTo("DOCUMENTATION");
         assertThat(user.path("categories").path(0).path("group").stringValue()).isEqualTo("documentation");
@@ -213,7 +219,8 @@ class OpenAiCompatibleClassifierTest {
                 OutputLanguage.parse(language),
                 lockedCategory,
                 TestCategories.CATALOG,
-                List.of(new AudienceBrief("operator", "Rollback and monitoring."), new AudienceBrief("end_user", ""))
+                List.of(new AudienceBrief("operator", "Rollback and monitoring."), new AudienceBrief("end_user", "")),
+                60
         );
     }
 }

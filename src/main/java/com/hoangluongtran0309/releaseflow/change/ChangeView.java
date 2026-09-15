@@ -45,7 +45,8 @@ public record ChangeView(
         AiProvider aiProvider,
         Map<String, String> audienceNarratives,
         String summaryEditorName,
-        Instant summaryEditedAt
+        Instant summaryEditedAt,
+        ContextAssessment context
 ) {
 
     public ChangeView {
@@ -108,7 +109,8 @@ public record ChangeView(
                 change.getAiProvider(),
                 change.getAudienceNarratives(),
                 change.getSummaryEditorName(),
-                change.getSummaryEditedAt()
+                change.getSummaryEditedAt(),
+                change.getContext()
         );
     }
 }

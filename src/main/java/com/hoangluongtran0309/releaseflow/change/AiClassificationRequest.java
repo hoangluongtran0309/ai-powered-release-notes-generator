@@ -15,6 +15,7 @@ import java.util.stream.Stream;
  *     or null when the rules left the change Unknown
  * @param categories the Organization's active categories, Unknown included
  * @param audiences the audiences to write a narrative for
+ * @param contextThreshold the context score below which a change needs review
  */
 record AiClassificationRequest(
         UUID changeId,
@@ -25,7 +26,8 @@ record AiClassificationRequest(
         OutputLanguage outputLanguage,
         CategoryRef lockedCategory,
         List<CategoryRef> categories,
-        List<AudienceBrief> audiences
+        List<AudienceBrief> audiences,
+        int contextThreshold
 ) {
 
     AiClassificationRequest {
@@ -43,7 +45,8 @@ record AiClassificationRequest(
             OutputLanguage outputLanguage,
             CategoryRef rulesCategory,
             List<CategoryRef> categories,
-            List<AudienceBrief> audiences
+            List<AudienceBrief> audiences,
+            int contextThreshold
     ) {
         return new AiClassificationRequest(
                 changeId,
@@ -54,7 +57,8 @@ record AiClassificationRequest(
                 outputLanguage,
                 rulesCategory.isUnknown() ? null : rulesCategory,
                 categories,
-                audiences
+                audiences,
+                contextThreshold
         );
     }
 

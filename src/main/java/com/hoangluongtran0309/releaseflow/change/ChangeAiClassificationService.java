@@ -30,6 +30,7 @@ class ChangeAiClassificationService {
     private final AudienceService audienceService;
     private final CategoryService categoryService;
     private final CategorySuggestionService suggestionService;
+    private final ClassificationSettings settings;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -41,6 +42,7 @@ class ChangeAiClassificationService {
             AudienceService audienceService,
             CategoryService categoryService,
             CategorySuggestionService suggestionService,
+            ClassificationSettings settings,
             PlatformTransactionManager transactionManager,
             Clock clock
     ) {
@@ -51,6 +53,7 @@ class ChangeAiClassificationService {
         this.audienceService = audienceService;
         this.categoryService = categoryService;
         this.suggestionService = suggestionService;
+        this.settings = settings;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -85,7 +88,7 @@ class ChangeAiClassificationService {
             outcome = AiOutcome.succeeded(
                     ai,
                     ai.classify(AiClassificationRequest.of(changeId, snapshot.pullRequest(), language,
-                            snapshot.rules().category(), snapshot.catalog(), audiences)),
+                            snapshot.rules().category(), snapshot.catalog(), audiences, settings.contextThreshold())),
                     language
             );
         } catch (AiClassificationException exception) {
@@ -97,7 +100,8 @@ class ChangeAiClassificationService {
             Change current = find(organizationId, projectId, changeId);
             // A concurrent request or review may have settled the change meanwhile; its result is kept.
             if (current.isAiEligible()) {
-                ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(snapshot.rules(), recorded);
+                ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(
+                        snapshot.rules(), recorded, snapshot.pullRequest(), settings.contextThreshold());
                 current.applyAiRetry(merged, clock.instant());
                 if (merged.suggestion() != null) {
                     suggestionService.propose(organizationId, projectId, changeId, merged.suggestion());

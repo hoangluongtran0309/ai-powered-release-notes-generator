@@ -7,10 +7,12 @@ import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.ProjectView;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +34,7 @@ public class ChangeInboxPageController {
     private final ChangeReviewService reviewService;
     private final CategoryService categoryService;
     private final CategorySuggestionService suggestionService;
+    private final DuplicateCandidateService duplicateService;
 
     ChangeInboxPageController(
             ProjectService projectService,
@@ -39,7 +42,8 @@ public class ChangeInboxPageController {
             ChangeAiClassificationService aiClassificationService,
             ChangeReviewService reviewService,
             CategoryService categoryService,
-            CategorySuggestionService suggestionService
+            CategorySuggestionService suggestionService,
+            DuplicateCandidateService duplicateService
     ) {
         this.projectService = projectService;
         this.inboxService = inboxService;
@@ -47,6 +51,7 @@ public class ChangeInboxPageController {
         this.reviewService = reviewService;
         this.categoryService = categoryService;
         this.suggestionService = suggestionService;
+        this.duplicateService = duplicateService;
     }
 
     @GetMapping("/changes")
@@ -55,10 +60,11 @@ public class ChangeInboxPageController {
             @RequestParam(name = "project", required = false) UUID projectId,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String context,
             Model model,
             HttpServletResponse response
     ) {
-        return renderInbox(principal, projectId, category, status, model, response);
+        return renderInbox(principal, projectId, category, status, context, model, response);
     }
 
     // Both card actions carry the inbox filters as returnCategory/returnStatus so the
@@ -71,6 +77,7 @@ public class ChangeInboxPageController {
             @ModelAttribute ChangeReviewRequest request,
             @RequestParam(required = false) String returnCategory,
             @RequestParam(required = false) String returnStatus,
+            @RequestParam(required = false) String returnContext,
             Model model,
             HttpServletResponse response
     ) {
@@ -82,13 +89,13 @@ public class ChangeInboxPageController {
         } catch (ChangeNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             model.addAttribute("pageError", exception.getMessage());
-            return renderInbox(principal, projectId, returnCategory, returnStatus, model, response);
+            return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         } catch (InvalidChangeReviewException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
             model.addAttribute("pageError", exception.getMessage());
-            return renderInbox(principal, projectId, returnCategory, returnStatus, model, response);
+            return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         }
-        return redirectToCard(projectId, changeId, returnCategory, returnStatus);
+        return redirectToCard(projectId, changeId, returnCategory, returnStatus, returnContext);
     }
 
     @PostMapping("/projects/{projectId}/changes/{changeId}/ai-classification")
@@ -98,6 +105,7 @@ public class ChangeInboxPageController {
             @PathVariable UUID changeId,
             @RequestParam(required = false) String returnCategory,
             @RequestParam(required = false) String returnStatus,
+            @RequestParam(required = false) String returnContext,
             Model model,
             HttpServletResponse response
     ) {
@@ -108,20 +116,55 @@ public class ChangeInboxPageController {
         } catch (ChangeNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             model.addAttribute("pageError", exception.getMessage());
-            return renderInbox(principal, projectId, returnCategory, returnStatus, model, response);
+            return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         } catch (AiClassificationUnavailableException exception) {
             response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
             model.addAttribute("pageError", exception.getMessage());
-            return renderInbox(principal, projectId, returnCategory, returnStatus, model, response);
+            return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         }
-        return redirectToCard(projectId, changeId, returnCategory, returnStatus);
+        return redirectToCard(projectId, changeId, returnCategory, returnStatus, returnContext);
     }
 
-    private static String redirectToCard(UUID projectId, UUID changeId, String category, String status) {
+    // Records a person's conclusion on a possible duplicate and returns to the change's card.
+    @PostMapping("/projects/{projectId}/duplicate-candidates/{candidateId}/decision")
+    String decideDuplicate(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID candidateId,
+            @RequestParam UUID changeId,
+            @Valid @ModelAttribute DuplicateDecisionRequest request,
+            BindingResult bindingResult,
+            @RequestParam(required = false) String returnCategory,
+            @RequestParam(required = false) String returnStatus,
+            @RequestParam(required = false) String returnContext,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (bindingResult.hasErrors()) {
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            model.addAttribute("pageError", "Confirm or dismiss the possible duplicate.");
+            return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
+        }
+        try {
+            duplicateService.decide(principal, projectId, candidateId, request);
+        } catch (DuplicateCandidateNotFoundException exception) {
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            model.addAttribute("pageError", exception.getMessage());
+            return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
+        } catch (DuplicateCandidateDecidedException exception) {
+            response.setStatus(HttpStatus.CONFLICT.value());
+            model.addAttribute("pageError", exception.getMessage());
+            return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
+        }
+        return redirectToCard(projectId, changeId, returnCategory, returnStatus, returnContext);
+    }
+
+    private static String redirectToCard(UUID projectId, UUID changeId, String category, String status, String context) {
         return "redirect:" + UriComponentsBuilder.fromPath("/changes")
                 .queryParam("project", projectId)
                 .queryParamIfPresent("category", Optional.ofNullable(category).filter(value -> !value.isBlank()))
                 .queryParamIfPresent("status", Optional.ofNullable(status).filter(value -> !value.isBlank()))
+                .queryParamIfPresent("context", Optional.ofNullable(context).filter(value -> !value.isBlank()))
                 .fragment("change-" + changeId)
                 .encode()
                 .toUriString();
@@ -132,6 +175,7 @@ public class ChangeInboxPageController {
             UUID projectId,
             String category,
             String status,
+            String context,
             Model model,
             HttpServletResponse response
     ) {
@@ -151,7 +195,9 @@ public class ChangeInboxPageController {
         model.addAttribute("selectedProjectId", selectedProjectId);
         model.addAttribute("selectedCategory", category);
         model.addAttribute("selectedStatus", status);
-        model.addAttribute("filtered", hasText(category) || hasText(status));
+        model.addAttribute("selectedContext", context);
+        model.addAttribute("filtered", hasText(category) || hasText(status) || hasText(context));
+        model.addAttribute("duplicates", List.of());
         model.addAttribute("aiEnabled", aiClassificationService.isEnabled());
         model.addAttribute("changes", List.of());
         if (selectedProjectId == null) {
@@ -162,9 +208,10 @@ public class ChangeInboxPageController {
             model.addAttribute("changes", inboxService.list(
                     principal.organizationId(),
                     selectedProjectId,
-                    ChangeFilter.parse(category, status)
+                    ChangeFilter.parse(category, status, context)
             ));
             model.addAttribute("suggestions", suggestionService.byChange(principal.organizationId(), selectedProjectId));
+            model.addAttribute("duplicates", duplicateService.list(principal.organizationId(), selectedProjectId, null));
         } catch (ProjectNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             model.addAttribute("pageError", exception.getMessage());

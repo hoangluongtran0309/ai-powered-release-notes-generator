@@ -78,6 +78,7 @@ public final class OpenAiStub implements AutoCloseable {
                         "migration_step", ""
                 ),
                 "suggested_category", Map.of("code", code, "display_name", name, "group", group, "rationale", rationale),
+                "context_sufficiency", Map.of("score", 80, "reasons", List.of()),
                 "narratives", Map.of()
         ))));
     }
@@ -121,6 +122,7 @@ public final class OpenAiStub implements AutoCloseable {
                         "technical_detail", "Handled in the exporter.",
                         "migration_step", ""
                 ),
+                "context_sufficiency", Map.of("score", 90, "reasons", List.of()),
                 "narratives", narratives
         ));
     }

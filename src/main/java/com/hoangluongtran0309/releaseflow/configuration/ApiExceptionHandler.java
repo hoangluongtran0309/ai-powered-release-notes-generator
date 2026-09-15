@@ -25,6 +25,8 @@ import com.hoangluongtran0309.releaseflow.change.ChangeApiController;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotEligibleForAiException;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
+import com.hoangluongtran0309.releaseflow.change.DuplicateCandidateDecidedException;
+import com.hoangluongtran0309.releaseflow.change.DuplicateCandidateNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
@@ -500,6 +502,26 @@ public class ApiExceptionHandler {
     @ExceptionHandler(CategoryConflictException.class)
     ResponseEntity<ProblemDetail> categoryConflict(CategoryConflictException exception) {
         return response(problem(HttpStatus.CONFLICT, "Category conflict", exception.getMessage(), exception.code()));
+    }
+
+    @ExceptionHandler(DuplicateCandidateNotFoundException.class)
+    ResponseEntity<ProblemDetail> duplicateCandidateNotFound(DuplicateCandidateNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Possible duplicate not found",
+                exception.getMessage(),
+                "duplicate_candidate_not_found"
+        ));
+    }
+
+    @ExceptionHandler(DuplicateCandidateDecidedException.class)
+    ResponseEntity<ProblemDetail> duplicateCandidateDecided(DuplicateCandidateDecidedException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Possible duplicate already decided",
+                exception.getMessage(),
+                "duplicate_candidate_decided"
+        ));
     }
 
     private static ProblemDetail problem(HttpStatus status, String title, String detail, String code) {

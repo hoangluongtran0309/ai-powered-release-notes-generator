@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V14`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V15`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -34,6 +34,8 @@ The application currently provides:
   review status;
 - a category catalog per Organization, managed by administrators, with
   categories the AI proposes held for an administrator's decision;
+- review signals for pull requests that give too little context and for
+  changes that look like earlier ones, with the evidence shown to reviewers;
 - optional automatic AI classification with OpenAI, Anthropic, or DeepSeek:
   one request per change, a neutral summary and a narrative for each audience
   in the Organization's output language, and rules and review triggers that
@@ -286,9 +288,10 @@ starting, so the rule cannot be switched off by accident.
 
 Open `/changes` to browse a Project's inbox, or call
 `GET /api/projects/{projectId}/changes`. Both accept `category` (a category
-code such as `feature` or `security`, in any case) and `status`
+code such as `feature` or `security`, in any case), `status`
 (`needs-review`, `classified` for changes settled by rules without a person,
-`reviewed`). A value that is not a code or status returns
+`reviewed`), and `context=insufficient` (see
+[Review signals](#review-signals)). A value that is not a code or status returns
 `400 invalid_change_filter`, and another Organization's Project returns
 `404 project_not_found`. Each change returns its `category` code with its
 `categoryName` and `categoryGroup`, as recorded when it was classified.
@@ -401,6 +404,45 @@ The category is a code of the catalog in any case. It returns the updated
 change, `400 invalid_change_review` for `unknown`, an archived category, or a
 code that is not in the catalog, `400 validation_failed` when a field is missing, and
 `404 change_not_found` for another Organization's change.
+
+## Review signals
+
+Two signals point reviewers at changes that deserve a closer look. Both only add
+a need for review; they never merge, remove, or settle a change. See
+[ADR-0013](docs/adr/0013-context-sufficiency-and-duplicates.md).
+
+**Context sufficiency.** With AI enabled, the AI also scores from 0 to 100 how
+much evidence the pull request gives about what changed and why. Fixed caps can
+only lower that score:
+
+| Pull request | Score at most | Reason |
+| --- | --- | --- |
+| Empty description | 30 | `DESCRIPTION_MISSING` |
+| Title shorter than 12 characters | 50 | `TITLE_TOO_SHORT` |
+| Title of just fix, update, change, cleanup, misc, or wip, with a description under 160 characters | 40 | `GENERIC_TITLE` |
+
+A score below `RELEASEFLOW_CONTEXT_THRESHOLD` (default 60, 0–100) needs review
+with a **Not enough context** trigger. The Change Inbox shows the score, and
+`context=insufficient` filters to these changes; the changes API returns
+`context` (`score`, `status`, `reasons`). Without an AI answer, context is not
+assessed.
+
+**Possible duplicates.** When a change finishes processing, it is compared with
+the Project's other changes from the last 180 days (at most 500). The
+comparison uses title, content (description and what changed), and changed
+files. A pair at least `RELEASEFLOW_DUPLICATE_THRESHOLD` similar (default
+0.82) is recorded with its evidence, up to five per change. The new change
+needs review with a **Possible duplicate** trigger. Both cards show the pair,
+and any member can **Confirm duplicate** or mark it **Not a duplicate**, once.
+
+```text
+GET  /api/projects/{projectId}/duplicate-candidates?status=OPEN
+POST /api/projects/{projectId}/duplicate-candidates/{candidateId}/decision   {"decision": "CONFIRMED" | "DISMISSED"}
+```
+
+A decision that is missing or `OPEN` returns `400 validation_failed`, a second
+decision `409 duplicate_candidate_decided`, and an unknown or foreign candidate
+`404 duplicate_candidate_not_found`.
 
 ## Categories
 

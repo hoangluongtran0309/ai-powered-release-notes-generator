@@ -25,7 +25,7 @@
     </section>
 
     <th:block th:if="${hasProjects}">
-        <form class="surface-card grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_auto] lg:items-end"
+        <form class="surface-card grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_auto] lg:items-end"
               th:action="@{/changes}" method="get" aria-label="Filter changes">
             <label class="form-control"><span class="label-text font-medium">Project</span>
                 <select name="project" class="select select-bordered w-full">
@@ -46,6 +46,12 @@
                     <option value="">All statuses</option>
                     <option th:each="option : ${statuses}" th:value="${option.value}" th:text="${option.label}"
                             th:selected="${option.value == selectedStatus}">Needs review</option>
+                </select>
+            </label>
+            <label class="form-control"><span class="label-text font-medium">Context</span>
+                <select name="context" class="select select-bordered w-full">
+                    <option value="">Any context</option>
+                    <option value="insufficient" th:selected="${selectedContext == 'insufficient'}">Needs more context</option>
                 </select>
             </label>
             <button type="submit" class="btn btn-primary">Apply</button>
@@ -146,6 +152,53 @@
                             <li th:each="trigger : ${change.reviewTriggers}" th:text="${trigger.describe()}">Sensitive file db/migration/V9.sql</li>
                         </ul>
                     </div>
+                    <p class="mt-2 text-sm text-amber-800" th:if="${change.context != null and change.context.insufficient()}"
+                       th:id="|context-${change.id}|">
+                        <span class="badge badge-warning badge-soft font-semibold">Needs more context</span>
+                        <span th:text="|Context score ${change.context.score} of 100|">Context score 30 of 100</span>
+                        <span class="text-slate-600" th:unless="${#lists.isEmpty(change.context.reasons)}"
+                              th:text="|(${#strings.listJoin(change.context.reasons, ', ')})|">(DESCRIPTION_MISSING)</span>
+                    </p>
+                    <p class="mt-2 text-xs text-slate-500" th:if="${change.context != null and !change.context.insufficient()}"
+                       th:text="|Context score ${change.context.score} of 100|">Context score 90 of 100</p>
+                    <div class="subtle-panel mt-3 text-sm" th:each="duplicate : ${duplicates}"
+                         th:if="${duplicate.changeId == change.id or duplicate.duplicateOfId == change.id}"
+                         th:id="|duplicate-${duplicate.id}-${change.id}|"
+                         th:with="later=${duplicate.changeId == change.id}">
+                        <p>
+                            <span class="font-semibold" th:text="${later} ? 'Possible duplicate of' : 'A later change may duplicate this one:'">Possible duplicate of</span>
+                            <a class="link" th:href="|#change-${later ? duplicate.duplicateOfId : duplicate.changeId}|"
+                               th:text="${later} ? |#${duplicate.duplicateOfPullRequestNumber} ${duplicate.duplicateOfTitle}| : |#${duplicate.changePullRequestNumber} ${duplicate.changeTitle}|">#12 Add export</a>
+                            <span class="badge badge-sm ml-1" th:text="|${duplicate.percent()}% similar|">91% similar</span>
+                            <span class="badge badge-sm badge-ghost" th:switch="${duplicate.status.name()}">
+                                <th:block th:case="'OPEN'">Open</th:block>
+                                <th:block th:case="'CONFIRMED'" th:text="|Confirmed by ${duplicate.deciderName}|">Confirmed</th:block>
+                                <th:block th:case="*" th:text="|Dismissed by ${duplicate.deciderName}|">Dismissed</th:block>
+                            </span>
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500"
+                           th:text="|Title ${duplicate.evidence.title} · content ${duplicate.evidence.content} · files ${duplicate.evidence.paths}|">Title 0.9 · content 0.8 · files 0.5</p>
+                        <p class="mt-1 text-slate-600" th:if="${later and duplicate.duplicateOfWhatChanged != null}"
+                           th:text="|Earlier change: ${duplicate.duplicateOfWhatChanged}|">Earlier change: Adds export.</p>
+                        <p class="mt-1 text-slate-600" th:if="${!later and duplicate.changeWhatChanged != null}"
+                           th:text="|Later change: ${duplicate.changeWhatChanged}|">Later change: Adds export.</p>
+                        <div class="mt-3 flex flex-wrap gap-2" th:if="${duplicate.open()}">
+                            <form method="post" th:each="decision : ${ {'CONFIRMED', 'DISMISSED'} }"
+                                  th:action="@{/projects/{projectId}/duplicate-candidates/{id}/decision(projectId=${selectedProjectId},id=${duplicate.id})}">
+                                <input type="hidden" name="decision" th:value="${decision}">
+                                <input type="hidden" name="changeId" th:value="${change.id}">
+                                <input type="hidden" name="returnCategory" th:value="${selectedCategory}">
+                                <input type="hidden" name="returnStatus" th:value="${selectedStatus}">
+                                <input type="hidden" name="returnContext" th:value="${selectedContext}">
+                                <button type="submit" class="btn btn-sm"
+                                        th:classappend="${decision == 'CONFIRMED'} ? 'btn-outline' : 'btn-ghost'"
+                                        th:text="${decision == 'CONFIRMED'} ? 'Confirm duplicate' : 'Not a duplicate'">Confirm duplicate</button>
+                            </form>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-500" th:if="${duplicate.open()}">
+                            A decision records what you found. It never merges or removes a change, and the change is still reviewed.
+                        </p>
+                    </div>
                     <div class="subtle-panel mt-3 text-sm" th:with="suggestion=${suggestions[change.id]}"
                          th:if="${suggestions[change.id] != null}" th:id="|suggestion-${change.id}|">
                         <p>
@@ -227,6 +280,7 @@
                       x-data="{ busy: false }" @submit="busy = true">
                     <input type="hidden" name="returnCategory" th:value="${selectedCategory}">
                     <input type="hidden" name="returnStatus" th:value="${selectedStatus}">
+                    <input type="hidden" name="returnContext" th:value="${selectedContext}">
                     <button type="submit" class="btn btn-outline btn-sm gap-2" :disabled="busy">
                         <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#sparkles}"></use></svg>
                         <span x-show="!busy" th:text="${change.aiStatus.name() == 'FAILED'} ? 'Retry with AI' : 'Classify with AI'">Classify with AI</span>

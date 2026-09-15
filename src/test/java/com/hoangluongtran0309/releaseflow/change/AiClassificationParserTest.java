@@ -5,9 +5,11 @@ import com.hoangluongtran0309.releaseflow.category.CategorySuggestionDraft;
 import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AiClassificationParserTest {
 
     private static final AiClassificationRequest REQUEST = OpenAiCompatibleClassifierTest.request(null, null, "en");
-    private static final String SUMMARY = "\"neutral_core\":{\"what_changed\":\"Adds audit logs.\",\"why_changed\":\"\","
+    private static final String SUMMARY = "\"context_sufficiency\":{\"score\":90,\"reasons\":[]},\"neutral_core\":{\"what_changed\":\"Adds audit logs.\",\"why_changed\":\"\","
             + "\"technical_detail\":\"\",\"migration_step\":\"\"}";
 
     private final AiClassificationParser parser = new AiClassificationParser(new ObjectMapper());
@@ -25,7 +27,7 @@ class AiClassificationParserTest {
     void parsesAValidAnswerAndIgnoresExtraFields() {
         AiClassification answer = parser.parse("""
                 {"category":"fix","breaking_change":true,"needs_human_review":false,"confidence":0.4,
-                 "neutral_core":{"what_changed":"  Trims input.  ","why_changed":"","technical_detail":"Strip()",
+                 "context_sufficiency":{"score":90,"reasons":[]},"neutral_core":{"what_changed":"  Trims input.  ","why_changed":"","technical_detail":"Strip()",
                  "migration_step":"","narratives":{"end_user":"ignored"}}}
                 """, REQUEST);
 
@@ -35,7 +37,9 @@ class AiClassificationParserTest {
                 false,
                 new NeutralSummary("Trims input.", "", "Strip()", ""),
                 Map.of(),
-                null
+                null,
+                90,
+                List.of()
         ));
     }
 
@@ -84,7 +88,7 @@ class AiClassificationParserTest {
     void keepsTheNarrativesOfRequestedAudiencesOnly() {
         AiClassification answer = parser.parse("""
                 {"category":"fix","breaking_change":false,"needs_human_review":false,
-                 "neutral_core":{"what_changed":"Trims input.","why_changed":"","technical_detail":"","migration_step":""},
+                 "context_sufficiency":{"score":90,"reasons":[]},"neutral_core":{"what_changed":"Trims input.","why_changed":"","technical_detail":"","migration_step":""},
                  "narratives":{"operator":"  Watch the import logs.  ","end_user":"   ","contributor":"Not requested."}}
                 """, REQUEST);
 
@@ -96,18 +100,42 @@ class AiClassificationParserTest {
     void acceptsMissingOrMistypedNarrativesWithoutThem(String narratives) {
         AiClassification answer = parser.parse("""
                 {"category":"fix","breaking_change":false,"needs_human_review":false,
-                 "neutral_core":{"what_changed":"Trims input.","why_changed":"","technical_detail":"","migration_step":""}%s}
+                 "context_sufficiency":{"score":90,"reasons":[]},"neutral_core":{"what_changed":"Trims input.","why_changed":"","technical_detail":"","migration_step":""}%s}
                 """.formatted(narratives), REQUEST);
 
         assertThat(answer.narratives()).isEmpty();
         assertThat(answer.summary().whatChanged()).isEqualTo("Trims input.");
     }
 
+    @ParameterizedTest
+    @CsvSource({"150, 100", "-3, 0", "59.6, 60"})
+    void clampsAndRoundsTheContextScore(String score, int expected) {
+        AiClassification answer = parser.parse("""
+                {"category":"fix","breaking_change":false,"needs_human_review":false,
+                 "context_sufficiency":{"score":%s,"reasons":[" NO_PROBLEM_STATEMENT ","",42,"A","B","C","D","E"]},
+                 "neutral_core":{"what_changed":"Trims input.","why_changed":"","technical_detail":"","migration_step":""}}
+                """.formatted(score), REQUEST);
+
+        assertThat(answer.contextScore()).isEqualTo(expected);
+        assertThat(answer.contextReasons()).containsExactly("NO_PROBLEM_STATEMENT", "A", "B", "C", "D");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", ",\"context_sufficiency\":null", ",\"context_sufficiency\":{\"reasons\":[]}",
+            ",\"context_sufficiency\":{\"score\":\"high\",\"reasons\":[]}"})
+    void rejectsAnAnswerWithoutAContextScore(String context) {
+        assertThatThrownBy(() -> parser.parse("""
+                {"category":"fix","breaking_change":false,"needs_human_review":false%s,
+                 "neutral_core":{"what_changed":"Trims input.","why_changed":"","technical_detail":"","migration_step":""}}
+                """.formatted(context), REQUEST))
+                .isInstanceOf(AiClassificationException.class);
+    }
+
     @Test
     void shortensOverlongSummaryFields() {
         String answer = """
                 {"category":"fix","breaking_change":false,"needs_human_review":false,
-                 "neutral_core":{"what_changed":"%s","why_changed":"","technical_detail":"","migration_step":""}}
+                 "context_sufficiency":{"score":90,"reasons":[]},"neutral_core":{"what_changed":"%s","why_changed":"","technical_detail":"","migration_step":""}}
                 """.formatted("w".repeat(3000));
 
         assertThat(parser.parse(answer, REQUEST).summary().whatChanged())

@@ -54,6 +54,8 @@ class ChangeProcessingWorker {
     private final AudienceService audienceService;
     private final CategoryService categoryService;
     private final CategorySuggestionService suggestionService;
+    private final ClassificationSettings settings;
+    private final DuplicateDetector duplicateDetector;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final boolean enabled;
@@ -69,6 +71,8 @@ class ChangeProcessingWorker {
             AudienceService audienceService,
             CategoryService categoryService,
             CategorySuggestionService suggestionService,
+            ClassificationSettings settings,
+            DuplicateDetector duplicateDetector,
             PlatformTransactionManager transactionManager,
             Clock clock,
             @Value("${releaseflow.processing.enabled}") boolean enabled
@@ -83,6 +87,8 @@ class ChangeProcessingWorker {
         this.audienceService = audienceService;
         this.categoryService = categoryService;
         this.suggestionService = suggestionService;
+        this.settings = settings;
+        this.duplicateDetector = duplicateDetector;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.enabled = enabled;
@@ -154,7 +160,7 @@ class ChangeProcessingWorker {
 
         Optional<AiChangeClassifier> ai = aiClassifiers.active();
         if (ai.isEmpty()) {
-            complete(claim, files, ChangeAiMerge.merge(rules, null), files.failure());
+            complete(claim, files, ChangeAiMerge.merge(rules, null, null), files.failure());
             return;
         }
 
@@ -174,7 +180,7 @@ class ChangeProcessingWorker {
         complete(
                 claim,
                 files,
-                ChangeAiMerge.merge(rules, outcome),
+                ChangeAiMerge.merge(rules, outcome, claim.pullRequest(), settings.contextThreshold()),
                 outcome.succeeded() ? files.failure() : AI_FAILED
         );
     }
@@ -190,7 +196,8 @@ class ChangeProcessingWorker {
                     language,
                     rulesCategory,
                     catalog,
-                    audiences
+                    audiences,
+                    settings.contextThreshold()
             ));
             return AiOutcome.succeeded(ai, answer, language);
         } catch (AiClassificationException exception) {
@@ -209,7 +216,9 @@ class ChangeProcessingWorker {
                 return;
             }
             Instant now = now();
-            findChange(job).completeProcessing(files, outcome, now);
+            Change change = findChange(job);
+            change.completeProcessing(files, outcome, now);
+            duplicateDetector.detect(change);
             job.complete(error, now);
             if (outcome.suggestion() != null) {
                 suggestionService.propose(claim.organizationId(), claim.projectId(), claim.changeId(), outcome.suggestion());
@@ -229,7 +238,8 @@ class ChangeProcessingWorker {
         AiOutcome outcome = aiClassifiers.active()
                 .map(ai -> AiOutcome.failed(ai, AiOutcome.DID_NOT_FINISH))
                 .orElse(null);
-        change.completeProcessing(files, ChangeAiMerge.merge(rules, outcome), now);
+        change.completeProcessing(files, ChangeAiMerge.merge(rules, outcome, null), now);
+        duplicateDetector.detect(change);
         job.complete(AI_DID_NOT_FINISH, now);
         log.warn("Completed change {} without AI because its classification did not finish.", change.getId());
     }

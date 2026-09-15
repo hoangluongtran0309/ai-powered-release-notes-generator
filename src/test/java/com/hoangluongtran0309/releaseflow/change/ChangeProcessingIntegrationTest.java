@@ -163,6 +163,8 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(change.isNeedsReview()).isFalse();
         assertThat(change.getReviewTriggers()).isEmpty();
         assertThat(change.getClassificationReasons()).containsExactly("Title type \"feat\"");
+        // Without an AI answer, context is not assessed.
+        assertThat(change.getContext()).isNull();
     }
 
     @Test

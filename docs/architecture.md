@@ -156,6 +156,13 @@ changes
   reviewed_by (composite FK with organization_id -> app_users), reviewer_name, reviewed_at
   neutral_summary (jsonb), content_language, audience_narratives (jsonb, keyed by audience code)
   summary_edited_by (composite FK with organization_id -> app_users), summary_editor_name, summary_edited_at
+  context_score (0-100), context_status (SUFFICIENT | INSUFFICIENT), context_reasons (jsonb); null when not assessed
+
+duplicate_candidates
+  id (UUID PK)
+  (change_id, organization_id, project_id) and (duplicate_of_id, organization_id, project_id) FK -> changes, ON DELETE CASCADE
+  change_id + duplicate_of_id unique, distinct; similarity (0-1), evidence (jsonb: title, content, paths)
+  status (OPEN | CONFIRMED | DISMISSED), decided_by (composite FK -> app_users), decider_name, created_at, decided_at
 
 category_definitions
   id (UUID PK)
@@ -370,8 +377,8 @@ classification" to changes recorded before it ran.
 `GET /api/projects/{projectId}/changes`. It first resolves the Project through
 `ProjectService.get` with the principal's Organization ID, so another tenant's
 Project is reported as not found. It then queries changes by both Organization
-and Project ID, optionally filtered by category code and review status, newest
-merge first. Cards show each change's category snapshot, a pending category
+and Project ID, optionally filtered by category code, review status, and
+insufficient context, newest merge first. Cards show each change's category snapshot, a pending category
 proposal, and, for administrators, the forms that decide it. Unsupported filter values return `400 invalid_change_filter`. The
 page defaults to the first Project and uses a plain GET form for filters.
 
@@ -434,6 +441,41 @@ code, turns `_` into `-`, and limits the result to 16 characters.
 `GET|PUT /api/organization/output-language`. Changing the tag is
 administrator-only by URL rule. The worker reads the tag once per change and
 records it as the summary's `content_language`.
+
+## Review signals
+
+Two signals add review triggers after classification; they never settle,
+merge, or remove a change. See
+[ADR-0013](adr/0013-context-sufficiency-and-duplicates.md).
+`ClassificationSettings` reads and validates their thresholds at startup
+(`releaseflow.classification.context-threshold`, default 60;
+`releaseflow.classification.duplicate-threshold`, default 0.82).
+
+- **Context sufficiency.**
+  - The AI request carries `context_threshold`, and the schema requires
+    `context_sufficiency` with a score and reasons. The parser rounds and
+    clamps the score and keeps at most five reasons.
+  - `ContextSufficiency.assess` lowers the score with the fixed caps for an
+    empty description (30), a short title (50), and a generic title (40), and
+    merges their reason codes after the AI's.
+  - `ChangeAiMerge` assesses only a successful answer and adds one
+    `CONTEXT_INSUFFICIENT` trigger below the threshold.
+  - `changes_context_consistent` keeps the three context columns together, in
+    range, and present only with a successful AI attempt.
+- **Possible duplicates.**
+  - `DuplicateDetector` runs in the worker's completing transaction, also when
+    a stalled classification is finished without AI. It reads at most 500
+    other processed changes of the Project received in the last 180 days by the
+    application clock.
+  - `DuplicateSimilarity` compares title and content trigrams after NFKC,
+    lower-casing, and collapsing other characters, and the changed and
+    previous file paths when both sides list files.
+  - Pairs at or above the threshold become `duplicate_candidates` rows (at
+    most five, most similar first) and `DUPLICATE_CANDIDATE` triggers on the
+    new change through `Change.addReviewTriggers`, which only adds.
+  - `DuplicateCandidateService` lists pairs with both sides for the Inbox and
+    REST, and records one decision per pair; a second decision is
+    `409 duplicate_candidate_decided`.
 
 ## Category catalog
 

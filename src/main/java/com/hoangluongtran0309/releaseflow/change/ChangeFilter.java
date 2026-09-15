@@ -3,12 +3,19 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 
 /**
- * Optional Change Inbox filters. A null category or status means "all". The category is
- * a code of the catalog, compared with the code each change recorded.
+ * Optional Change Inbox filters. A null category, status, or context means "all". The
+ * category is a code of the catalog, compared with the code each change recorded; the
+ * context filter keeps changes whose context was found insufficient.
  */
-record ChangeFilter(String category, ReviewStatus status) {
+record ChangeFilter(String category, ReviewStatus status, boolean insufficientContext) {
+
+    static final String INSUFFICIENT_CONTEXT = "insufficient";
 
     static ChangeFilter parse(String category, String status) {
+        return parse(category, status, null);
+    }
+
+    static ChangeFilter parse(String category, String status, String context) {
         String parsedCategory = null;
         if (category != null && !category.isBlank()) {
             parsedCategory = CategoryRef.normalize(category).orElseThrow(() -> new InvalidChangeFilterException(
@@ -21,7 +28,14 @@ record ChangeFilter(String category, ReviewStatus status) {
                     "Status must be one of: needs-review, classified, reviewed."
             ));
         }
-        return new ChangeFilter(parsedCategory, parsedStatus);
+        boolean insufficientContext = false;
+        if (context != null && !context.isBlank()) {
+            if (!INSUFFICIENT_CONTEXT.equals(context.strip())) {
+                throw new InvalidChangeFilterException("Context must be insufficient.");
+            }
+            insufficientContext = true;
+        }
+        return new ChangeFilter(parsedCategory, parsedStatus, insufficientContext);
     }
 
     Boolean needsReview() {
