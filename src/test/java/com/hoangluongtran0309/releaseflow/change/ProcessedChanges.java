@@ -24,7 +24,8 @@ final class ProcessedChanges {
     }
 
     static Change processed(UUID id, UUID organizationId, UUID projectId, MergedPullRequest pullRequest) {
-        Change change = Change.received(id, organizationId, projectId, pullRequest, UUID.randomUUID(), Instant.now());
+        Change change = Change.received(id, organizationId, projectId, null, pullRequest, ChangeOrigin.WEBHOOK,
+                UUID.randomUUID(), Instant.now());
         change.completeProcessing(
                 ORDINARY_FILES,
                 ChangeAiMerge.merge(ChangeClassifier.classify(pullRequest, ORDINARY_FILES, RULES, TestCategories.CATALOG), null, null),

@@ -38,7 +38,7 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
     private ProjectRepository projectRepository;
 
     @Autowired
-    private GitHubIntegrationRepository integrationRepository;
+    private IntegrationSourceRepository integrationRepository;
 
     @Autowired
     private AppUserRepository appUserRepository;
@@ -88,14 +88,14 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
         MockHttpSession session = registerAndLogin("owner@example.com", "owner-password");
         UUID connected = createProject(session, "Connected");
         UUID duplicate = createProject(session, "Duplicate");
-        mockMvc.perform(post("/projects/{projectId}/github-integration", connected)
+        mockMvc.perform(post("/projects/{projectId}/sources", connected)
                         .session(session)
                         .with(csrf())
                         .param("owner", "acme")
                         .param("repository", "releaseflow"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/projects/{projectId}/github-integration", duplicate)
+        mockMvc.perform(post("/projects/{projectId}/sources", duplicate)
                         .session(session)
                         .with(csrf())
                         .param("owner", " Acme ")
@@ -117,7 +117,7 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
         MockHttpSession session = registerAndLogin("owner@example.com", "owner-password");
         UUID projectId = createProject(session, "ReleaseFlow");
 
-        mockMvc.perform(post("/projects/{projectId}/github-integration", projectId)
+        mockMvc.perform(post("/projects/{projectId}/sources", projectId)
                         .session(session)
                         .with(csrf())
                         .param("owner", " Acme ")
@@ -145,19 +145,19 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
         UUID firstProject = createProject(first, "First");
         MockHttpSession second = registerAndLogin("second@example.com", "second-password");
 
-        mockMvc.perform(post("/projects/{projectId}/github-integration", firstProject)
+        mockMvc.perform(post("/projects/{projectId}/sources", firstProject)
                         .session(second)
                         .with(csrf())
                         .param("owner", "acme")
                         .param("repository", "releaseflow"))
                 .andExpect(status().isNotFound())
                 .andExpect(view().name("projects"))
-                .andExpect(model().attributeHasErrors("githubIntegrationRequest"))
+                .andExpect(model().attributeHasErrors("sourceRequest"))
                 .andExpect(model().attribute("pageError", "Project was not found."))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Project was not found.")));
 
         UUID secondProject = createProject(second, "Second");
-        mockMvc.perform(post("/projects/{projectId}/github-integration", secondProject)
+        mockMvc.perform(post("/projects/{projectId}/sources", secondProject)
                         .session(second)
                         .with(csrf())
                         .param("owner", "bad/owner")
@@ -165,7 +165,7 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("projects"))
                 .andExpect(model().attributeHasFieldErrors(
-                        "githubIntegrationRequest", "owner", "repository"
+                        "sourceRequest", "owner", "repository"
                 ))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("value=\"bad/owner\"")));
 

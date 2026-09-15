@@ -52,7 +52,7 @@ class InvitationIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         jdbcTemplate.update("DELETE FROM organization_invitations");
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
@@ -244,10 +244,10 @@ class InvitationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
         UUID projectId = UUID.fromString(JsonPath.read(project.getResponse().getContentAsString(), "$.id"));
-        mockMvc.perform(post("/api/projects/{id}/github-integration", projectId).session(member).with(csrf())
+        mockMvc.perform(post("/api/projects/{id}/sources", projectId).session(member).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"owner\":\"acme\",\"repository\":\"app\"}"))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/projects/{id}/github-integration", projectId).session(admin.session()).with(csrf())
+        mockMvc.perform(post("/api/projects/{id}/sources", projectId).session(admin.session()).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"owner\":\"acme\",\"repository\":\"app\"}"))
                 .andExpect(status().isCreated());
 

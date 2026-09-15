@@ -12,11 +12,7 @@ import java.util.UUID;
 
 interface ChangeRepository extends JpaRepository<Change, UUID> {
 
-    boolean existsByProjectIdAndOrganizationIdAndPullRequestNumber(
-            UUID projectId,
-            UUID organizationId,
-            int pullRequestNumber
-    );
+    boolean existsBySourceIdAndExternalId(UUID sourceId, String externalId);
 
     Optional<Change> findByIdAndOrganizationIdAndProjectId(UUID id, UUID organizationId, UUID projectId);
 

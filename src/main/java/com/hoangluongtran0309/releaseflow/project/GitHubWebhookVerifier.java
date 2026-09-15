@@ -23,16 +23,16 @@ public class GitHubWebhookVerifier {
     private static final String SIGNATURE_PREFIX = "sha256=";
     private static final int SIGNATURE_HEX_LENGTH = 64;
 
-    private final GitHubIntegrationRepository integrationRepository;
+    private final IntegrationSourceRepository sourceRepository;
     private final CredentialCipher credentialCipher;
 
-    GitHubWebhookVerifier(GitHubIntegrationRepository integrationRepository, CredentialCipher credentialCipher) {
-        this.integrationRepository = integrationRepository;
+    GitHubWebhookVerifier(IntegrationSourceRepository sourceRepository, CredentialCipher credentialCipher) {
+        this.sourceRepository = sourceRepository;
         this.credentialCipher = credentialCipher;
     }
 
     /**
-     * Resolves the integration addressed by the untrusted path and returns it only
+     * Resolves the source addressed by the untrusted path and returns it only
      * when its own secret produced the X-Hub-Signature-256 value for these exact bytes.
      */
     public Optional<VerifiedGitHubWebhook> verify(String webhookId, String signatureHeader, byte[] body) {
@@ -41,40 +41,40 @@ public class GitHubWebhookVerifier {
         if (suppliedSignature.isEmpty() || parsedWebhookId.isEmpty()) {
             return Optional.empty();
         }
-        return integrationRepository.findByWebhookId(parsedWebhookId.get())
-                .filter(integration -> signatureMatches(integration, body, suppliedSignature.get()))
-                .map(integration -> new VerifiedGitHubWebhook(
-                        integration.getOrganizationId(),
-                        integration.getProjectId(),
-                        integration.getId(),
-                        integration.getRepositoryOwner(),
-                        integration.getRepositoryName()
+        return sourceRepository.findByWebhookId(parsedWebhookId.get())
+                .filter(source -> signatureMatches(source, body, suppliedSignature.get()))
+                .map(source -> new VerifiedGitHubWebhook(
+                        source.getOrganizationId(),
+                        source.getProjectId(),
+                        source.getId(),
+                        source.getRepositoryOwner(),
+                        source.getRepositoryName()
                 ));
     }
 
     @Transactional
     public void recordDelivery(VerifiedGitHubWebhook webhook, Instant deliveredAt) {
-        integrationRepository.recordDelivery(webhook.integrationId(), webhook.organizationId(), deliveredAt);
+        sourceRepository.recordDelivery(webhook.sourceId(), webhook.organizationId(), deliveredAt);
     }
 
-    private boolean signatureMatches(GitHubIntegration integration, byte[] body, byte[] suppliedSignature) {
+    private boolean signatureMatches(IntegrationSource source, byte[] body, byte[] suppliedSignature) {
         final String secret;
         try {
             secret = credentialCipher.decrypt(
                     new CredentialCipher.EncryptedSecret(
-                            integration.getSecretNonce(),
-                            integration.getSecretCiphertext()
+                            source.getSecretNonce(),
+                            source.getSecretCiphertext()
                     ),
-                    GitHubIntegrationService.additionalAuthenticatedData(
-                            integration.getOrganizationId(),
-                            integration.getProjectId(),
-                            integration.getId(),
-                            integration.getRepositoryOwner(),
-                            integration.getRepositoryName()
+                    IntegrationSourceService.additionalAuthenticatedData(
+                            source.getOrganizationId(),
+                            source.getProjectId(),
+                            source.getId(),
+                            source.getRepositoryOwner(),
+                            source.getRepositoryName()
                     )
             );
         } catch (IllegalStateException exception) {
-            log.warn("Could not decrypt the webhook secret of GitHub integration {}.", integration.getId());
+            log.warn("Could not decrypt the webhook secret of source {}.", source.getId());
             return false;
         }
         return MessageDigest.isEqual(hmacSha256(secret, body), suppliedSignature);

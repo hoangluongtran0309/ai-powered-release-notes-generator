@@ -14,19 +14,25 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+/**
+ * A Project's integration sources. Each GitHub repository gets its own webhook ID and
+ * signing secret, revealed once, and an optional write-only access token. Secrets and
+ * tokens are encrypted with authenticated data that binds them to their source.
+ */
 @Service
-class GitHubIntegrationService {
+public class IntegrationSourceService {
 
     private static final int WEBHOOK_SECRET_BYTES = 32;
-    private static final String PROJECT_UNIQUE_CONSTRAINT = "github_integrations_project_unique";
-    private static final String REPOSITORY_UNIQUE_CONSTRAINT = "github_integrations_repository_unique";
+    private static final String EXTERNAL_UNIQUE_CONSTRAINT = "integration_sources_external_unique";
     private static final String TOKEN_PURPOSE = "github-access-token";
+    private static final String WEBHOOK_DELIVERY = "WEBHOOK";
 
     private final ProjectRepository projectRepository;
-    private final GitHubIntegrationRepository integrationRepository;
+    private final IntegrationSourceRepository sourceRepository;
     private final CredentialCipher credentialCipher;
     private final GitHubApiClient gitHubApiClient;
     private final TransactionTemplate transactionTemplate;
@@ -34,9 +40,9 @@ class GitHubIntegrationService {
     private final SecureRandom secureRandom;
 
     @Autowired
-    GitHubIntegrationService(
+    IntegrationSourceService(
             ProjectRepository projectRepository,
-            GitHubIntegrationRepository integrationRepository,
+            IntegrationSourceRepository sourceRepository,
             CredentialCipher credentialCipher,
             GitHubApiClient gitHubApiClient,
             PlatformTransactionManager transactionManager,
@@ -44,7 +50,7 @@ class GitHubIntegrationService {
     ) {
         this(
                 projectRepository,
-                integrationRepository,
+                sourceRepository,
                 credentialCipher,
                 gitHubApiClient,
                 transactionManager,
@@ -53,9 +59,9 @@ class GitHubIntegrationService {
         );
     }
 
-    GitHubIntegrationService(
+    IntegrationSourceService(
             ProjectRepository projectRepository,
-            GitHubIntegrationRepository integrationRepository,
+            IntegrationSourceRepository sourceRepository,
             CredentialCipher credentialCipher,
             GitHubApiClient gitHubApiClient,
             PlatformTransactionManager transactionManager,
@@ -63,7 +69,7 @@ class GitHubIntegrationService {
             SecureRandom secureRandom
     ) {
         this.projectRepository = projectRepository;
-        this.integrationRepository = integrationRepository;
+        this.sourceRepository = sourceRepository;
         this.credentialCipher = credentialCipher;
         this.gitHubApiClient = gitHubApiClient;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -71,46 +77,35 @@ class GitHubIntegrationService {
         this.secureRandom = secureRandom;
     }
 
+    /**
+     * Connects a GitHub repository to a Project. A repository belongs to at most one
+     * Project of the Organization; a Project may have several.
+     */
     @Transactional
-    GitHubIntegrationCreated configure(
-            UUID organizationId,
-            UUID projectId,
-            GitHubIntegrationRequest request
-    ) {
-        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(ProjectNotFoundException::new);
+    public IntegrationSourceCreated create(UUID organizationId, UUID projectId, IntegrationSourceRequest request) {
+        requireProject(organizationId, projectId);
 
         String owner = canonicalize(request.getOwner());
         String repository = canonicalize(request.getRepository());
-        if (integrationRepository.existsByProjectIdAndOrganizationId(projectId, organizationId)) {
-            throw new GitHubIntegrationAlreadyConfiguredException();
-        }
-        if (integrationRepository.existsByOrganizationIdAndRepositoryOwnerAndRepositoryName(
+        if (sourceRepository.existsByOrganizationIdAndSourceTypeAndExternalProjectKey(
                 organizationId,
-                owner,
-                repository
+                SourceType.GITHUB,
+                owner + "/" + repository
         )) {
             throw new GitHubRepositoryAlreadyConnectedException();
         }
 
-        UUID integrationId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
         UUID webhookId = UUID.randomUUID();
         Instant createdAt = clock.instant();
         String webhookSecret = generateWebhookSecret();
-        byte[] authenticatedData = additionalAuthenticatedData(
-                organizationId,
-                projectId,
-                integrationId,
-                owner,
-                repository
-        );
         CredentialCipher.EncryptedSecret encryptedSecret = credentialCipher.encrypt(
                 webhookSecret,
-                authenticatedData
+                additionalAuthenticatedData(organizationId, projectId, sourceId, owner, repository)
         );
 
-        GitHubIntegration integration = new GitHubIntegration(
-                integrationId,
+        IntegrationSource source = new IntegrationSource(
+                sourceId,
                 organizationId,
                 projectId,
                 owner,
@@ -121,14 +116,15 @@ class GitHubIntegrationService {
                 createdAt
         );
         try {
-            integrationRepository.saveAndFlush(integration);
+            sourceRepository.saveAndFlush(source);
         } catch (DataIntegrityViolationException exception) {
-            throw translateConstraintViolation(exception);
+            throw violates(exception, EXTERNAL_UNIQUE_CONSTRAINT) ? new GitHubRepositoryAlreadyConnectedException() : exception;
         }
 
-        return new GitHubIntegrationCreated(
-                integrationId,
+        return new IntegrationSourceCreated(
+                sourceId,
                 projectId,
+                SourceType.GITHUB,
                 owner,
                 repository,
                 webhookId,
@@ -138,17 +134,31 @@ class GitHubIntegrationService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public List<IntegrationSourceView> list(UUID organizationId, UUID projectId) {
+        requireProject(organizationId, projectId);
+        return sourceRepository.findAllByOrganizationIdAndProjectIdOrderByCreatedAtAscIdAsc(organizationId, projectId)
+                .stream()
+                .map(IntegrationSourceService::view)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public IntegrationSourceView get(UUID organizationId, UUID projectId, UUID sourceId) {
+        return view(find(organizationId, projectId, sourceId));
+    }
+
     /**
      * Stores a new access token after GitHub confirms it can read the repository's pull
      * requests. The GitHub call runs between two short transactions, never inside one.
      */
-    void replaceToken(UUID organizationId, UUID projectId, GitHubTokenRequest request) {
+    public void replaceToken(UUID organizationId, UUID projectId, UUID sourceId, GitHubTokenRequest request) {
         String token = request.getToken();
-        GitHubIntegration integration = transactionTemplate.execute(status -> find(organizationId, projectId));
+        IntegrationSource source = transactionTemplate.execute(status -> find(organizationId, projectId, sourceId));
 
         GitHubAccess access = gitHubApiClient.checkPullRequestAccess(
-                integration.getRepositoryOwner(),
-                integration.getRepositoryName(),
+                source.getRepositoryOwner(),
+                source.getRepositoryName(),
                 token
         );
         if (access == GitHubAccess.REJECTED) {
@@ -159,7 +169,7 @@ class GitHubIntegrationService {
         }
 
         transactionTemplate.executeWithoutResult(status -> {
-            GitHubIntegration current = find(organizationId, projectId);
+            IntegrationSource current = find(organizationId, projectId, sourceId);
             current.replaceToken(
                     credentialCipher.encrypt(token, tokenAuthenticatedData(current)),
                     clock.instant()
@@ -167,21 +177,56 @@ class GitHubIntegrationService {
         });
     }
 
-    private GitHubIntegration find(UUID organizationId, UUID projectId) {
+    /**
+     * Records how reading a source's history ended. A refused credential marks the
+     * source as failing until a new token is saved.
+     */
+    @Transactional
+    public void recordSync(UUID organizationId, UUID sourceId, Instant at, String errorCode, boolean credentialRejected) {
+        sourceRepository.findByIdAndOrganizationId(sourceId, organizationId)
+                .ifPresent(source -> source.recordSync(at, errorCode, credentialRejected));
+    }
+
+    private IntegrationSource find(UUID organizationId, UUID projectId, UUID sourceId) {
+        requireProject(organizationId, projectId);
+        return sourceRepository.findByIdAndOrganizationIdAndProjectId(sourceId, organizationId, projectId)
+                .orElseThrow(SourceNotFoundException::new);
+    }
+
+    private void requireProject(UUID organizationId, UUID projectId) {
         projectRepository.findByIdAndOrganizationId(projectId, organizationId)
                 .orElseThrow(ProjectNotFoundException::new);
-        return integrationRepository.findByProjectIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(GitHubIntegrationNotFoundException::new);
+    }
+
+    static IntegrationSourceView view(IntegrationSource source) {
+        return new IntegrationSourceView(
+                source.getId(),
+                source.getSourceType(),
+                WEBHOOK_DELIVERY,
+                source.getExternalProjectKey(),
+                source.getRepositoryOwner(),
+                source.getRepositoryName(),
+                source.getWebhookId(),
+                webhookPath(source.getWebhookId()),
+                source.getCreatedAt(),
+                source.getLastDeliveryAt(),
+                source.hasAccessToken(),
+                source.getTokenUpdatedAt(),
+                source.getConnectionStatus(),
+                source.getLastSyncAt(),
+                source.getLastErrorCode()
+        );
     }
 
     static String webhookPath(UUID webhookId) {
         return "/webhooks/github/" + webhookId;
     }
 
+    // Unchanged since sources were GitHub integrations, so existing ciphertexts still decrypt.
     static byte[] additionalAuthenticatedData(
             UUID organizationId,
             UUID projectId,
-            UUID integrationId,
+            UUID sourceId,
             String owner,
             String repository
     ) {
@@ -189,7 +234,7 @@ class GitHubIntegrationService {
                         "\n",
                         organizationId.toString(),
                         projectId.toString(),
-                        integrationId.toString(),
+                        sourceId.toString(),
                         owner,
                         repository
                 )
@@ -197,14 +242,14 @@ class GitHubIntegrationService {
     }
 
     // The purpose line keeps a token ciphertext from being accepted as a webhook secret.
-    static byte[] tokenAuthenticatedData(GitHubIntegration integration) {
+    static byte[] tokenAuthenticatedData(IntegrationSource source) {
         return String.join(
                         "\n",
-                        integration.getOrganizationId().toString(),
-                        integration.getProjectId().toString(),
-                        integration.getId().toString(),
-                        integration.getRepositoryOwner(),
-                        integration.getRepositoryName(),
+                        source.getOrganizationId().toString(),
+                        source.getProjectId().toString(),
+                        source.getId().toString(),
+                        source.getRepositoryOwner(),
+                        source.getRepositoryName(),
                         TOKEN_PURPOSE
                 )
                 .getBytes(StandardCharsets.UTF_8);
@@ -220,18 +265,12 @@ class GitHubIntegrationService {
         return value.strip().toLowerCase(Locale.ROOT);
     }
 
-    private static RuntimeException translateConstraintViolation(DataIntegrityViolationException exception) {
-        Throwable cause = exception;
-        while (cause != null) {
-            String message = cause.getMessage();
-            if (message != null && message.contains(PROJECT_UNIQUE_CONSTRAINT)) {
-                return new GitHubIntegrationAlreadyConfiguredException();
+    private static boolean violates(DataIntegrityViolationException exception, String constraint) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause.getMessage() != null && cause.getMessage().contains(constraint)) {
+                return true;
             }
-            if (message != null && message.contains(REPOSITORY_UNIQUE_CONSTRAINT)) {
-                return new GitHubRepositoryAlreadyConnectedException();
-            }
-            cause = cause.getCause();
         }
-        return exception;
+        return false;
     }
 }

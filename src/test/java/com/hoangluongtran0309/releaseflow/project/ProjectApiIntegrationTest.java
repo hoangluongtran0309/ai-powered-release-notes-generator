@@ -41,7 +41,7 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
     private ProjectRepository projectRepository;
 
     @Autowired
-    private GitHubIntegrationRepository integrationRepository;
+    private IntegrationSourceRepository integrationRepository;
 
     @Autowired
     private AppUserRepository appUserRepository;
@@ -67,7 +67,7 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
         RegisteredOwner owner = registerAndLogin("owner@example.com", "owner-password");
         UUID projectId = createProject(owner.session(), " ReleaseFlow ");
 
-        MvcResult configured = mockMvc.perform(post("/api/projects/{projectId}/github-integration", projectId)
+        MvcResult configured = mockMvc.perform(post("/api/projects/{projectId}/sources", projectId)
                         .session(owner.session())
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -76,6 +76,7 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.type").value("GITHUB"))
                 .andExpect(jsonPath("$.owner").value("acme-corp"))
                 .andExpect(jsonPath("$.repository").value("releaseflow_app"))
                 .andExpect(jsonPath("$.webhookPath", matchesPattern("/webhooks/github/[0-9a-f-]{36}")))
@@ -85,10 +86,10 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
         String body = configured.getResponse().getContentAsString();
         String webhookSecret = JsonPath.read(body, "$.webhookSecret");
         UUID integrationId = UUID.fromString(JsonPath.read(body, "$.id"));
-        GitHubIntegration stored = integrationRepository
-                .findByProjectIdAndOrganizationId(projectId, owner.registration().organizationId())
+        IntegrationSource stored = integrationRepository
+                .findByIdAndOrganizationIdAndProjectId(integrationId, owner.registration().organizationId(), projectId)
                 .orElseThrow();
-        byte[] aad = GitHubIntegrationService.additionalAuthenticatedData(
+        byte[] aad = IntegrationSourceService.additionalAuthenticatedData(
                 owner.registration().organizationId(),
                 projectId,
                 integrationId,
@@ -106,10 +107,12 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(projectId.toString()))
                 .andExpect(jsonPath("$[0].name").value("ReleaseFlow"))
-                .andExpect(jsonPath("$[0].githubIntegration.owner").value("acme-corp"))
-                .andExpect(jsonPath("$[0].githubIntegration.webhookSecret").doesNotExist())
-                .andExpect(jsonPath("$[0].githubIntegration.secretNonce").doesNotExist())
-                .andExpect(jsonPath("$[0].githubIntegration.secretCiphertext").doesNotExist());
+                .andExpect(jsonPath("$[0].sources[0].owner").value("acme-corp"))
+                .andExpect(jsonPath("$[0].sources[0].externalProjectKey").value("acme-corp/releaseflow_app"))
+                .andExpect(jsonPath("$[0].sources[0].connectionStatus").value("ACTIVE"))
+                .andExpect(jsonPath("$[0].sources[0].webhookSecret").doesNotExist())
+                .andExpect(jsonPath("$[0].sources[0].secretNonce").doesNotExist())
+                .andExpect(jsonPath("$[0].sources[0].secretCiphertext").doesNotExist());
     }
 
     @Test
@@ -128,7 +131,7 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(firstProject.toString()));
-        mockMvc.perform(post("/api/projects/{projectId}/github-integration", firstProject)
+        mockMvc.perform(post("/api/projects/{projectId}/sources", firstProject)
                         .session(second.session())
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -139,19 +142,28 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
     }
 
     @Test
-    void rejectsDuplicateIntegrationAndRepositoryWithinTenant() throws Exception {
+    void aProjectHasSeveralRepositoriesButARepositoryOneProject() throws Exception {
         RegisteredOwner owner = registerAndLogin("owner@example.com", "owner-password");
         UUID firstProject = createProject(owner.session(), "First");
         UUID secondProject = createProject(owner.session(), "Second");
         configure(owner.session(), firstProject, "Acme", "ReleaseFlow")
                 .andExpect(status().isCreated());
 
-        configure(owner.session(), firstProject, "other", "repository")
+        configure(owner.session(), firstProject, "acme", "releaseflow-web")
+                .andExpect(status().isCreated());
+        configure(owner.session(), firstProject, "acme", "releaseflow")
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("github_integration_already_configured"));
+                .andExpect(jsonPath("$.code").value("github_repository_already_connected"));
         configure(owner.session(), secondProject, " ACME ", " releaseflow ")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("github_repository_already_connected"));
+        mockMvc.perform(get("/api/projects/{projectId}/sources", firstProject).session(owner.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].externalProjectKey").value(org.hamcrest.Matchers.contains(
+                        "acme/releaseflow", "acme/releaseflow-web")))
+                .andExpect(jsonPath("$[0].deliveryMechanism").value("WEBHOOK"));
+        mockMvc.perform(get("/api/projects/{projectId}/sources", UUID.randomUUID()).session(owner.session()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -200,7 +212,7 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
             String owner,
             String repository
     ) throws Exception {
-        return mockMvc.perform(post("/api/projects/{projectId}/github-integration", projectId)
+        return mockMvc.perform(post("/api/projects/{projectId}/sources", projectId)
                 .session(session)
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)

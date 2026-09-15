@@ -44,7 +44,7 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
     void clearDatabase() {
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
@@ -265,14 +265,14 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
     }
 
     private void insertIntegration(byte[] tokenNonce, byte[] tokenCiphertext, Instant tokenUpdatedAt) {
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update(
                 """
-                        INSERT INTO github_integrations
-                            (id, organization_id, project_id, repository_owner, repository_name, webhook_id,
-                             secret_nonce, secret_ciphertext, created_at, token_nonce, token_ciphertext,
-                             token_updated_at)
-                        VALUES (?, ?, ?, 'acme', 'releaseflow', ?, ?, ?, now(), ?, ?, ?)
+                        INSERT INTO integration_sources
+                            (id, organization_id, project_id, source_type, external_project_key, repository_owner,
+                             repository_name, webhook_id, secret_nonce, secret_ciphertext, created_at, token_nonce,
+                             token_ciphertext, token_updated_at)
+                        VALUES (?, ?, ?, 'GITHUB', 'acme/releaseflow', 'acme', 'releaseflow', ?, ?, ?, now(), ?, ?, ?)
                         """,
                 UUID.randomUUID(),
                 organization,

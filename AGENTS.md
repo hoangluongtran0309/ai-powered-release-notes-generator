@@ -8,13 +8,14 @@ deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
-signal, Project sensitive path, and multilingual release note slices: one
-Spring Boot application, PostgreSQL/Flyway V1-V17,
+signal, Project sensitive path, multilingual release note, and integration
+source slices: one Spring Boot application, PostgreSQL/Flyway V1-V18,
 administrator
 registration, member
 invitations with administrator and member roles, session
-authentication, tenant-scoped Projects, per-integration encrypted webhook
-secrets, a signature-verified webhook endpoint that records normalized merged
+authentication, tenant-scoped Projects with one or more GitHub repository
+sources, per-source encrypted webhook secrets, a resumable 90-day history
+import, a signature-verified webhook endpoint that records normalized merged
 pull requests idempotently, optional write-only GitHub access tokens, a durable
 `SKIP LOCKED` worker that lists changed files outside transactions,
 rule-based classification against a per-Organization category catalog with
@@ -68,6 +69,11 @@ Read `README.md`, `docs/architecture.md`, and
   the change itself through `ChangeReviewService`.
 - Background work uses its own job table, short claim and result
   transactions, and `FOR UPDATE SKIP LOCKED`; retries stay bounded.
+- A change is identified by its source and the source's ID for it. Webhooks and
+  imports record changes only through `ChangeIntake`, so neither duplicates the
+  other, and one import per source runs at a time.
+- Integration source ciphertexts are bound to the source's ID and repository;
+  never rewrite those columns, or existing secrets stop decrypting.
 - The sensitive-path list must compile and must not be empty. A Project's
   additions extend it and never remove any of it; they apply only to changes
   classified afterwards.

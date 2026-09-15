@@ -17,16 +17,18 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
+// Members read Projects and their sources; connecting a source and setting its token
+// are administrator only, by URL rule.
 @RestController
 @RequestMapping("/api/projects")
 public class ProjectApiController {
 
     private final ProjectService projectService;
-    private final GitHubIntegrationService integrationService;
+    private final IntegrationSourceService sourceService;
 
-    ProjectApiController(ProjectService projectService, GitHubIntegrationService integrationService) {
+    ProjectApiController(ProjectService projectService, IntegrationSourceService sourceService) {
         this.projectService = projectService;
-        this.integrationService = integrationService;
+        this.sourceService = sourceService;
     }
 
     @GetMapping
@@ -43,29 +45,35 @@ public class ProjectApiController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @PostMapping("/{projectId}/github-integration")
-    ResponseEntity<GitHubIntegrationCreated> configureGitHub(
+    @GetMapping("/{projectId}/sources")
+    List<IntegrationSourceView> sources(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId
+    ) {
+        return sourceService.list(principal.organizationId(), projectId);
+    }
+
+    // The webhook secret is in this response only.
+    @PostMapping("/{projectId}/sources")
+    ResponseEntity<IntegrationSourceCreated> createSource(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
-            @Valid @RequestBody GitHubIntegrationRequest request
+            @Valid @RequestBody IntegrationSourceRequest request
     ) {
-        GitHubIntegrationCreated created = integrationService.configure(
-                principal.organizationId(),
-                projectId,
-                request
-        );
+        IntegrationSourceCreated created = sourceService.create(principal.organizationId(), projectId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .cacheControl(CacheControl.noStore())
                 .body(created);
     }
 
-    @PutMapping("/{projectId}/github-integration/token")
-    ResponseEntity<Void> replaceGitHubToken(
+    @PutMapping("/{projectId}/sources/{sourceId}/token")
+    ResponseEntity<Void> replaceToken(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
+            @PathVariable UUID sourceId,
             @Valid @RequestBody GitHubTokenRequest request
     ) {
-        integrationService.replaceToken(principal.organizationId(), projectId, request);
+        sourceService.replaceToken(principal.organizationId(), projectId, sourceId, request);
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 }

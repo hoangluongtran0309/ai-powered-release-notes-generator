@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 
@@ -184,6 +185,6 @@ class GitHubApiClientTest {
     }
 
     private static GitHubApiClient client(Duration timeout) {
-        return new GitHubApiClient(GITHUB.baseUrl(), timeout, new ObjectMapper());
+        return new GitHubApiClient(GITHUB.baseUrl(), timeout, new ObjectMapper(), Clock.systemUTC());
     }
 }

@@ -47,7 +47,7 @@ class InvitationPageIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         jdbcTemplate.update("DELETE FROM organization_invitations");
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
@@ -148,9 +148,9 @@ class InvitationPageIntegrationTest extends PostgreSqlIntegrationTest {
         MockHttpSession member = login("second@example.com", "member-password-1");
         mockMvc.perform(get("/projects").session(member))
                 .andExpect(content().string(containsString("Only organization administrators can connect repositories.")))
-                .andExpect(content().string(not(matchesPattern("(?s).*action=\"/projects/[^\"]+/github-integration\".*"))));
+                .andExpect(content().string(not(matchesPattern("(?s).*action=\"/projects/[^\"]+/sources\".*"))));
         mockMvc.perform(get("/projects").session(admin))
-                .andExpect(content().string(matchesPattern("(?s).*action=\"/projects/[^\"]+/github-integration\".*")));
+                .andExpect(content().string(matchesPattern("(?s).*action=\"/projects/[^\"]+/sources\".*")));
     }
 
     private String issue(MockHttpSession admin, String email) throws Exception {

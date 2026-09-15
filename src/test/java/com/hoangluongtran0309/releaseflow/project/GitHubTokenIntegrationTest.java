@@ -48,7 +48,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
     private RegistrationService registrationService;
 
     @Autowired
-    private GitHubIntegrationRepository integrationRepository;
+    private IntegrationSourceRepository integrationRepository;
 
     @Autowired
     private GitHubRepositoryAccess repositoryAccess;
@@ -74,7 +74,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         GITHUB.reset();
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
@@ -93,20 +93,20 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
             assertThat(request.path()).isEqualTo("/repos/acme/releaseflow/pulls");
             assertThat(request.authorization()).isEqualTo("Bearer " + TOKEN);
         });
-        GitHubIntegration integration = integrationRepository.findAll().getFirst();
+        IntegrationSource integration = integrationRepository.findAll().getFirst();
         assertThat(integration.hasAccessToken()).isTrue();
         assertThat(new String(integration.getToken().ciphertext())).doesNotContain(TOKEN);
-        assertThat(repositoryAccess.find(owner.organizationId(), owner.projectId()))
+        assertThat(repositoryAccess.find(owner.organizationId(), owner.projectId(), owner.sourceId()))
                 .hasValueSatisfying(credentials -> {
                     assertThat(credentials.accessToken()).contains(TOKEN);
                     assertThat(credentials.toString()).doesNotContain(TOKEN);
                 });
-        assertThat(repositoryAccess.find(UUID.randomUUID(), owner.projectId())).isEmpty();
+        assertThat(repositoryAccess.find(UUID.randomUUID(), owner.projectId(), owner.sourceId())).isEmpty();
 
         mockMvc.perform(get("/api/projects").session(owner.session()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].githubIntegration.accessTokenConfigured").value(true))
-                .andExpect(jsonPath("$[0].githubIntegration.accessTokenUpdatedAt").isNotEmpty())
+                .andExpect(jsonPath("$[0].sources[0].accessTokenConfigured").value(true))
+                .andExpect(jsonPath("$[0].sources[0].accessTokenUpdatedAt").isNotEmpty())
                 .andExpect(content().string(not(containsString(TOKEN))));
         mockMvc.perform(get("/projects").session(owner.session()))
                 .andExpect(content().string(containsString("Replace access token")))
@@ -116,7 +116,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
         byte[] firstCiphertext = integration.getToken().ciphertext();
         mockMvc.perform(putToken(owner, "github_pat_second")).andExpect(status().isNoContent());
         assertThat(integrationRepository.findAll().getFirst().getToken().ciphertext()).isNotEqualTo(firstCiphertext);
-        assertThat(repositoryAccess.find(owner.organizationId(), owner.projectId()).orElseThrow().accessToken())
+        assertThat(repositoryAccess.find(owner.organizationId(), owner.projectId(), owner.sourceId()).orElseThrow().accessToken())
                 .contains("github_pat_second");
     }
 
@@ -162,19 +162,19 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
     }
 
     @Test
-    void requiresAnIntegrationInTheCallersOrganization() throws Exception {
+    void requiresASourceInTheCallersOrganization() throws Exception {
         Owner owner = registerAndLogin("owner@example.com");
-        UUID projectWithoutIntegration = createProject(owner.session());
+        UUID projectWithoutSource = createProject(owner.session());
         Owner other = connectedOwner("other@example.com");
 
-        mockMvc.perform(put("/api/projects/{projectId}/github-integration/token", projectWithoutIntegration)
+        mockMvc.perform(put("/api/projects/{projectId}/sources/{sourceId}/token", projectWithoutSource, other.sourceId())
                         .session(owner.session())
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"%s\"}".formatted(TOKEN)))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("github_integration_not_found"));
-        mockMvc.perform(put("/api/projects/{projectId}/github-integration/token", other.projectId())
+                .andExpect(jsonPath("$.code").value("source_not_found"));
+        mockMvc.perform(put("/api/projects/{projectId}/sources/{sourceId}/token", other.projectId(), other.sourceId())
                         .session(owner.session())
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -190,13 +190,13 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
         Owner owner = connectedOwner("owner@example.com");
         MockHttpSession member = memberOf(owner, "member@example.com");
 
-        mockMvc.perform(put("/api/projects/{projectId}/github-integration/token", owner.projectId())
+        mockMvc.perform(put("/api/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())
                         .session(member)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"%s\"}".formatted(TOKEN)))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(post("/projects/{projectId}/github-integration/token", owner.projectId())
+        mockMvc.perform(post("/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())
                         .session(member)
                         .with(csrf())
                         .param("token", TOKEN))
@@ -215,9 +215,9 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
         Owner owner = connectedOwner("owner@example.com");
         mockMvc.perform(get("/projects").session(owner.session()))
                 .andExpect(content().string(containsString("Add access token")))
-                .andExpect(content().string(containsString("Every new change needs review")));
+                .andExpect(content().string(containsString("Every new change from this repository needs review")));
 
-        mockMvc.perform(post("/projects/{projectId}/github-integration/token", owner.projectId())
+        mockMvc.perform(post("/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())
                         .session(owner.session())
                         .with(csrf())
                         .param("token", TOKEN))
@@ -228,7 +228,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(containsString("Configured")));
 
         GITHUB.failAccessCheck(403);
-        mockMvc.perform(post("/projects/{projectId}/github-integration/token", owner.projectId())
+        mockMvc.perform(post("/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())
                         .session(owner.session())
                         .with(csrf())
                         .param("token", "github_pat_rejected"))
@@ -236,7 +236,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(containsString("GitHub did not accept this token")))
                 .andExpect(content().string(not(containsString("github_pat_rejected"))));
 
-        mockMvc.perform(post("/projects/{projectId}/github-integration/token", owner.projectId())
+        mockMvc.perform(post("/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())
                         .session(owner.session())
                         .with(csrf())
                         .param("token", ""))
@@ -245,7 +245,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
     }
 
     private MockHttpServletRequestBuilder putToken(Owner owner, String token) {
-        return put("/api/projects/{projectId}/github-integration/token", owner.projectId())
+        return put("/api/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())
                 .session(owner.session())
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -255,13 +255,14 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
     private Owner connectedOwner(String email) throws Exception {
         Owner owner = registerAndLogin(email);
         UUID projectId = createProject(owner.session());
-        mockMvc.perform(post("/api/projects/{projectId}/github-integration", projectId)
+        String created = mockMvc.perform(post("/api/projects/{projectId}/sources", projectId)
                         .session(owner.session())
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"owner\":\"acme\",\"repository\":\"releaseflow\"}"))
-                .andExpect(status().isCreated());
-        return new Owner(owner.organizationId(), projectId, owner.session());
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return new Owner(owner.organizationId(), projectId, UUID.fromString(JsonPath.read(created, "$.id")), owner.session());
     }
 
     private UUID createProject(MockHttpSession session) throws Exception {
@@ -282,7 +283,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
         registration.setEmail(email);
         registration.setPassword("owner-password");
         RegistrationResult registered = registrationService.register(registration);
-        return new Owner(registered.organizationId(), null, login(email, "owner-password"));
+        return new Owner(registered.organizationId(), null, null, login(email, "owner-password"));
     }
 
     private MockHttpSession memberOf(Owner owner, String email) throws Exception {
@@ -309,6 +310,6 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
         return (MockHttpSession) login.getRequest().getSession(false);
     }
 
-    private record Owner(UUID organizationId, UUID projectId, MockHttpSession session) {
+    private record Owner(UUID organizationId, UUID projectId, UUID sourceId, MockHttpSession session) {
     }
 }

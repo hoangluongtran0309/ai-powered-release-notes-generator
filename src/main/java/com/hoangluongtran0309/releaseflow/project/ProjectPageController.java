@@ -23,16 +23,16 @@ import java.util.UUID;
 public class ProjectPageController {
 
     private final ProjectService projectService;
-    private final GitHubIntegrationService integrationService;
+    private final IntegrationSourceService sourceService;
     private final OutputLanguageService outputLanguageService;
 
     ProjectPageController(
             ProjectService projectService,
-            GitHubIntegrationService integrationService,
+            IntegrationSourceService sourceService,
             OutputLanguageService outputLanguageService
     ) {
         this.projectService = projectService;
-        this.integrationService = integrationService;
+        this.sourceService = sourceService;
         this.outputLanguageService = outputLanguageService;
     }
 
@@ -60,27 +60,23 @@ public class ProjectPageController {
         return "redirect:/projects";
     }
 
-    @PostMapping("/projects/{projectId}/github-integration")
-    String configureGitHub(
+    @PostMapping("/projects/{projectId}/sources")
+    String createSource(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
-            @Valid @ModelAttribute("githubIntegrationRequest") GitHubIntegrationRequest request,
+            @Valid @ModelAttribute("sourceRequest") IntegrationSourceRequest request,
             BindingResult bindingResult,
             Model model,
             HttpServletResponse response
     ) {
         if (bindingResult.hasErrors()) {
-            model.addAttribute("integrationProjectId", projectId);
+            model.addAttribute("sourceProjectId", projectId);
             addPageModel(principal, model);
             return "projects";
         }
 
         try {
-            GitHubIntegrationCreated created = integrationService.configure(
-                    principal.organizationId(),
-                    projectId,
-                    request
-            );
+            IntegrationSourceCreated created = sourceService.create(principal.organizationId(), projectId, request);
             response.setHeader("Cache-Control", CacheControl.noStore().getHeaderValue());
             model.addAttribute("integration", created);
             return "github-integration-created";
@@ -89,21 +85,22 @@ public class ProjectPageController {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             bindingResult.reject("project.notFound", exception.getMessage());
             model.addAttribute("pageError", exception.getMessage());
-        } catch (GitHubIntegrationAlreadyConfiguredException | GitHubRepositoryAlreadyConnectedException exception) {
+        } catch (GitHubRepositoryAlreadyConnectedException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
-            bindingResult.reject("githubIntegration.conflict", exception.getMessage());
-            model.addAttribute("integrationError", exception.getMessage());
+            bindingResult.reject("source.conflict", exception.getMessage());
+            model.addAttribute("sourceError", exception.getMessage());
         }
 
-        model.addAttribute("integrationProjectId", projectId);
+        model.addAttribute("sourceProjectId", projectId);
         addPageModel(principal, model);
         return "projects";
     }
 
-    @PostMapping("/projects/{projectId}/github-integration/token")
-    String replaceGitHubToken(
+    @PostMapping("/projects/{projectId}/sources/{sourceId}/token")
+    String replaceToken(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
+            @PathVariable UUID sourceId,
             @Valid @ModelAttribute("githubTokenRequest") GitHubTokenRequest request,
             BindingResult bindingResult,
             Model model,
@@ -111,9 +108,9 @@ public class ProjectPageController {
     ) {
         if (!bindingResult.hasErrors()) {
             try {
-                integrationService.replaceToken(principal.organizationId(), projectId, request);
+                sourceService.replaceToken(principal.organizationId(), projectId, sourceId, request);
                 return "redirect:/projects?tokenSaved";
-            } catch (ProjectNotFoundException | GitHubIntegrationNotFoundException exception) {
+            } catch (ProjectNotFoundException | SourceNotFoundException exception) {
                 response.setStatus(HttpStatus.NOT_FOUND.value());
                 model.addAttribute("pageError", exception.getMessage());
             } catch (GitHubTokenRejectedException exception) {
@@ -125,7 +122,7 @@ public class ProjectPageController {
             }
         }
         // The submitted token is never rendered back into the page.
-        model.addAttribute("tokenProjectId", projectId);
+        model.addAttribute("tokenSourceId", sourceId);
         addPageModel(principal, model);
         return "projects";
     }
@@ -156,8 +153,8 @@ public class ProjectPageController {
         if (!model.containsAttribute("projectRequest")) {
             model.addAttribute("projectRequest", new ProjectRequest());
         }
-        if (!model.containsAttribute("githubIntegrationRequest")) {
-            model.addAttribute("githubIntegrationRequest", new GitHubIntegrationRequest());
+        if (!model.containsAttribute("sourceRequest")) {
+            model.addAttribute("sourceRequest", new IntegrationSourceRequest());
         }
         if (!model.containsAttribute("githubTokenRequest")) {
             model.addAttribute("githubTokenRequest", new GitHubTokenRequest());

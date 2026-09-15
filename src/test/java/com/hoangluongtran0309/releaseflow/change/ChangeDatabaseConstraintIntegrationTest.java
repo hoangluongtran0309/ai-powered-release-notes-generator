@@ -34,6 +34,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     void clearDatabase() {
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
@@ -41,16 +42,55 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     }
 
     @Test
-    void recordsOneChangePerPullRequestWithinAProject() {
+    void recordsOneChangePerPullRequestWithinASource() {
         UUID organization = insertOrganization("First");
         UUID project = insertProject(organization);
-        UUID anotherProject = insertProject(organization);
-        insertChange(organization, project, 1, "Title", VALID_SHA);
+        UUID otherProject = insertProject(organization);
+        UUID web = insertSource(organization, project, "web");
+        UUID api = insertSource(organization, project, "api");
+        UUID elsewhere = insertSource(organization, otherProject, "elsewhere");
+        insertChange(organization, project, 1, "First", VALID_SHA);
+        insertChange(organization, project, 1, "Second", VALID_SHA);
+        insertChange(organization, project, 1, "Third", VALID_SHA);
+        String identify = "UPDATE changes SET source_id = ?, external_id = '1' WHERE title = ?";
 
-        assertThatThrownBy(() -> insertChange(organization, project, 1, "Other", VALID_SHA))
+        jdbcTemplate.update(identify, web, "First");
+        assertThatThrownBy(() -> jdbcTemplate.update(identify, web, "Second"))
+                .as("one change per pull request of a source")
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatCode(() -> insertChange(organization, anotherProject, 1, "Title", VALID_SHA))
+        assertThatCode(() -> jdbcTemplate.update(identify, api, "Second"))
+                .as("two repositories of a Project may both have pull request #1")
                 .doesNotThrowAnyException();
+        assertThatThrownBy(() -> jdbcTemplate.update(identify, elsewhere, "Third"))
+                .as("a source of another Project")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET source_id = ? WHERE title = 'Third'", api))
+                .as("a source needs the change's ID in it")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET origin = 'IMPORT' WHERE title = 'Third'"))
+                .as("an imported change has no delivery")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(
+                "UPDATE changes SET origin = 'IMPORT', delivery_id = NULL WHERE title = 'Third'"))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET delivery_id = NULL WHERE title = 'First'"))
+                .as("a webhook change keeps its delivery")
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private UUID insertSource(UUID organizationId, UUID projectId, String repository) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO integration_sources
+                            (id, organization_id, project_id, source_type, external_project_key, repository_owner,
+                             repository_name, webhook_id, secret_nonce, secret_ciphertext, created_at)
+                        VALUES (?, ?, ?, 'GITHUB', ?, 'acme', ?, ?, ?, ?, now())
+                        """,
+                id, organizationId, projectId, "acme/" + repository, repository, UUID.randomUUID(), new byte[12],
+                new byte[17]
+        );
+        return id;
     }
 
     @Test

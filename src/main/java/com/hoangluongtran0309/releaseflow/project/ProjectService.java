@@ -8,23 +8,22 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 public class ProjectService {
 
     private final ProjectRepository projectRepository;
-    private final GitHubIntegrationRepository integrationRepository;
+    private final IntegrationSourceRepository sourceRepository;
     private final Clock clock;
 
     ProjectService(
             ProjectRepository projectRepository,
-            GitHubIntegrationRepository integrationRepository,
+            IntegrationSourceRepository sourceRepository,
             Clock clock
     ) {
         this.projectRepository = projectRepository;
-        this.integrationRepository = integrationRepository;
+        this.sourceRepository = sourceRepository;
         this.clock = clock;
     }
 
@@ -37,7 +36,7 @@ public class ProjectService {
                 request.getName(),
                 createdAt
         ));
-        return toView(project, null);
+        return toView(project, List.of());
     }
 
     @Transactional(readOnly = true)
@@ -46,7 +45,7 @@ public class ProjectService {
                 .orElseThrow(ProjectNotFoundException::new);
         return toView(
                 project,
-                integrationRepository.findByProjectIdAndOrganizationId(projectId, organizationId).orElse(null)
+                sourceRepository.findAllByOrganizationIdAndProjectIdOrderByCreatedAtAscIdAsc(organizationId, projectId)
         );
     }
 
@@ -57,35 +56,25 @@ public class ProjectService {
             return List.of();
         }
 
-        Map<UUID, GitHubIntegration> integrationsByProject = integrationRepository
-                .findAllByOrganizationIdAndProjectIdIn(
+        Map<UUID, List<IntegrationSource>> sourcesByProject = sourceRepository
+                .findAllByOrganizationIdAndProjectIdInOrderByCreatedAtAscIdAsc(
                         organizationId,
                         projects.stream().map(Project::getId).toList()
                 )
                 .stream()
-                .collect(Collectors.toMap(GitHubIntegration::getProjectId, Function.identity()));
+                .collect(Collectors.groupingBy(IntegrationSource::getProjectId));
 
         return projects.stream()
-                .map(project -> toView(project, integrationsByProject.get(project.getId())))
+                .map(project -> toView(project, sourcesByProject.getOrDefault(project.getId(), List.of())))
                 .toList();
     }
 
-    private static ProjectView toView(Project project, GitHubIntegration integration) {
+    private static ProjectView toView(Project project, List<IntegrationSource> sources) {
         return new ProjectView(
                 project.getId(),
                 project.getName(),
                 project.getCreatedAt(),
-                integration == null ? null : new GitHubIntegrationView(
-                        integration.getId(),
-                        integration.getRepositoryOwner(),
-                        integration.getRepositoryName(),
-                        integration.getWebhookId(),
-                        GitHubIntegrationService.webhookPath(integration.getWebhookId()),
-                        integration.getCreatedAt(),
-                        integration.getLastDeliveryAt(),
-                        integration.hasAccessToken(),
-                        integration.getTokenUpdatedAt()
-                )
+                sources.stream().map(IntegrationSourceService::view).toList()
         );
     }
 }

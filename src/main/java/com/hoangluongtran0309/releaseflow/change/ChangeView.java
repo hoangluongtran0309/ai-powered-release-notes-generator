@@ -46,7 +46,9 @@ public record ChangeView(
         Map<String, String> audienceNarratives,
         String summaryEditorName,
         Instant summaryEditedAt,
-        ContextAssessment context
+        ContextAssessment context,
+        UUID sourceId,
+        ChangeOrigin origin
 ) {
 
     public ChangeView {
@@ -67,7 +69,7 @@ public record ChangeView(
                 mergedAt, url, category, categoryName, categoryGroup, breaking, needsReview, reasons,
                 classificationSource, aiStatus, aiModel, aiFailure, aiEligible, reviewedBy, reviewerName, reviewedAt,
                 processingStatus, changedFileStatus, changedFiles, reviewTriggers, summary, language, aiProvider,
-                narratives, summaryEditorName, summaryEditedAt, context);
+                narratives, summaryEditorName, summaryEditedAt, context, sourceId, origin);
     }
 
     /** The category the change carries, as a snapshot. */
@@ -119,7 +121,9 @@ public record ChangeView(
                 change.getAudienceNarratives(),
                 change.getSummaryEditorName(),
                 change.getSummaryEditedAt(),
-                change.getContext()
+                change.getContext(),
+                change.getSourceId(),
+                change.getOrigin()
         );
     }
 }
