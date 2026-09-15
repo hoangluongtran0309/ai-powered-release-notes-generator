@@ -251,7 +251,7 @@ class AudienceReleaseNoteIntegrationTest extends PostgreSqlIntegrationTest {
                         .session(owner.session()))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "text/markdown;charset=UTF-8"))
-                .andExpect(header().string("Content-Disposition", "attachment; filename=\"1.4.0-rc-1-operator.md\""))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"1.4.0-rc-1-operator-en.md\""))
                 .andExpect(content().string(containsString("# Release 1.4.0/rc 1\n")))
                 .andExpect(content().string(containsString("— Watch the export queue.")));
     }

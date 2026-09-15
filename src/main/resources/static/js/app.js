@@ -86,6 +86,35 @@
             },
         }));
 
+        // Checks the release's notes every three seconds while some are still being
+        // translated, and reloads the page once none is. The URL comes from the element's
+        // data attribute, never from an Alpine expression.
+        Alpine.data('translationPoll', () => ({
+            timer: null,
+            init() {
+                const url = this.$el.dataset.pollUrl;
+                const stopAt = Date.now() + 10 * 60 * 1000;
+                this.timer = setInterval(async () => {
+                    if (Date.now() > stopAt) {
+                        clearInterval(this.timer);
+                        return;
+                    }
+                    try {
+                        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+                        if (!response.ok) return;
+                        const notes = await response.json();
+                        if (!notes.some((note) => note.translationStatus === 'PENDING')) {
+                            clearInterval(this.timer);
+                            window.location.reload();
+                        }
+                    } catch (ignored) {
+                        // A missed check is retried on the next tick.
+                    }
+                }, 3000);
+            },
+            destroy() { clearInterval(this.timer); },
+        }));
+
         // Reads the value from the element marked x-ref="source" so server data
         // never has to be interpolated into an Alpine expression.
         Alpine.data('copyText', () => ({

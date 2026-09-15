@@ -8,8 +8,8 @@ deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
-signal, and Project sensitive path slices: one Spring Boot application,
-PostgreSQL/Flyway V1-V16,
+signal, Project sensitive path, and multilingual release note slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V17,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -24,8 +24,9 @@ classification (OpenAI, Anthropic, or DeepSeek) that the rules always override,
 recorded human review of any change, releases that move from draft through a
 per-change review and approval to publication (several per Project, with a
 planned release time), administrator-managed audiences with Mustache templates
-and AI narratives, one release note per audience written at approval and
-frozen at publication, REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
+and AI narratives, one release note per audience and language written at
+approval, translated by an optional DeepL queue, and frozen at publication,
+REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
 Read `README.md`, `docs/architecture.md`, and
 `docs/implementation-status.md` before changing behavior.
@@ -94,6 +95,9 @@ Read `README.md`, `docs/architecture.md`, and
   audience's template and are frozen at publication.
 - A summary or narrative written by a person is never replaced by the AI, and a
   note a person edited never follows its template again.
+- Approval never calls a translation provider: it only records translation
+  jobs, which the worker runs after commit. A release is published only when
+  every note is ready, and translation retries stay bounded.
 - Tenant-owned repository lookups include both resource ID and the current
   principal's Organization ID.
 - GitHub Actions stay pinned to commit SHAs, images to digests, and downloaded

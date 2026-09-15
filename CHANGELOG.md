@@ -181,6 +181,25 @@ version has been released.
   `audience_last`, `audience_in_use`, `audience_not_preset`,
   `audience_not_found`, `release_note_render_failed`, `release_notes_missing`,
   and `release_note_not_found`.
+- Release notes in several languages (ADR-0015):
+  - one to five release note languages per Organization, chosen on the
+    Audiences page or through `/api/organization/release-languages`, and one
+    note per audience and language at approval;
+  - per-language audience templates, made for shipped audiences from their
+    shipped templates and for others from their main template, and edited
+    through `/api/audiences/{audienceId}/templates/{language}`;
+  - DeepL translation (`RELEASEFLOW_TRANSLATION_PROVIDER=deepl`,
+    `RELEASEFLOW_DEEPL_API_KEY`) of change summaries and narratives through a
+    durable queue after approval, with batching, a per-Organization cache,
+    at most five attempts, and a **Retry translations** action;
+  - translating and not-translated notes on a release page that refreshes
+    itself, and publication held until every note is ready;
+  - downloads named `<version>-<audience>-<language>.md`.
+- Error codes `invalid_release_languages`, `template_language_not_targeted`,
+  and `translations_not_ready`.
+- Flyway migration `V17` for `organization_translation_settings`,
+  `audience_template_variants`, `translation_jobs`, `translation_cache`, note
+  translation status, and a publication trigger.
 - Sensitive paths per Project (ADR-0014):
   - administrators add glob patterns to the deployment's baseline on a
     Sensitive paths page and through

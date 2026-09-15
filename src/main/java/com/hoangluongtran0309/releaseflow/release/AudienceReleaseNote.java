@@ -1,7 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
+import com.hoangluongtran0309.releaseflow.translation.TranslationState;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -9,10 +12,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * The note one audience gets for an approved or published release. It is rendered at
- * approval from a snapshot of the audience's template and follows later summary edits
- * until a person edits it; then it is manual and never rendered again. The database
- * allows writes only while the release is approved, so a published note is final.
+ * The note one audience gets in one language for an approved or published release. It
+ * is rendered at approval from a snapshot of the audience's template for that language,
+ * and follows later summary edits and translations until a person edits it; then it is
+ * manual and never rendered again. The database allows writes only while the release is
+ * approved, and publication only once every note is ready, so a published note is final.
  */
 @Entity
 @Table(name = "release_audience_notes")
@@ -51,6 +55,10 @@ class AudienceReleaseNote {
     @Column(name = "auto_rerender", nullable = false)
     private boolean autoRerender;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "translation_status", nullable = false, length = 10)
+    private TranslationState.Status translationStatus;
+
     @Column(name = "last_edited_by")
     private UUID lastEditedBy;
 
@@ -75,6 +83,7 @@ class AudienceReleaseNote {
             String language,
             String templateBodySnapshot,
             String content,
+            TranslationState.Status translationStatus,
             Instant createdAt
     ) {
         this.id = id;
@@ -88,22 +97,28 @@ class AudienceReleaseNote {
         this.templateBodySnapshot = templateBodySnapshot;
         this.content = content;
         this.autoRerender = true;
+        this.translationStatus = translationStatus;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
     }
 
-    /** Replaces the content of a note that still follows its template; a manual note is kept. */
-    void rerender(String content, Instant at) {
-        if (!autoRerender || this.content.equals(content)) {
+    /**
+     * Replaces the content of a note that still follows its template, with how far its
+     * translations have come; a manual note is kept.
+     */
+    void rerender(String content, TranslationState.Status translationStatus, Instant at) {
+        if (!autoRerender || (this.content.equals(content) && this.translationStatus == translationStatus)) {
             return;
         }
         this.content = content;
+        this.translationStatus = translationStatus;
         this.updatedAt = at;
     }
 
-    /** A person's text. The note never follows its template again. */
+    /** A person's text, ready as written. The note never follows its template again. */
     void edit(String content, UUID editor, String editorName, Instant at) {
         this.content = content;
+        this.translationStatus = TranslationState.Status.READY;
         this.autoRerender = false;
         this.lastEditedBy = editor;
         this.lastEditorName = editorName;
@@ -120,7 +135,8 @@ class AudienceReleaseNote {
                 content,
                 autoRerender,
                 lastEditorName,
-                updatedAt
+                updatedAt,
+                translationStatus
         );
     }
 
@@ -138,6 +154,14 @@ class AudienceReleaseNote {
 
     String getLanguage() {
         return language;
+    }
+
+    boolean isAutoRerender() {
+        return autoRerender;
+    }
+
+    TranslationState.Status getTranslationStatus() {
+        return translationStatus;
     }
 
     String getTemplateBodySnapshot() {

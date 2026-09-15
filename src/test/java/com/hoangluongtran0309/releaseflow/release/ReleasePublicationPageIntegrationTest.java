@@ -121,7 +121,7 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(containsString("Publish 1.4.0")))
                 .andExpect(content().string(not(containsString("Approve as shown"))))
                 .andExpect(content().string(matchesPattern(
-                        "(?s).*id=\"release-notes\".*id=\"note-contributor\".*id=\"note-end_user\".*id=\"note-operator\".*")))
+                        "(?s).*id=\"release-notes\".*id=\"note-contributor-en\".*id=\"note-end_user-en\".*id=\"note-operator-en\".*")))
                 .andExpect(content().string(containsString(">Automatic</span>")))
                 .andExpect(content().string(containsString("Edit Markdown")))
                 .andExpect(content().string(containsString("Saving makes this note manual")));

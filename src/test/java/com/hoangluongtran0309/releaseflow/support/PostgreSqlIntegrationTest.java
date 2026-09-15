@@ -26,10 +26,14 @@ public abstract class PostgreSqlIntegrationTest {
         registry.add("releaseflow.credentials.master-key", () -> TEST_MASTER_KEY);
         // Tests drive the change worker explicitly instead of racing its schedule.
         registry.add("releaseflow.processing.enabled", () -> "false");
+        registry.add("releaseflow.translation.worker-enabled", () -> "false");
     }
 
     /** Every Organization owns audiences and categories, which must go before the Organization itself. */
     protected void deleteOrganizationSettings() {
+        supportJdbcTemplate.update("DELETE FROM translation_jobs");
+        supportJdbcTemplate.update("DELETE FROM translation_cache");
+        supportJdbcTemplate.update("DELETE FROM organization_translation_settings");
         supportJdbcTemplate.update("DELETE FROM category_suggestions");
         supportJdbcTemplate.update("DELETE FROM category_definitions");
         supportJdbcTemplate.update("DELETE FROM audience_definitions");

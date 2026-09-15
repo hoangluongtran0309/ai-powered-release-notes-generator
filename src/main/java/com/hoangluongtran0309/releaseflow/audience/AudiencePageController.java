@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,9 +25,11 @@ public class AudiencePageController {
     private static final String FORM = "audienceForm";
 
     private final AudienceService audienceService;
+    private final ReleaseLanguageService releaseLanguageService;
 
-    AudiencePageController(AudienceService audienceService) {
+    AudiencePageController(AudienceService audienceService, ReleaseLanguageService releaseLanguageService) {
         this.audienceService = audienceService;
+        this.releaseLanguageService = releaseLanguageService;
     }
 
     @GetMapping("/audiences")
@@ -139,6 +142,53 @@ public class AudiencePageController {
         }
     }
 
+    /** Saves an audience's template for one release note language. */
+    @PostMapping("/audiences/{audienceId}/templates/{language}")
+    String updateTemplate(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID audienceId,
+            @PathVariable String language,
+            @ModelAttribute AudienceTemplateRequest request,
+            Model model,
+            HttpServletResponse response
+    ) {
+        try {
+            audienceService.updateTemplate(principal.organizationId(), audienceId, language, request.getTemplateBody());
+            return "redirect:/audiences/" + audienceId + "?templateSaved#language-templates";
+        } catch (InvalidAudienceTemplateException exception) {
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            model.addAttribute("variantLanguage", language);
+            model.addAttribute("variantBody", request.getTemplateBody());
+            model.addAttribute("variantError", exception.getMessage());
+        } catch (AudienceNotFoundException exception) {
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            model.addAttribute("pageError", exception.getMessage());
+        }
+        return render(principal, audienceId, model, response);
+    }
+
+    /** Saves the release note languages, entered as tags separated by commas or spaces. */
+    @PostMapping("/audiences/release-languages")
+    String replaceReleaseLanguages(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @RequestParam(name = "targetLanguages", defaultValue = "") String targetLanguages,
+            Model model,
+            HttpServletResponse response
+    ) {
+        ReleaseLanguagesRequest request = new ReleaseLanguagesRequest();
+        request.setTargetLanguages(Arrays.asList(targetLanguages.split("[,\\s]+")));
+        try {
+            releaseLanguageService.replace(principal, request);
+            return "redirect:/audiences?languagesSaved";
+        } catch (InvalidReleaseLanguagesException exception) {
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            model.addAttribute("languagesError", exception.getMessage());
+            model.addAttribute("languagesText", targetLanguages);
+        }
+        List<AudienceView> audiences = audienceService.list(principal.organizationId());
+        return render(principal, audiences.isEmpty() ? null : audiences.getFirst().id(), model, response);
+    }
+
     /**
      * Renders the submitted template with sample values and shows the editor again with
      * the values as entered; nothing is saved.
@@ -166,6 +216,11 @@ public class AudiencePageController {
         model.addAttribute("audiences", audienceService.list(organizationId));
         model.addAttribute("variables", AudienceItem.VARIABLES);
         model.addAttribute("maxAudiences", AudienceService.MAX_AUDIENCES);
+        ReleaseLanguageSettings languages = releaseLanguageService.settings(organizationId);
+        model.addAttribute("releaseLanguages", languages);
+        if (!model.containsAttribute("languagesText")) {
+            model.addAttribute("languagesText", String.join(", ", languages.targetLanguages()));
+        }
         model.addAttribute("selected", null);
         if (selectedId != null) {
             try {

@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -74,8 +75,9 @@ class AudienceDefinition {
         this.updatedAt = at;
     }
 
-    AudienceView view() {
-        return new AudienceView(id, code, displayName, communicationIntent, templateBody, preset, createdAt, updatedAt);
+    AudienceView view(Map<String, String> templateVariants) {
+        return new AudienceView(id, code, displayName, communicationIntent, templateBody, preset, createdAt, updatedAt,
+                templateVariants);
     }
 
     UUID getId() {
@@ -84,6 +86,14 @@ class AudienceDefinition {
 
     String getCode() {
         return code;
+    }
+
+    UUID getOrganizationId() {
+        return organizationId;
+    }
+
+    String getTemplateBody() {
+        return templateBody;
     }
 
     String getCommunicationIntent() {

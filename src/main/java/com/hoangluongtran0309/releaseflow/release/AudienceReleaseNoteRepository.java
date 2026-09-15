@@ -8,7 +8,7 @@ import java.util.UUID;
 
 interface AudienceReleaseNoteRepository extends JpaRepository<AudienceReleaseNote, UUID> {
 
-    List<AudienceReleaseNote> findAllByReleaseIdAndOrganizationIdOrderByAudienceNameAscAudienceCodeAsc(
+    List<AudienceReleaseNote> findAllByReleaseIdAndOrganizationIdOrderByAudienceNameAscAudienceCodeAscLanguageAsc(
             UUID releaseId,
             UUID organizationId
     );

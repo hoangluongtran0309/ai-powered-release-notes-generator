@@ -15,6 +15,8 @@ import com.hoangluongtran0309.releaseflow.audience.AudienceApiController;
 import com.hoangluongtran0309.releaseflow.audience.AudienceConflictException;
 import com.hoangluongtran0309.releaseflow.audience.AudienceNotFoundException;
 import com.hoangluongtran0309.releaseflow.audience.InvalidAudienceTemplateException;
+import com.hoangluongtran0309.releaseflow.audience.InvalidReleaseLanguagesException;
+import com.hoangluongtran0309.releaseflow.audience.ReleaseLanguageApiController;
 import com.hoangluongtran0309.releaseflow.category.CategoryApiController;
 import com.hoangluongtran0309.releaseflow.category.CategoryConflictException;
 import com.hoangluongtran0309.releaseflow.category.CategoryNotFoundException;
@@ -55,6 +57,7 @@ import com.hoangluongtran0309.releaseflow.release.ReleasePublishedException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseReviewIncompleteException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseStatusException;
 import com.hoangluongtran0309.releaseflow.release.ReleaseVersionTakenException;
+import com.hoangluongtran0309.releaseflow.release.TranslationsNotReadyException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -81,7 +84,8 @@ import java.util.Map;
         ReleaseApiController.class,
         AudienceApiController.class,
         CategoryApiController.class,
-        SensitivePathApiController.class
+        SensitivePathApiController.class,
+        ReleaseLanguageApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -534,6 +538,26 @@ public class ApiExceptionHandler {
                 "Invalid sensitive paths",
                 exception.getMessage(),
                 "invalid_sensitive_paths"
+        ));
+    }
+
+    @ExceptionHandler(InvalidReleaseLanguagesException.class)
+    ResponseEntity<ProblemDetail> invalidReleaseLanguages(InvalidReleaseLanguagesException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid release note languages",
+                exception.getMessage(),
+                "invalid_release_languages"
+        ));
+    }
+
+    @ExceptionHandler(TranslationsNotReadyException.class)
+    ResponseEntity<ProblemDetail> translationsNotReady(TranslationsNotReadyException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Translations not ready",
+                exception.getMessage(),
+                "translations_not_ready"
         ));
     }
 

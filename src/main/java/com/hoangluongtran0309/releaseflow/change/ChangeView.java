@@ -61,6 +61,15 @@ public record ChangeView(
         return audienceNarratives.getOrDefault(audienceCode, "");
     }
 
+    /** The same change with its summary and narratives written in another language. */
+    public ChangeView withContent(NeutralSummary summary, Map<String, String> narratives, String language) {
+        return new ChangeView(id, pullRequestNumber, title, description, authorLogin, labels, targetBranch, mergeCommitSha,
+                mergedAt, url, category, categoryName, categoryGroup, breaking, needsReview, reasons,
+                classificationSource, aiStatus, aiModel, aiFailure, aiEligible, reviewedBy, reviewerName, reviewedAt,
+                processingStatus, changedFileStatus, changedFiles, reviewTriggers, summary, language, aiProvider,
+                narratives, summaryEditorName, summaryEditedAt, context);
+    }
+
     /** The category the change carries, as a snapshot. */
     public CategoryRef categoryRef() {
         return new CategoryRef(category, categoryName, categoryGroup);

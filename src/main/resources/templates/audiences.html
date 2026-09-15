@@ -12,8 +12,8 @@
             <p class="page-eyebrow">Organization administration</p>
             <h1 class="page-heading">Audiences</h1>
             <p class="page-subtitle">
-                Every approved release gets one release note per audience. The AI writes a short narrative for each audience,
-                following its intent, and the template turns each change into Markdown.
+                Every approved release gets one release note per audience and language. The AI writes a short narrative for
+                each audience, following its intent, and the template turns each change into Markdown.
             </p>
         </div>
         <div class="page-actions">
@@ -30,6 +30,44 @@
     <div class="alert alert-success mb-6" role="status" th:if="${param.saved != null}"><span>Audience saved.</span></div>
     <div class="alert alert-success mb-6" role="status" th:if="${param.reset != null}"><span>Audience reset to its shipped preset.</span></div>
     <div class="alert alert-success mb-6" role="status" th:if="${param.deleted != null}"><span>Audience deleted.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.languagesSaved != null}"><span>Release note languages saved. Approved releases get a note in each of them.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.templateSaved != null}"><span>Language template saved.</span></div>
+
+    <section class="surface-card mb-6 p-6" id="release-languages">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="max-w-2xl">
+                <h2 class="section-heading">Release note languages</h2>
+                <p class="section-copy">
+                    Approving a release writes one note per audience in each of these languages. Summaries are written in
+                    <strong th:text="${releaseLanguages.outputLanguage}">en</strong>; other languages are translated after
+                    approval, and a release is published only when every note is ready.
+                </p>
+                <p class="mt-2 text-sm text-amber-700" th:if="${releaseLanguages.translationMissing()}">
+                    No translation provider is configured, so notes in other languages cannot be translated. Set
+                    <code>RELEASEFLOW_TRANSLATION_PROVIDER=deepl</code> and <code>RELEASEFLOW_DEEPL_API_KEY</code>, or edit those notes by hand.
+                </p>
+                <p class="mt-2 text-xs text-slate-500" th:if="${releaseLanguages.updatedAt != null}">
+                    Last changed by <span th:text="${releaseLanguages.updatedBy}">Mai</span> on
+                    <time th:datetime="${releaseLanguages.updatedAt}"
+                          th:text="|${#temporals.format(releaseLanguages.updatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">15 Sep 2026, 10:02 UTC</time>.
+                </p>
+            </div>
+            <form class="flex flex-col gap-2 sm:flex-row sm:items-start" method="post" th:action="@{/audiences/release-languages}">
+                <label class="form-control">
+                    <span class="sr-only">Release note languages</span>
+                    <input type="text" name="targetLanguages" maxlength="200" required autocomplete="off" spellcheck="false"
+                           list="release-language-options" placeholder="en, vi" th:value="${languagesText}"
+                           class="input input-bordered w-full font-mono sm:w-56" th:classappend="${languagesError != null} ? 'input-error'">
+                    <datalist id="release-language-options">
+                        <option th:each="option : ${releaseLanguages.suggestions}" th:value="${option.tag}" th:text="${option.displayName}">English</option>
+                    </datalist>
+                    <span class="label-text-alt">Up to 5 language tags, separated by commas.</span>
+                    <span class="field-error" th:if="${languagesError != null}" th:text="${languagesError}">Choose between one and 5 release note languages.</span>
+                </label>
+                <button type="submit" class="btn btn-outline">Save languages</button>
+            </form>
+        </div>
+    </section>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
         <nav class="surface-card content-start p-3" aria-label="Audiences" id="audience-list">
@@ -111,6 +149,30 @@
                 </form>
             </section>
 
+            <section class="surface-card p-6" id="language-templates"
+                     th:if="${selected != null and !#maps.isEmpty(selected.templateVariants)}">
+                <h2 class="section-heading">Language templates</h2>
+                <p class="section-copy">
+                    Notes in these languages use their own template, so fixed words such as labels can be written in that
+                    language. The main template above is used for every other language.
+                </p>
+                <form class="mt-5 grid gap-2" method="post" th:each="variant : ${selected.templateVariants}"
+                      th:if="${#lists.contains(releaseLanguages.targetLanguages, variant.key)}"
+                      th:id="|template-${variant.key}|"
+                      th:action="@{/audiences/{id}/templates/{language}(id=${selected.id},language=${variant.key})}"
+                      th:with="failing=${variantLanguage == variant.key}">
+                    <label class="label-text font-medium" th:for="|template-body-${variant.key}|"
+                           th:text="|Template (${variant.key})|">Template (vi)</label>
+                    <div class="alert alert-error" role="alert" th:if="${failing}"><span th:text="${variantError}">Template is invalid.</span></div>
+                    <textarea name="templateBody" rows="8" required spellcheck="false" th:id="|template-body-${variant.key}|"
+                              class="textarea textarea-bordered w-full font-mono text-xs"
+                              th:classappend="${failing} ? 'textarea-error'"
+                              th:text="${failing} ? ${variantBody} : ${variant.value}"></textarea>
+                    <div><button type="submit" class="btn btn-outline btn-sm"
+                                 th:text="|Save ${variant.key} template|">Save vi template</button></div>
+                </form>
+            </section>
+
             <section class="surface-card p-6" id="audience-preview" th:if="${preview != null}">
                 <h2 class="section-heading">Preview</h2>
                 <p class="section-copy">One sample change rendered with this template, as it appears inside a release note.</p>
@@ -126,8 +188,9 @@
                 <details class="mt-3" th:if="${selected.preset}" id="reset-audience">
                     <summary class="cursor-pointer font-semibold text-indigo-700">Reset to preset</summary>
                     <p class="mt-2 text-sm text-slate-600">
-                        The name, intent, and template return to the shipped version in the Organization's output language.
-                        Notes already written keep the template they were written with.
+                        The name, intent, and template return to the shipped version in the Organization's output language,
+                        and each language template to the shipped version in its language. Notes already written keep the
+                        template they were written with.
                     </p>
                     <form class="mt-3" method="post" th:action="@{/audiences/{id}/reset-to-preset(id=${selected.id})}">
                         <button type="submit" class="btn btn-outline btn-sm">Reset to preset</button>

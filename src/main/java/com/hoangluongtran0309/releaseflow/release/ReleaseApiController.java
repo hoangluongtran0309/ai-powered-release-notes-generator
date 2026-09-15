@@ -164,6 +164,16 @@ public class ReleaseApiController {
         return releaseService.publish(principal, projectId, releaseId);
     }
 
+    // Starts the failed translations of an approved release over.
+    @PostMapping("/releases/{releaseId}/translations/retry")
+    ReleaseView retryTranslations(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId
+    ) {
+        return releaseService.retryTranslations(principal.organizationId(), projectId, releaseId);
+    }
+
     // A person's summary and narratives for one change, during review or after approval.
     @PutMapping("/releases/{releaseId}/changes/{changeId}/summary")
     ReleaseView editSummary(
