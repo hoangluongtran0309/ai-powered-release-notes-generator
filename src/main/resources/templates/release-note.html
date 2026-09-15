@@ -37,12 +37,12 @@
     <section class="surface-card p-6" th:unless="${release.legacyNote()}" id="release-notes" aria-label="Release notes">
         <span class="badge badge-success badge-soft font-semibold">Published</span>
         <h2 class="mt-3 text-2xl font-bold">Release notes</h2>
-        <p class="section-copy">One note for each audience, frozen when the release was published.</p>
-        <div class="tabs tabs-border mt-4" role="tablist" aria-label="Audiences">
+        <p class="section-copy">One note for each audience and language, frozen when the release was published.</p>
+        <div class="tabs tabs-border mt-4" role="tablist" aria-label="Audiences and languages">
             <th:block th:each="note, state : ${release.notes}">
                 <input type="radio" name="note-tabs" class="tab" role="tab"
-                       th:aria-label="${note.audienceName}" th:checked="${state.first}">
-                <div class="tab-content pt-4" role="tabpanel" th:id="|note-${note.audienceCode}|">
+                       th:aria-label="|${note.audienceName} · ${note.language}|" th:checked="${state.first}">
+                <div class="tab-content pt-4" role="tabpanel" th:id="|note-${note.audienceCode}-${note.language}|">
                     <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                         <article class="release-note-body" th:lang="${note.language}" th:utext="${note.html()}"></article>
                         <div class="content-start" x-data="copyText()">

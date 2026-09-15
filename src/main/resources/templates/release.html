@@ -71,7 +71,7 @@
                         </p>
                         <details class="mt-4" id="approve-release">
                             <summary class="cursor-pointer font-semibold text-indigo-700">Approve release</summary>
-                            <p class="mt-3 text-sm text-slate-600">Approval fixes the list of changes and their decisions, and writes a release note for each audience from its template. The notes can be edited until the release is published.</p>
+                            <p class="mt-3 text-sm text-slate-600">Approval fixes the list of changes and their decisions, and writes a release note for each audience in each release note language from its template. Notes in other languages are translated after approval. The notes can be edited until the release is published.</p>
                             <form class="mt-3" method="post" th:action="${releasePath + '/approve'}">
                                 <button type="submit" class="btn btn-primary btn-sm" th:disabled="${!release.fullyReviewed()}"
                                         th:text="|Approve ${release.version}|">Approve 1.4.0</button>
@@ -91,8 +91,13 @@
                                 Publishing freezes the release note of every audience exactly as shown. They cannot be edited, unpublished,
                                 or deleted, and later changes to classifications or summaries do not alter them.
                             </p>
+                            <p class="mt-3 text-sm font-medium text-amber-700" th:unless="${release.translationsReady()}">
+                                Every release note must be ready before publishing. Wait for the translations, retry them, or edit
+                                the notes that could not be translated.
+                            </p>
                             <form class="mt-3" method="post" th:action="${releasePath + '/publish'}">
-                                <button type="submit" class="btn btn-primary btn-sm" th:text="|Publish ${release.version}|">Publish 1.4.0</button>
+                                <button type="submit" class="btn btn-primary btn-sm" th:disabled="${!release.translationsReady()}"
+                                        th:text="|Publish ${release.version}|">Publish 1.4.0</button>
                             </form>
                         </details>
                     </th:block>
@@ -346,7 +351,10 @@
                 </p>
 
                 <th:block th:unless="${approved}">
-                    <p class="mt-2 text-sm text-slate-600">What each audience will read if the release is approved now.</p>
+                    <p class="mt-2 text-sm text-slate-600">
+                        What each audience will read if the release is approved now, in <span th:text="${language}">en</span>.
+                        Other release note languages are translated after approval.
+                    </p>
                     <p class="mt-4 text-sm text-slate-500" th:if="${#lists.isEmpty(notePreviews)}">Add changes to see the release notes.</p>
                     <div class="tabs tabs-border mt-4" role="tablist" aria-label="Audiences" th:unless="${#lists.isEmpty(notePreviews)}">
                         <th:block th:each="preview, state : ${notePreviews}">
@@ -361,16 +369,32 @@
 
                 <th:block th:if="${approved}">
                     <p class="mt-2 text-sm text-slate-600">
-                        Written at approval. A note follows summary edits until someone edits the note itself.
+                        Written at approval. A note follows summary edits and translations until someone edits the note itself.
                     </p>
-                    <div class="tabs tabs-border mt-4" role="tablist" aria-label="Audiences">
+                    <div class="alert alert-info mt-4" role="status" id="translations-pending"
+                         th:if="${release.notesTranslating() > 0}"
+                         x-data="translationPoll()"
+                         th:attr="data-poll-url=@{/api/projects/{projectId}/releases/{releaseId}/notes(projectId=${projectId},releaseId=${release.id})}">
+                        <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
+                        <span th:text="${release.notesTranslating() == 1} ? 'Translating 1 note…' : |Translating ${release.notesTranslating()} notes…|">Translating 3 notes…</span>
+                    </div>
+                    <div class="alert alert-warning mt-4 flex flex-wrap items-center gap-3" role="alert" id="translations-failed"
+                         th:if="${release.notesUntranslated() > 0}">
+                        <span class="grow" th:text="${release.notesUntranslated() == 1} ? '1 note could not be translated. It shows the untranslated text.' : |${release.notesUntranslated()} notes could not be translated. They show the untranslated text.|">3 notes could not be translated.</span>
+                        <form method="post" th:action="${releasePath + '/translations/retry'}">
+                            <button type="submit" class="btn btn-sm">Retry translations</button>
+                        </form>
+                    </div>
+                    <div class="tabs tabs-border mt-4" role="tablist" aria-label="Audiences and languages">
                         <th:block th:each="note, state : ${release.notes}">
                             <input type="radio" name="note-tabs" class="tab" role="tab"
-                                   th:aria-label="${note.audienceName}" th:checked="${state.first}">
-                            <div class="tab-content pt-4" role="tabpanel" th:id="|note-${note.audienceCode}|" x-data="copyText()">
+                                   th:aria-label="|${note.audienceName} · ${note.language}|" th:checked="${state.first}">
+                            <div class="tab-content pt-4" role="tabpanel" th:id="|note-${note.audienceCode}-${note.language}|" x-data="copyText()">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span class="badge badge-sm" th:classappend="${note.autoRerender} ? 'badge-ghost' : 'badge-info'"
                                           th:text="${note.autoRerender} ? 'Automatic' : 'Manual'">Automatic</span>
+                                    <span class="badge badge-sm badge-warning" th:if="${note.translationStatus.name() == 'PENDING'}">Translating</span>
+                                    <span class="badge badge-sm badge-error" th:if="${note.translationStatus.name() == 'FAILED'}">Not translated</span>
                                     <span class="text-xs text-slate-500" th:if="${note.lastEditorName != null}"
                                           th:text="|Edited by ${note.lastEditorName}|">Edited by Mai Tran</span>
                                     <span class="grow"></span>
@@ -388,7 +412,7 @@
                                                   th:aria-label="|${note.audienceName} release note Markdown|"
                                                   th:text="${note.content}"># Release 1.4.0</textarea>
                                         <p class="text-xs text-amber-700" th:if="${note.autoRerender}">
-                                            Saving makes this note manual: later summary edits no longer update it.
+                                            Saving makes this note manual and ready: later summary edits and translations no longer update it.
                                         </p>
                                         <div><button type="submit" class="btn btn-primary btn-sm">Save note</button></div>
                                     </form>

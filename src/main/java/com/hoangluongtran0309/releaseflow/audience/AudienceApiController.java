@@ -55,6 +55,17 @@ public class AudienceApiController {
         return audienceService.update(principal.organizationId(), audienceId, request);
     }
 
+    // The audience's template for one of the Organization's release note languages.
+    @PutMapping("/{audienceId}/templates/{language}")
+    AudienceView updateTemplate(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID audienceId,
+            @PathVariable String language,
+            @RequestBody AudienceTemplateRequest request
+    ) {
+        return audienceService.updateTemplate(principal.organizationId(), audienceId, language, request.getTemplateBody());
+    }
+
     @DeleteMapping("/{audienceId}")
     ResponseEntity<Void> delete(@AuthenticationPrincipal ReleaseFlowPrincipal principal, @PathVariable UUID audienceId) {
         audienceService.delete(principal.organizationId(), audienceId);

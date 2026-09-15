@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V16`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V17`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -52,6 +52,9 @@ The application currently provides:
   live preview of each audience's note;
 - one release note per audience written at approval, editable until
   publication, with editable change summaries that update the notes;
+- release notes in up to five languages, with each change translated by DeepL
+  through a durable, cached queue, per-language audience templates, and
+  publication held until every note is ready;
 - publication of an approved release that freezes every audience's note, with
   copyable and downloadable Markdown;
 - `application/problem+json` responses with stable error codes for the current
@@ -549,6 +552,7 @@ GET    /api/audiences
 POST   /api/audiences                          {"code", "displayName", "communicationIntent", "templateBody"}
 GET    /api/audiences/{audienceId}
 PUT    /api/audiences/{audienceId}             {"displayName", "communicationIntent", "templateBody"}
+PUT    /api/audiences/{audienceId}/templates/{language}   {"templateBody"}
 DELETE /api/audiences/{audienceId}
 POST   /api/audiences/{audienceId}/reset-to-preset
 POST   /api/audiences/preview                  {"templateBody"} -> {"markdown", "html"}
@@ -565,7 +569,61 @@ POST   /api/audiences/preview                  {"templateBody"} -> {"markdown", 
 | Deleting the last audience | `409 audience_last` |
 | Deleting an audience that has release notes | `409 audience_in_use` |
 | Resetting an audience your team created | `409 audience_not_preset` |
+| A language template for a language that is not a release note language | `400 template_language_not_targeted` |
 | An unknown or foreign audience | `404 audience_not_found` |
+
+### Release note languages
+
+By default every note is written in the Organization's output language. An
+administrator can choose up to five **release note languages** at the top of
+the Audiences page, or with `PUT /api/organization/release-languages` and
+`{"targetLanguages": ["en", "vi"]}`; every member can read them with `GET`.
+Tags are canonicalized and repeats dropped; an empty list, more than five, or
+an invalid tag returns `400 invalid_release_languages`. Approving a release
+then writes one note per audience and language, so three audiences in English
+and Vietnamese make six notes.
+
+Each audience has its own template for every release note language that the
+output language does not cover, created when the language or the audience is
+added: a shipped audience starts from its shipped template in that language,
+with translated labels, and any other audience from a copy of its main
+template. Edit them under **Language templates** on the audience's page or
+with `PUT /api/audiences/{audienceId}/templates/{language}`. Resetting a shipped
+audience resets these templates too.
+
+A change's summary and narratives are written in the language the AI (or a
+person) used. For a note in another language they are translated with
+[DeepL](https://developers.deepl.com/docs) after approval, never inside it:
+
+```sh
+export RELEASEFLOW_TRANSLATION_PROVIDER=deepl   # the default is disabled
+export RELEASEFLOW_DEEPL_API_KEY=...            # a key ending in :fx uses the free API
+# RELEASEFLOW_DEEPL_BASE_URL overrides the host chosen from the key.
+```
+
+Translations are queued per change and language, and a background worker sends
+them to DeepL in batches. A translated text is cached for the Organization, so
+the same text is never sent twice, and an unchanged summary is never translated
+again, even when a release returns to draft and is approved again. A rate limit,
+a server error, or a network failure is retried up to five times with growing
+delays; any other failure is final. A pull request title used in place of a
+missing summary is not translated.
+
+Until its translations are in, a note shows the untranslated text and is
+**Translating**; the release page updates by itself when they arrive. A note
+whose translation failed, or that needs translation while the provider is
+disabled, is **Not translated**. **Retry translations** starts the failed ones
+over, and editing such a note by hand makes it ready. A release is published only
+when every note is ready: otherwise publishing returns
+`409 translations_not_ready`, and the database refuses it as well. Editing a
+summary after approval translates the new text. See
+[ADR-0015](docs/adr/0015-multilingual-release-notes.md).
+
+```text
+GET  /api/organization/release-languages
+PUT  /api/organization/release-languages                               {"targetLanguages"}
+POST /api/projects/{projectId}/releases/{releaseId}/translations/retry
+```
 
 ## Releases
 
@@ -590,7 +648,9 @@ A release moves through four steps, shown at the top of its page:
    change must be edited. **Approve release** becomes available once every
    change has a decision.
 3. **Approved.** The approver and time are recorded, and a release note is
-   written for every audience from its template. Check each audience's tab,
+   written for every audience in every release note language from its
+   template (see [Release note languages](#release-note-languages)). Check each
+   note's tab,
    edit a note's Markdown if needed (the note becomes **Manual** and no longer
    follows its template), then **Publish release**.
 4. **Published.** See [Publishing](#publishing).
@@ -637,6 +697,7 @@ PUT    /api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decisio
 POST   /api/projects/{projectId}/releases/{releaseId}/approve
 POST   /api/projects/{projectId}/releases/{releaseId}/return-to-draft
 POST   /api/projects/{projectId}/releases/{releaseId}/publish
+POST   /api/projects/{projectId}/releases/{releaseId}/translations/retry
 PUT    /api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/summary
                                                                          {"whatChanged", "whyChanged", "technicalDetail", "migrationStep", "narratives": {"<code>": "..."}}
 GET    /api/projects/{projectId}/releases/{releaseId}/note-previews
@@ -651,8 +712,9 @@ value without an offset is read as UTC. A release returns its `changes`, its
 `decisions` (`changeId`, `action`, `reviewerName`, `note`, `decidedAt`),
 `reviewedCount`, `plannedReleaseAt`, `approvedAt`, `approverName`, and its
 `notes` (`id`, `audienceCode`, `audienceName`, `language`, `content`,
-`autoRerender`, `lastEditorName`, `updatedAt`). The download is
-`text/markdown`, named `<version>-<audience code>.md`.
+`autoRerender`, `lastEditorName`, `updatedAt`, and `translationStatus`:
+`READY`, `PENDING`, or `FAILED`). The download is `text/markdown`, named
+`<version>-<audience code>-<language>.md`.
 `release-assignments` lists which release, by ID, version, and status, each
 of the Project's changes belongs to. Errors:
 
@@ -669,6 +731,7 @@ of the Project's changes belongs to. Errors:
 | A summary or note edit outside the allowed status | `409 release_status_conflict` |
 | An audience template that cannot render at approval | `409 release_note_render_failed` |
 | Publishing an approved release that has no notes | `409 release_notes_missing` |
+| Publishing while a note is still translating or could not be translated | `409 translations_not_ready` |
 | An empty summary or note, or a field over its limit | `400 validation_failed` |
 | An unknown or foreign change | `404 change_not_found` |
 | An unknown or foreign release | `404 release_not_found` |
@@ -679,8 +742,9 @@ of the Project's changes belongs to. Errors:
 On an approved release's page, open **Publish release**. Publishing freezes
 every audience's note, together with who published the release and when. The
 page then becomes read-only. It shows who approved and published the release,
-and offers one tab per audience with the rendered note, its Markdown, a
-**Copy** button, and a **Download** link for GitHub Releases or a changelog.
+and offers one tab per audience and language with the rendered note, its
+Markdown, a **Copy** button, and a **Download** link for GitHub Releases or a
+changelog. Downloaded files are named `<version>-<audience>-<language>.md`.
 
 A published release cannot be edited, scheduled, reviewed, discarded,
 unpublished, or changed in content, and neither can its notes. Its changes can

@@ -81,6 +81,8 @@ public class SecurityConfiguration {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/projects/*/sensitive-paths")
                         .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/organization/release-languages")
+                        .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/organization/output-language")
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/organization/output-language")

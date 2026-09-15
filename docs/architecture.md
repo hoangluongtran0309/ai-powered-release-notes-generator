@@ -4,8 +4,9 @@
 
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
-`account`, `project`, `change`, `category`, `audience`, `release`, the `github`
-API client shared by `project` and `change`, and shared `configuration`:
+`account`, `project`, `change`, `category`, `audience`, `release`,
+`translation`, the `github` API client shared by `project` and `change`, and
+shared `configuration`:
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
@@ -44,6 +45,7 @@ GET  /api/projects/{id}/releases/{releaseId}/available-changes -> ReleaseService
 POST /api/projects/{id}/releases/{releaseId}/changes -> ReleaseService
 DELETE /api/projects/{id}/releases/{releaseId}/changes/{changeId} -> ReleaseService
 POST /api/projects/{id}/releases/{releaseId}/{request-review|approve|return-to-draft|publish} -> ReleaseService
+POST /[api/]projects/{id}/releases/{releaseId}/translations/retry -> ReleaseService, TranslationService
 PUT  /api/projects/{id}/releases/{releaseId}/changes/{changeId}/decision -> ReleaseService
 POST /projects/{id}/releases/{releaseId}/changes/{changeId}/summary -> ReleaseService, ChangeSummaryService
 POST /projects/{id}/releases/{releaseId}/notes/{noteId} -> ReleaseService
@@ -62,6 +64,10 @@ GET  /audiences[/new|/{audienceId}] -> AudienceService (Audiences UI, administra
 POST /audiences[/{audienceId}[/delete|/reset-to-preset]], /audiences/preview -> AudienceService (administrator)
 GET|POST /api/audiences, GET|PUT|DELETE /api/audiences/{audienceId} -> AudienceService (administrator)
 POST /api/audiences/{audienceId}/reset-to-preset, /api/audiences/preview -> AudienceService (administrator)
+POST /audiences/{audienceId}/templates/{language}, PUT /api/audiences/{audienceId}/templates/{language} -> AudienceService (administrator)
+POST /audiences/release-languages -> ReleaseLanguageService (administrator)
+GET  /api/organization/release-languages -> ReleaseLanguageService (every member)
+PUT  /api/organization/release-languages -> ReleaseLanguageService (administrator)
 ```
 
 REST and Thymeleaf registration call the same transactional application
@@ -673,10 +679,11 @@ Without a summary, what changed is the escaped pull request title.
 
 `ReleaseService` uses it as follows:
 
-- **Approval** renders one `AudienceReleaseNote` per audience from the current
-  changes, snapshots the audience's code, name, template, and the output
-  language, and inserts the notes after the release row is flushed as
-  approved. A render failure aborts approval with
+- **Approval** renders one `AudienceReleaseNote` per audience and release note
+  language from the current changes, snapshots the audience's code, name,
+  template for that language, and the language, and inserts the notes after the
+  release row is flushed as approved (see
+  [Release note languages and translation](#release-note-languages-and-translation)). A render failure aborts approval with
   `409 release_note_render_failed`.
 - **Editing a note** is allowed only while approved. It stores the text and the
   editor and turns off `auto_rerender`.
@@ -695,10 +702,68 @@ content and the edit record, and deletes are rejected once the release is
 published. `release_audience_notes_edit_recorded` ties `auto_rerender` to the
 editor columns.
 
+## Release note languages and translation
+
+ADR-0015 writes a note per audience and **release note language**; see
+[ADR-0015](adr/0015-multilingual-release-notes.md).
+
+- **Languages.** `ReleaseLanguageService` (package `audience`) stores the
+  Organization's 1–5 target languages in `organization_translation_settings`,
+  canonicalized by `OutputLanguage.parse`. Without a row, the output language
+  is the only one.
+- **Templates.** `audience_template_variants` holds an audience's template for
+  one language, unique per audience and language and deleted with the
+  audience. `AudienceView.templateFor(language)` returns the variant or the
+  main template. Saving the languages, and creating an audience, add the
+  missing variants for every target language whose primary language differs
+  from the output language: the shipped template in that language for a preset,
+  a copy of the main template otherwise.
+- **Jobs.** The `translation` package depends on no other domain package.
+  `TranslationService.ensure` touches only the database, so approval can call it
+  in its transaction. It returns the texts at once when the source and target
+  share a primary language or all are blank, returns the existing job's state
+  for the same change, target, and `input_hash` (SHA-256 of the source language
+  and the texts sorted by key), and otherwise creates a `translation_jobs` row:
+  `SUCCEEDED` when every text is in `translation_cache`, `FAILED`
+  (`translation_disabled`) without a provider, and `PENDING` otherwise.
+- **Worker.** `TranslationWorker` runs every second. It claims one due job with
+  `FOR UPDATE SKIP LOCKED`, looks its texts up in the cache, and sends only the
+  missing ones to `DeepLTranslator` outside any transaction: `POST
+  /v2/translate` with `DeepL-Auth-Key`, batches of at most 50 texts and 120 KiB,
+  source as the primary language and English or Portuguese targets with a
+  region. A 429, a 5xx, or a network failure is retried up to five attempts with
+  `min(300, 2^attempt)` seconds of backoff; 403, 456, other 4xx, and a response
+  with the wrong number of translations fail at once. Only fixed codes are
+  stored. The result transaction writes the output and the cache and publishes
+  `TranslationFinished`; a `RUNNING` job left for ten minutes becomes
+  `PENDING` again.
+- **Notes.** `ReleaseNoteWriter` localizes the release's changes for one
+  language: a summarized change in another language is replaced by
+  `ChangeView.withContent` with its translated summary and narratives once
+  ready, and keeps its own text otherwise. The note takes the worst state of its
+  changes (`FAILED` over `PENDING` over `READY`) in
+  `release_audience_notes.translation_status`. Approval writes a note per
+  target language and audience from `templateFor`; `ReleaseService` listens to
+  `TranslationFinished` in the worker's transaction and renders the automatic
+  notes of the change's approved release in that language again. Editing a
+  summary renders every automatic note again, which queues the new text.
+  `retryTranslations` restarts the failed jobs of an approved release's current
+  texts. Editing a note by hand makes it `READY`.
+- **Publication.** `publish` refuses a release with a note that is not ready
+  (`409 translations_not_ready`), and the `releases_publish_ready_notes`
+  trigger refuses it in the database too. Notes are unique per release,
+  audience, and language, and downloads are named
+  `<version>-<audience>-<language>.md`.
+- **Page.** The release page shows a badge per note, a banner while notes are
+  translating or failed, and a **Retry translations** button. The
+  `translationPoll` Alpine component reads the notes URL from a data attribute,
+  polls it every three seconds for up to ten minutes, and reloads once no note
+  is pending.
+
 ## Release Note publication
 
 `ReleaseService.publish` runs in one transaction. It requires an approved
-release with notes and marks it `PUBLISHED` with the publisher's ID, name, and
+release with notes that are all ready and marks it `PUBLISHED` with the publisher's ID, name, and
 time; from then on the triggers freeze its audience notes. Releases published
 before V13 have a single legacy `release_notes` snapshot of sections and
 Markdown instead, which reads fall back to. Reads of a published release use

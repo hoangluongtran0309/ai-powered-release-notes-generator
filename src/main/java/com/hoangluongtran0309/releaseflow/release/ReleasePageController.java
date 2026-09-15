@@ -278,6 +278,19 @@ public class ReleasePageController {
                 () -> releaseService.publish(principal, projectId, releaseId));
     }
 
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/translations/retry")
+    String retryTranslations(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return act(principal, projectId, releaseId, model, response,
+                releasePath(projectId, releaseId) + "#release-notes",
+                () -> releaseService.retryTranslations(principal.organizationId(), projectId, releaseId));
+    }
+
     private String act(
             ReleaseFlowPrincipal principal,
             UUID projectId,
@@ -316,6 +329,7 @@ public class ReleasePageController {
                  | ChangeNotReleasableException
                  | ChangeProcessingException
                  | ReleaseNotesMissingException
+                 | TranslationsNotReadyException
                  | ReleaseNoteRenderException exception) {
             return renderReleaseWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
         }

@@ -64,6 +64,17 @@
   sections and Markdown, the publisher and time, a read-only page with
   copyable Markdown, unique versions per Project, and Flyway `V8` triggers that
   reject any change to published releases, their changes, and their notes.
+- Release notes in several languages (ADR-0015), with Flyway `V17`:
+  - one to five release note languages per Organization, and one note per
+    audience and language at approval;
+  - per-language audience templates, made when a language or an audience is
+    added;
+  - DeepL translation of change summaries and narratives through a durable
+    queue after commit, with a per-Organization cache, bounded retries, and a
+    manual retry;
+  - notes that are ready, translating, or not translated, a polling release
+    page, and publication held until every note is ready, in the service and
+    in the database.
 - Sensitive paths per Project (ADR-0014), with Flyway `V16`: administrators add
   glob patterns to the deployment's baseline through Thymeleaf and REST,
   members read them, and the worker and AI retries check changes against the
@@ -126,7 +137,7 @@
 
 ## In progress
 
-- Nothing. The Project sensitive path slice is complete and awaiting review.
+- Nothing. The multilingual release note slice is complete and awaiting review.
 
 ## Planned
 
@@ -141,8 +152,8 @@ deliberately deferred list below, one reviewed slice at a time.
   changed-file collection.
 - Validating a repository with GitHub when it is connected, keyword review
   triggers, integration replacement, and secret or token rotation reminders.
-- Localization of the UI, translation of notes into several languages,
-  per-language template variants, and asynchronous note generation.
+- Localization of the UI, translation providers other than DeepL, and
+  asynchronous note generation.
 - Automation, distribution integrations, and a public changelog.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
   tests, production observability (Actuator, metrics, Prometheus, Grafana),

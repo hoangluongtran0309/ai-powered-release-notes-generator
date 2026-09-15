@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.release;
 
 import com.hoangluongtran0309.releaseflow.change.ChangeView;
+import com.hoangluongtran0309.releaseflow.translation.TranslationState;
 
 import java.time.Instant;
 import java.util.List;
@@ -53,6 +54,19 @@ public record ReleaseView(
     /** A release published before audiences existed, shown from its single legacy note. */
     public boolean legacyNote() {
         return markdown != null;
+    }
+
+    /** Whether every stored note is ready, so the release can be published. */
+    public boolean translationsReady() {
+        return notes.stream().allMatch(note -> note.translationStatus() == TranslationState.Status.READY);
+    }
+
+    public long notesTranslating() {
+        return notes.stream().filter(note -> note.translationStatus() == TranslationState.Status.PENDING).count();
+    }
+
+    public long notesUntranslated() {
+        return notes.stream().filter(note -> note.translationStatus() == TranslationState.Status.FAILED).count();
     }
 
     public boolean fullyReviewed() {

@@ -28,6 +28,10 @@ services:
       RELEASEFLOW_ANTHROPIC_MODEL: ${RELEASEFLOW_ANTHROPIC_MODEL:-}
       RELEASEFLOW_DEEPSEEK_API_KEY: ${RELEASEFLOW_DEEPSEEK_API_KEY:-}
       RELEASEFLOW_DEEPSEEK_MODEL: ${RELEASEFLOW_DEEPSEEK_MODEL:-}
+      # Optional translation of release notes; disabled unless set to deepl.
+      RELEASEFLOW_TRANSLATION_PROVIDER: ${RELEASEFLOW_TRANSLATION_PROVIDER:-disabled}
+      RELEASEFLOW_DEEPL_API_KEY: ${RELEASEFLOW_DEEPL_API_KEY:-}
+      RELEASEFLOW_DEEPL_BASE_URL: ${RELEASEFLOW_DEEPL_BASE_URL:-}
       # Other optional settings, including RELEASEFLOW_SENSITIVE_PATHS, are
       # deliberately not forwarded: Compose turns an unset variable into an empty
       # string, which would replace the default in application.properties (an
