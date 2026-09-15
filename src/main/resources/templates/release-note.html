@@ -17,6 +17,16 @@
                 Published by <span class="font-semibold" th:text="${release.publisherName}">Mai Tran</span> on
                 <time th:datetime="${release.publishedAt}"
                       th:text="|${#temporals.format(release.publishedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>.
+                <th:block th:if="${release.approverName != null}">
+                    Approved by <span class="font-semibold" th:text="${release.approverName}">Mai Tran</span> on
+                    <time th:datetime="${release.approvedAt}"
+                          th:text="|${#temporals.format(release.approvedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">10 Sep 2026, 16:02 UTC</time>.
+                </th:block>
+                <th:block th:if="${release.plannedReleaseAt != null}">
+                    Planned for
+                    <time th:datetime="${release.plannedReleaseAt}"
+                          th:text="|${#temporals.format(release.plannedReleaseAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:00 UTC</time>.
+                </th:block>
                 This release note is an immutable snapshot.
             </p>
         </div>

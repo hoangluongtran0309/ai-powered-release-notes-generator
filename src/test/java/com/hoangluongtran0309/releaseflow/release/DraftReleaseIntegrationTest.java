@@ -45,7 +45,7 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
@@ -55,7 +55,7 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
     }
 
     @Test
-    void createsEditsAndDiscardsTheSingleDraftOfAProject() throws Exception {
+    void createsEditsAndDiscardsSeveralDraftsOfAProject() throws Exception {
         Owner owner = registerAndLogin("owner@example.com");
         UUID projectId = createProject(owner);
 
@@ -64,15 +64,17 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.version").value("1.4.0"))
                 .andExpect(jsonPath("$.summary").doesNotExist())
                 .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.plannedReleaseAt").doesNotExist())
                 .andExpect(jsonPath("$.changes.length()").value(0))
+                .andExpect(jsonPath("$.decisions.length()").value(0))
                 .andExpect(jsonPath("$.preview.length()").value(0))
                 .andReturn().getResponse().getContentAsString();
         UUID releaseId = UUID.fromString(JsonPath.read(created, "$.id"));
 
-        createDraft(owner, projectId, "{\"version\":\"2.0.0\"}")
-                .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.code").value("draft_release_exists"));
+        createDraft(owner, projectId, "{\"version\":\"2.0.0\",\"plannedReleaseAt\":\"2099-10-01T09:00:00+07:00\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.plannedReleaseAt").value("2099-10-01T02:00:00Z"));
 
         mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
                         .session(owner.session())
@@ -84,9 +86,11 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.summary").value("Exports and a faster inbox."));
         mockMvc.perform(get("/api/projects/{projectId}/releases", projectId).session(owner.session()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].version").value("1.5.0"))
-                .andExpect(jsonPath("$[0].changeCount").value(0));
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].version").value(containsInAnyOrder("1.5.0", "2.0.0")))
+                .andExpect(jsonPath("$[*].status").value(contains("DRAFT", "DRAFT")))
+                .andExpect(jsonPath("$[*].changeCount").value(contains(0, 0)))
+                .andExpect(jsonPath("$[*].reviewedCount").value(contains(0, 0)));
 
         mockMvc.perform(delete("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
                         .session(owner.session())
@@ -96,7 +100,8 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
                         .session(owner.session()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("release_not_found"));
-        createDraft(owner, projectId, "{\"version\":\"2.0.0\"}").andExpect(status().isCreated());
+        mockMvc.perform(get("/api/projects/{projectId}/releases", projectId).session(owner.session()))
+                .andExpect(jsonPath("$[*].version").value(contains("2.0.0")));
     }
 
     @Test
@@ -114,10 +119,20 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
         createDraft(owner, projectId, "{\"version\":\"1.0.0\",\"summary\":\"" + "s".repeat(2001) + "\"}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.summary").exists());
+        createDraft(owner, projectId, "{\"version\":\"1.0.0\",\"plannedReleaseAt\":\"next Tuesday\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("invalid_release_schedule"));
+        createDraft(owner, projectId, "{\"version\":\"1.0.0\",\"plannedReleaseAt\":\"2020-01-01T00:00:00Z\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_release_schedule"))
+                .andExpect(jsonPath("$.detail").value("The planned release time must be in the future."));
+        mockMvc.perform(get("/api/projects/{projectId}/releases", projectId).session(owner.session()))
+                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
-    void addsOnlySettledChangesOfTheProjectAndBuildsThePreview() throws Exception {
+    void addsProcessedChangesOfTheProjectAndBuildsThePreview() throws Exception {
         Owner owner = registerAndLogin("owner@example.com");
         UUID projectId = createProject(owner);
         UUID otherProjectId = createProject(owner);
@@ -133,12 +148,10 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
                 "feat: another project", "FEATURE", false, false, null);
         UUID releaseId = draftId(owner, projectId);
 
+        // A change that still needs review may join a draft; the release's review settles it.
         available(owner, projectId, releaseId)
-                .andExpect(jsonPath("$[*].pullRequestNumber").value(contains(1, 2, 3)));
+                .andExpect(jsonPath("$[*].pullRequestNumber").value(contains(1, 2, 3, 4)));
 
-        addChanges(owner, projectId, releaseId, "{\"changeIds\":[\"%s\"]}".formatted(unsettled))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("change_not_releasable"));
         addChanges(owner, projectId, releaseId, "{\"changeIds\":[\"%s\"]}".formatted(elsewhere))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("change_not_found"));
@@ -149,19 +162,27 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_failed"));
 
-        addChanges(owner, projectId, releaseId, "{\"changeIds\":[\"%s\",\"%s\"]}".formatted(feature, breaking))
+        addChanges(owner, projectId, releaseId, "{\"changeIds\":[\"%s\",\"%s\"]}".formatted(feature, unsettled))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.changes[*].pullRequestNumber").value(contains(1, 2)));
+                .andExpect(jsonPath("$.changes[*].pullRequestNumber").value(contains(1, 4)))
+                .andExpect(jsonPath("$.changes[1].needsReview").value(true));
         addChanges(owner, projectId, releaseId, "{\"changeIds\":[\"%s\"]}".formatted(feature))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.changes.length()").value(2));
         available(owner, projectId, releaseId)
-                .andExpect(jsonPath("$[*].pullRequestNumber").value(contains(3)));
+                .andExpect(jsonPath("$[*].pullRequestNumber").value(contains(2, 3)));
+
+        UUID secondRelease = UUID.fromString(JsonPath.read(createDraft(owner, projectId, "{\"version\":\"1.5.0\"}")
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id"));
+        addChanges(owner, projectId, secondRelease, "{\"changeIds\":[\"%s\"]}".formatted(feature))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("change_not_releasable"));
 
         addChanges(owner, projectId, releaseId, "{\"allAvailable\":true}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.changes[*].id").value(containsInAnyOrder(
-                        feature.toString(), breaking.toString(), docs.toString())))
+                        feature.toString(), breaking.toString(), docs.toString(), unsettled.toString())))
                 .andExpect(jsonPath("$.preview[0].title").value("Breaking changes"))
                 .andExpect(jsonPath("$.preview[0].items[0].title").value("rename config keys"))
                 .andExpect(jsonPath("$.preview[0].items[0].category").value("FIX"))
@@ -170,24 +191,25 @@ class DraftReleaseIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.preview[2].title").value("Documentation"))
                 .andExpect(jsonPath("$.preview.length()").value(3));
         available(owner, projectId, releaseId).andExpect(jsonPath("$.length()").value(0));
+        available(owner, projectId, secondRelease).andExpect(jsonPath("$.length()").value(0));
 
         mockMvc.perform(delete("/api/projects/{projectId}/releases/{releaseId}/changes/{changeId}",
                         projectId, releaseId, breaking)
                         .session(owner.session())
                         .with(csrf()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.changes[*].pullRequestNumber").value(contains(1, 3)))
+                .andExpect(jsonPath("$.changes[*].pullRequestNumber").value(contains(1, 3, 4)))
                 .andExpect(jsonPath("$.preview[0].title").value("Features"));
         mockMvc.perform(delete("/api/projects/{projectId}/releases/{releaseId}/changes/{changeId}",
-                        projectId, releaseId, unsettled)
+                        projectId, releaseId, elsewhere)
                         .session(owner.session())
                         .with(csrf()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("change_not_found"));
         available(owner, projectId, releaseId)
                 .andExpect(jsonPath("$[*].pullRequestNumber").value(contains(2)));
-        mockMvc.perform(get("/api/projects/{projectId}/releases", projectId).session(owner.session()))
-                .andExpect(jsonPath("$[0].changeCount").value(2));
+        mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId).session(owner.session()))
+                .andExpect(jsonPath("$.changes.length()").value(3));
     }
 
     @Test

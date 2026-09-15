@@ -49,15 +49,21 @@
   recorded. Flyway `V6` adds the review columns, a same-tenant reviewer foreign
   key, and constraints so breaking, Unknown, and AI-suggested changes leave
   review only through a recorded review.
-- Draft Release management through Thymeleaf and REST: one draft per Project,
-  version and summary, settled changes added by hand or all at once, removal,
-  discard, and a grouped release note preview. Flyway `V7` enforces one draft
-  per Project, one release per change, and same-Project, same-tenant
-  membership.
-- Immutable Release Note publication: a snapshot of sections and Markdown,
-  the publisher and time, a read-only page with copyable Markdown, unique
-  versions per Project, and Flyway `V8` triggers that reject any change to
-  published releases, their changes, and their notes.
+- Release management through Thymeleaf and REST: several releases per
+  Project, version and summary, an optional planned release time, processed
+  changes added by hand or all at once, removal, discard until publication,
+  and a grouped release note preview. Flyway `V7` enforces one release per
+  change and same-Project, same-tenant membership.
+- A release review lifecycle (ADR-0010): request review, `APPROVE` or `EDIT`
+  decisions on each change that also review the change, rejection that removes
+  a change, approval with the approver recorded, return to draft, status
+  filters, a progress stepper, and a release-assignment endpoint. Flyway `V12`
+  adds the statuses, schedule and approval columns, `release_change_reviews`,
+  and triggers that fix changes and decisions after approval.
+- Immutable Release Note publication of an approved release: a snapshot of
+  sections and Markdown, the publisher and time, a read-only page with
+  copyable Markdown, unique versions per Project, and Flyway `V8` triggers that
+  reject any change to published releases, their changes, and their notes.
 
 - Administrator and member roles with single-use, hashed, expiring member
   invitations through Thymeleaf and REST, a Members page, and Flyway `V9`.
@@ -81,8 +87,8 @@
 
 ## In progress
 
-- Nothing. The automatic AI classification and output language slice is
-  complete and awaiting review.
+- Nothing. The release review lifecycle slice is complete and awaiting
+  review.
 
 ## Planned
 
@@ -108,6 +114,6 @@ deliberately deferred list below, one reviewed slice at a time.
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
 - Review history, comments, reviewer roles, and bulk review.
-- Several concurrent drafts per Project, item reordering, and editing release
-  note text.
+- Item reordering, editing release note text, and reminders or automation for
+  planned release times.
 - Unpublishing or correcting published release notes.

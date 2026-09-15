@@ -1,7 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.change.ChangeCategory;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
+import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
+import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.ProjectView;
@@ -18,7 +21,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Controller
@@ -36,43 +41,46 @@ public class ReleasePageController {
     String releases(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @RequestParam(name = "project", required = false) UUID projectId,
+            @RequestParam(name = "status", required = false) String status,
             Model model,
             HttpServletResponse response
     ) {
-        return renderReleases(principal, projectId, model, response);
+        return renderReleases(principal, projectId, status, model, response);
     }
 
     @PostMapping("/projects/{projectId}/releases")
     String create(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
-            @Valid @ModelAttribute("releaseRequest") ReleaseRequest request,
+            @Valid @ModelAttribute("releaseRequest") NewReleaseRequest request,
             BindingResult bindingResult,
             Model model,
             HttpServletResponse response
     ) {
         if (bindingResult.hasErrors()) {
-            return renderReleases(principal, projectId, model, response);
+            return renderReleases(principal, projectId, null, model, response);
         }
         try {
-            ReleaseView draft = releaseService.createDraft(principal.organizationId(), projectId, request);
-            return "redirect:" + draftPath(projectId, draft.id());
-        } catch (DraftReleaseExistsException | ReleaseVersionTakenException exception) {
+            ReleaseView release = releaseService.createDraft(principal.organizationId(), projectId, request);
+            return "redirect:" + releasePath(projectId, release.id());
+        } catch (ReleaseVersionTakenException exception) {
             return renderReleasesWithError(principal, projectId, HttpStatus.CONFLICT, exception, model, response);
+        } catch (InvalidReleaseScheduleException exception) {
+            return renderReleasesWithError(principal, projectId, HttpStatus.BAD_REQUEST, exception, model, response);
         } catch (ProjectNotFoundException exception) {
             return renderReleasesWithError(principal, projectId, HttpStatus.NOT_FOUND, exception, model, response);
         }
     }
 
     @GetMapping("/projects/{projectId}/releases/{releaseId}")
-    String draft(
+    String release(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
             @PathVariable UUID releaseId,
             Model model,
             HttpServletResponse response
     ) {
-        return renderDraft(principal, projectId, releaseId, model, response);
+        return renderRelease(principal, projectId, releaseId, model, response);
     }
 
     @PostMapping("/projects/{projectId}/releases/{releaseId}")
@@ -86,16 +94,23 @@ public class ReleasePageController {
             HttpServletResponse response
     ) {
         if (bindingResult.hasErrors()) {
-            return renderDraft(principal, projectId, releaseId, model, response);
+            return renderRelease(principal, projectId, releaseId, model, response);
         }
-        try {
-            releaseService.edit(principal.organizationId(), projectId, releaseId, request);
-        } catch (ReleaseVersionTakenException | ReleasePublishedException exception) {
-            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
-        } catch (ReleaseNotFoundException exception) {
-            return renderDraft(principal, projectId, releaseId, model, response);
-        }
-        return "redirect:" + draftPath(projectId, releaseId);
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.edit(principal.organizationId(), projectId, releaseId, request));
+    }
+
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/schedule")
+    String schedule(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @ModelAttribute ReleaseScheduleRequest request,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.schedule(principal.organizationId(), projectId, releaseId, request));
     }
 
     @PostMapping("/projects/{projectId}/releases/{releaseId}/discard")
@@ -106,14 +121,8 @@ public class ReleasePageController {
             Model model,
             HttpServletResponse response
     ) {
-        try {
-            releaseService.discard(principal.organizationId(), projectId, releaseId);
-        } catch (ReleasePublishedException exception) {
-            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
-        } catch (ReleaseNotFoundException exception) {
-            return renderDraft(principal, projectId, releaseId, model, response);
-        }
-        return "redirect:/releases?project=" + projectId;
+        return act(principal, projectId, releaseId, model, response, "/releases?project=" + projectId,
+                () -> releaseService.discard(principal.organizationId(), projectId, releaseId));
     }
 
     @PostMapping("/projects/{projectId}/releases/{releaseId}/changes")
@@ -125,23 +134,16 @@ public class ReleasePageController {
             Model model,
             HttpServletResponse response
     ) {
-        try {
-            if (!request.isSelection()) {
-                response.setStatus(HttpStatus.BAD_REQUEST.value());
-                model.addAttribute("pageError", "Choose changes to add, or add all available changes.");
-                return renderDraft(principal, projectId, releaseId, model, response);
-            }
-            releaseService.addChanges(principal.organizationId(), projectId, releaseId, request);
-        } catch (ChangeNotFoundException exception) {
-            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.NOT_FOUND, exception, model, response);
-        } catch (ChangeNotReleasableException | ReleasePublishedException exception) {
-            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
-        } catch (ReleaseNotFoundException exception) {
-            return renderDraft(principal, projectId, releaseId, model, response);
+        if (!request.isSelection()) {
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            model.addAttribute("pageError", "Choose changes to add, or add all available changes.");
+            return renderRelease(principal, projectId, releaseId, model, response);
         }
-        return "redirect:" + draftPath(projectId, releaseId);
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.addChanges(principal.organizationId(), projectId, releaseId, request));
     }
 
+    // Removes a change from a draft, or rejects it while the release is in review.
     @PostMapping("/projects/{projectId}/releases/{releaseId}/changes/{changeId}/remove")
     String removeChange(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
@@ -151,16 +153,66 @@ public class ReleasePageController {
             Model model,
             HttpServletResponse response
     ) {
-        try {
-            releaseService.removeChange(principal.organizationId(), projectId, releaseId, changeId);
-        } catch (ChangeNotFoundException exception) {
-            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.NOT_FOUND, exception, model, response);
-        } catch (ReleasePublishedException exception) {
-            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
-        } catch (ReleaseNotFoundException exception) {
-            return renderDraft(principal, projectId, releaseId, model, response);
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.removeChange(principal.organizationId(), projectId, releaseId, changeId));
+    }
+
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/request-review")
+    String requestReview(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.requestReview(principal.organizationId(), projectId, releaseId));
+    }
+
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decision")
+    String decide(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID changeId,
+            @ModelAttribute ReleaseDecisionRequest request,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (request.getBreaking() == null) {
+            request.setBreaking(false);
         }
-        return "redirect:" + draftPath(projectId, releaseId);
+        if (request.getAction() == null || request.getNote() != null && request.getNote().length() > 2000) {
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            model.addAttribute("pageError", "Approve or edit the change, with a note of at most 2000 characters.");
+            return renderRelease(principal, projectId, releaseId, model, response);
+        }
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.decide(principal, projectId, releaseId, changeId, request));
+    }
+
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/approve")
+    String approve(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.approve(principal, projectId, releaseId));
+    }
+
+    @PostMapping("/projects/{projectId}/releases/{releaseId}/return-to-draft")
+    String returnToDraft(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.returnToDraft(principal.organizationId(), projectId, releaseId));
     }
 
     @PostMapping("/projects/{projectId}/releases/{releaseId}/publish")
@@ -171,19 +223,56 @@ public class ReleasePageController {
             Model model,
             HttpServletResponse response
     ) {
+        return act(principal, projectId, releaseId, model, response,
+                () -> releaseService.publish(principal, projectId, releaseId));
+    }
+
+    private String act(
+            ReleaseFlowPrincipal principal,
+            UUID projectId,
+            UUID releaseId,
+            Model model,
+            HttpServletResponse response,
+            Runnable action
+    ) {
+        return act(principal, projectId, releaseId, model, response, releasePath(projectId, releaseId), action);
+    }
+
+    // Runs one release action and redirects, or renders the release page with the failure.
+    private String act(
+            ReleaseFlowPrincipal principal,
+            UUID projectId,
+            UUID releaseId,
+            Model model,
+            HttpServletResponse response,
+            String successPath,
+            Runnable action
+    ) {
         try {
-            releaseService.publish(principal, projectId, releaseId);
-        } catch (ReleaseEmptyException | ReleasePublishedException | ReleaseVersionTakenException exception) {
-            return renderDraftWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
+            action.run();
         } catch (ReleaseNotFoundException exception) {
-            return renderDraft(principal, projectId, releaseId, model, response);
+            return renderRelease(principal, projectId, releaseId, model, response);
+        } catch (ChangeNotFoundException exception) {
+            return renderReleaseWithError(principal, projectId, releaseId, HttpStatus.NOT_FOUND, exception, model, response);
+        } catch (InvalidReleaseScheduleException | InvalidChangeReviewException exception) {
+            return renderReleaseWithError(principal, projectId, releaseId, HttpStatus.BAD_REQUEST, exception, model, response);
+        } catch (ReleasePublishedException
+                 | ReleaseStatusException
+                 | ReleaseEmptyException
+                 | ReleaseReviewIncompleteException
+                 | ReleaseVersionTakenException
+                 | ClassificationChangedException
+                 | ChangeNotReleasableException
+                 | ChangeProcessingException exception) {
+            return renderReleaseWithError(principal, projectId, releaseId, HttpStatus.CONFLICT, exception, model, response);
         }
-        return "redirect:" + draftPath(projectId, releaseId);
+        return "redirect:" + successPath;
     }
 
     private String renderReleases(
             ReleaseFlowPrincipal principal,
             UUID projectId,
+            String status,
             Model model,
             HttpServletResponse response
     ) {
@@ -192,16 +281,31 @@ public class ReleasePageController {
         if (selectedProjectId == null && !projects.isEmpty()) {
             selectedProjectId = projects.getFirst().id();
         }
+        // An unknown status shows every release rather than an error.
+        ReleaseStatus selectedStatus = ReleaseStatus.fromValue(status).orElse(null);
         model.addAttribute("projects", projects);
         model.addAttribute("selectedProjectId", selectedProjectId);
+        model.addAttribute("selectedStatus", selectedStatus);
+        model.addAttribute("statuses", ReleaseStatus.values());
         model.addAttribute("releases", List.of());
+        model.addAttribute("statusCounts", Map.of());
+        model.addAttribute("releaseCount", 0);
         model.addAttribute("projectFound", false);
         if (!model.containsAttribute("releaseRequest")) {
-            model.addAttribute("releaseRequest", new ReleaseRequest());
+            model.addAttribute("releaseRequest", new NewReleaseRequest());
         }
         if (selectedProjectId != null) {
             try {
-                model.addAttribute("releases", releaseService.list(principal.organizationId(), selectedProjectId));
+                List<ReleaseSummary> releases = releaseService.list(principal.organizationId(), selectedProjectId);
+                Map<ReleaseStatus, Long> counts = new EnumMap<>(ReleaseStatus.class);
+                for (ReleaseStatus value : ReleaseStatus.values()) {
+                    counts.put(value, releases.stream().filter(release -> release.status() == value).count());
+                }
+                model.addAttribute("releases", releases.stream()
+                        .filter(release -> selectedStatus == null || release.status() == selectedStatus)
+                        .toList());
+                model.addAttribute("statusCounts", counts);
+                model.addAttribute("releaseCount", releases.size());
                 model.addAttribute("projectFound", true);
             } catch (ProjectNotFoundException exception) {
                 response.setStatus(HttpStatus.NOT_FOUND.value());
@@ -221,10 +325,10 @@ public class ReleasePageController {
     ) {
         response.setStatus(status.value());
         model.addAttribute("pageError", exception.getMessage());
-        return renderReleases(principal, projectId, model, response);
+        return renderReleases(principal, projectId, null, model, response);
     }
 
-    private String renderDraft(
+    private String renderRelease(
             ReleaseFlowPrincipal principal,
             UUID projectId,
             UUID releaseId,
@@ -238,10 +342,10 @@ public class ReleasePageController {
             if (release.status() == ReleaseStatus.PUBLISHED) {
                 return "release-note";
             }
-            model.addAttribute(
-                    "availableChanges",
-                    releaseService.availableChanges(principal.organizationId(), projectId, releaseId)
-            );
+            model.addAttribute("categories", ChangeCategory.values());
+            model.addAttribute("availableChanges", release.status() == ReleaseStatus.DRAFT
+                    ? releaseService.availableChanges(principal.organizationId(), projectId, releaseId)
+                    : List.of());
             if (!model.containsAttribute("releaseRequest")) {
                 ReleaseRequest request = new ReleaseRequest();
                 request.setVersion(release.version());
@@ -252,10 +356,10 @@ public class ReleasePageController {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             model.addAttribute("pageError", exception.getMessage());
         }
-        return "release-draft";
+        return "release";
     }
 
-    private String renderDraftWithError(
+    private String renderReleaseWithError(
             ReleaseFlowPrincipal principal,
             UUID projectId,
             UUID releaseId,
@@ -266,10 +370,10 @@ public class ReleasePageController {
     ) {
         response.setStatus(status.value());
         model.addAttribute("pageError", exception.getMessage());
-        return renderDraft(principal, projectId, releaseId, model, response);
+        return renderRelease(principal, projectId, releaseId, model, response);
     }
 
-    private static String draftPath(UUID projectId, UUID releaseId) {
+    private static String releasePath(UUID projectId, UUID releaseId) {
         return "/projects/" + projectId + "/releases/" + releaseId;
     }
 }

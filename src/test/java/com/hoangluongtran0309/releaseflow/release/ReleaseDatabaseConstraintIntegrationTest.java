@@ -24,7 +24,7 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
     @AfterEach
     void clearDatabase() {
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
@@ -33,13 +33,14 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
     }
 
     @Test
-    void allowsOneDraftPerProjectWithATrimmedVersion() {
+    void allowsSeveralDraftsPerProjectWithTrimmedVersions() {
         UUID organization = insertOrganization();
         UUID project = insertProject(organization);
         UUID otherProject = insertProject(organization);
         insertRelease(organization, project, "1.0.0");
 
-        assertThatThrownBy(() -> insertRelease(organization, project, "2.0.0"))
+        assertThatCode(() -> insertRelease(organization, project, "2.0.0")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> insertRelease(organization, project, "1.0.0"))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThatCode(() -> insertRelease(organization, otherProject, "1.0.0")).doesNotThrowAnyException();
         UUID third = insertProject(organization);
@@ -107,12 +108,91 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(() -> link(release, later, organization, project))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("The changes of a published release are immutable");
+                .hasMessageContaining("Changes can only be added to a draft release");
         assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM release_changes WHERE release_id = ?", release))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
         assertThat(jdbcTemplate.queryForObject("SELECT markdown FROM release_notes", String.class)).isEqualTo("# 1.0.0");
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM release_changes", Long.class)).isOne();
+    }
+
+    @Test
+    void letsTheReleaseStatusGovernItsChangesAndDecisions() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID reviewer = insertUser(organization);
+        UUID outsider = insertUser(insertOrganization());
+        UUID release = insertRelease(organization, project, "1.0.0");
+        UUID included = TestChanges.insert(jdbcTemplate, organization, project, 1, "feat: a", "FEATURE", false, false, null);
+        UUID later = TestChanges.insert(jdbcTemplate, organization, project, 2, "feat: b", "FEATURE", false, false, null);
+        link(release, included, organization, project);
+
+        assertThatThrownBy(() -> decide(release, included, organization, project, reviewer, "APPROVE", null))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("Review decisions can only be recorded while a release is in review");
+
+        setStatus(release, "IN_REVIEW");
+        assertThatThrownBy(() -> link(release, later, organization, project))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("Changes can only be added to a draft release");
+        assertThatThrownBy(() -> decide(release, later, organization, project, reviewer, "APPROVE", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> decide(release, included, organization, project, outsider, "APPROVE", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> decide(release, included, organization, project, reviewer, "REJECT", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> decide(release, included, organization, project, reviewer, "EDIT", "  "))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> decide(release, included, organization, project, reviewer, "EDIT", "Checked."))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> jdbcTemplate.update("UPDATE release_change_reviews SET action = 'APPROVE'"))
+                .doesNotThrowAnyException();
+
+        // Rejecting a change during review removes it together with its decision.
+        jdbcTemplate.update("DELETE FROM release_changes WHERE change_id = ?", included);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM release_change_reviews", Long.class)).isZero();
+        setStatus(release, "DRAFT");
+        link(release, included, organization, project);
+        setStatus(release, "IN_REVIEW");
+        decide(release, included, organization, project, reviewer, "APPROVE", null);
+
+        assertThatThrownBy(() -> setStatus(release, "APPROVED"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        approve(release, reviewer);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE release_change_reviews SET note = 'Changed.'"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("Review decisions can only be recorded while a release is in review");
+        assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM release_change_reviews"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("review decisions of an approved or published release are fixed");
+        assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM release_changes"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("changes of an approved or published release are fixed");
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE release_changes SET added_at = now()"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> setStatus(release, "DRAFT"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        // Discarding an approved release cascades after the release row is gone.
+        jdbcTemplate.update("DELETE FROM releases WHERE id = ?", release);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM release_changes", Long.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM release_change_reviews", Long.class)).isZero();
+    }
+
+    @Test
+    void recordsApproversInsideTheTenant() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID outsider = insertUser(insertOrganization());
+        UUID release = insertRelease(organization, project, "1.0.0");
+        setStatus(release, "IN_REVIEW");
+
+        assertThatThrownBy(() -> approve(release, outsider)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE releases SET status = 'APPROVED', approved_at = now(), approver_name = 'Approver' WHERE id = ?", release
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE releases SET status = 'CANCELLED' WHERE id = ?", release))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -141,6 +221,33 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
                         WHERE id = ?
                         """,
                 publisher, releaseId
+        );
+    }
+
+    private void setStatus(UUID releaseId, String status) {
+        jdbcTemplate.update("UPDATE releases SET status = ? WHERE id = ?", status, releaseId);
+    }
+
+    private void approve(UUID releaseId, UUID approver) {
+        jdbcTemplate.update(
+                """
+                        UPDATE releases
+                        SET status = 'APPROVED', approved_at = now(), approved_by = ?, approver_name = 'Approver'
+                        WHERE id = ?
+                        """,
+                approver, releaseId
+        );
+    }
+
+    private void decide(UUID releaseId, UUID changeId, UUID organizationId, UUID projectId, UUID reviewer,
+                        String action, String note) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO release_change_reviews
+                            (release_id, change_id, organization_id, project_id, action, reviewer_id, reviewer_name, note, decided_at)
+                        VALUES (?, ?, ?, ?, ?, ?, 'Reviewer', ?, now())
+                        """,
+                releaseId, changeId, organizationId, projectId, action, reviewer, note
         );
     }
 

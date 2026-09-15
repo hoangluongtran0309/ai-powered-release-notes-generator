@@ -6,15 +6,12 @@
 </head>
 <body>
 <p layout:fragment="page-title">Releases</p>
-<div layout:fragment="content"
-     th:with="hasProjects=${!#lists.isEmpty(projects)},
-              draft=${releases.^[status.name() == 'DRAFT']},
-              published=${releases.?[status.name() == 'PUBLISHED']}">
+<div layout:fragment="content" th:with="hasProjects=${!#lists.isEmpty(projects)}">
     <header class="page-header">
         <div>
             <p class="page-eyebrow">Release preparation</p>
             <h1 class="page-heading">Releases</h1>
-            <p class="page-subtitle">Prepare the next release of a project from changes that no longer need review, then publish it as an immutable release note.</p>
+            <p class="page-subtitle">Collect a project's changes into a release, review each change, approve the release, and publish it as an immutable release note.</p>
         </div>
     </header>
 
@@ -39,61 +36,82 @@
             <button type="submit" class="btn btn-outline">Show</button>
         </form>
 
-        <article class="surface-card mt-6 p-6" th:if="${draft != null}" id="draft-release">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <p class="text-sm font-semibold text-indigo-600">Draft release</p>
-                    <h2 class="mt-1 text-2xl font-bold" th:text="${draft.version}">1.4.0</h2>
-                    <p class="mt-2 whitespace-pre-line text-sm text-slate-600" th:if="${draft.summary != null}"
-                       th:text="${draft.summary}">Summary</p>
-                    <p class="mt-2 text-xs text-slate-500">
-                        <span th:text="${draft.changeCount == 1} ? '1 change' : |${draft.changeCount} changes|">3 changes</span>
-                        <span aria-hidden="true">·</span>
-                        updated
-                        <time th:datetime="${draft.updatedAt}"
-                              th:text="|${#temporals.format(draft.updatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
-                    </p>
-                </div>
-                <a class="btn btn-primary" th:href="@{/projects/{projectId}/releases/{releaseId}(projectId=${selectedProjectId},releaseId=${draft.id})}">Open draft</a>
-            </div>
-        </article>
-
-        <section class="surface-card mt-6 p-6" th:if="${draft == null and projectFound}">
-            <h2 class="section-heading">Create a draft release</h2>
-            <p class="section-copy">A project prepares one release at a time. You can add changes once the draft exists.</p>
-            <form class="mt-5 grid gap-4" method="post" th:object="${releaseRequest}"
+        <section class="surface-card mt-6 p-6" th:if="${projectFound}" id="create-release">
+            <h2 class="section-heading">Create a release</h2>
+            <p class="section-copy">A release starts as a draft. Add changes to it, then send it to review.</p>
+            <form class="mt-5 grid gap-4 sm:grid-cols-2" method="post" th:object="${releaseRequest}"
                   th:action="@{/projects/{projectId}/releases(projectId=${selectedProjectId})}">
                 <label class="form-control"><span class="label-text font-medium">Version</span>
                     <input type="text" th:field="*{version}" maxlength="50" required placeholder="1.4.0"
-                           class="input input-bordered w-full sm:max-w-xs" th:errorclass="input-error">
+                           class="input input-bordered w-full" th:errorclass="input-error">
                     <span class="field-error" th:if="${#fields.hasErrors('version')}" th:errors="*{version}"></span>
                 </label>
-                <label class="form-control"><span class="label-text font-medium">Summary <span class="text-slate-500">(optional)</span></span>
+                <label class="form-control"><span class="label-text font-medium">Planned release <span class="text-slate-500">(UTC, optional)</span></span>
+                    <input type="datetime-local" th:field="*{plannedReleaseAt}" class="input input-bordered w-full">
+                </label>
+                <label class="form-control sm:col-span-2"><span class="label-text font-medium">Summary <span class="text-slate-500">(optional)</span></span>
                     <textarea th:field="*{summary}" maxlength="2000" rows="3" class="textarea textarea-bordered w-full"
                               th:errorclass="textarea-error" placeholder="What this release brings, in a sentence or two."></textarea>
                     <span class="field-error" th:if="${#fields.hasErrors('summary')}" th:errors="*{summary}"></span>
                 </label>
-                <div><button type="submit" class="btn btn-primary">Create draft</button></div>
+                <div><button type="submit" class="btn btn-primary">Create release</button></div>
             </form>
         </section>
 
-        <section class="surface-card mt-6 p-6" th:if="${projectFound and !#lists.isEmpty(published)}" id="published-releases">
-            <h2 class="section-heading">Published releases</h2>
-            <ul class="mt-4 divide-y divide-slate-200">
-                <li class="flex flex-wrap items-center justify-between gap-3 py-3" th:each="release : ${published}">
-                    <div>
+        <section class="surface-card mt-6 p-6" th:if="${projectFound}" id="project-releases">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="section-heading">Project releases</h2>
+                <nav class="flex flex-wrap gap-2" aria-label="Filter releases by status">
+                    <a class="btn btn-sm" th:classappend="${selectedStatus == null} ? 'btn-primary' : 'btn-ghost'"
+                       th:attr="aria-current=${selectedStatus == null} ? 'true' : null"
+                       th:href="@{/releases(project=${selectedProjectId})}">
+                        All <span class="badge badge-sm" th:text="${releaseCount}">4</span>
+                    </a>
+                    <a class="btn btn-sm" th:each="option : ${statuses}"
+                       th:classappend="${selectedStatus == option} ? 'btn-primary' : 'btn-ghost'"
+                       th:attr="aria-current=${selectedStatus == option} ? 'true' : null"
+                       th:href="@{/releases(project=${selectedProjectId},status=${option.value})}">
+                        <span th:text="${option.label}">Draft</span>
+                        <span class="badge badge-sm" th:text="${statusCounts.get(option)}">1</span>
+                    </a>
+                </nav>
+            </div>
+
+            <p class="mt-4 text-sm text-slate-600" th:if="${#lists.isEmpty(releases)}"
+               th:text="${releaseCount == 0} ? 'No releases yet. Create one above.' : 'No releases have this status.'">No releases yet.</p>
+            <ul class="mt-4 divide-y divide-slate-200" th:unless="${#lists.isEmpty(releases)}">
+                <li class="flex flex-wrap items-center justify-between gap-3 py-3" th:each="release : ${releases}"
+                    th:id="|release-${release.id}|">
+                    <div class="min-w-0">
                         <a class="link-hover font-semibold"
                            th:href="@{/projects/{projectId}/releases/{releaseId}(projectId=${selectedProjectId},releaseId=${release.id})}"
-                           th:text="${release.version}">1.3.0</a>
-                        <p class="text-xs text-slate-500">
-                            Published
-                            <time th:datetime="${release.publishedAt}"
-                                  th:text="|${#temporals.format(release.publishedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">1 Sep 2026, 09:14 UTC</time>
+                           th:text="${release.version}">1.4.0</a>
+                        <p class="mt-1 text-xs text-slate-500">
+                            <span th:text="${release.changeCount == 1} ? '1 change' : |${release.changeCount} changes|">3 changes</span>
+                            <th:block th:if="${release.status.name() == 'IN_REVIEW' or release.status.name() == 'APPROVED'}">
+                                <span aria-hidden="true">·</span>
+                                <span th:text="|${release.reviewedCount} of ${release.changeCount} reviewed|">1 of 3 reviewed</span>
+                            </th:block>
+                            <th:block th:if="${release.plannedReleaseAt != null and release.publishedAt == null}">
+                                <span aria-hidden="true">·</span>
+                                planned
+                                <time th:datetime="${release.plannedReleaseAt}"
+                                      th:text="|${#temporals.format(release.plannedReleaseAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">1 Oct 2026, 09:00 UTC</time>
+                            </th:block>
                             <span aria-hidden="true">·</span>
-                            <span th:text="${release.changeCount == 1} ? '1 change' : |${release.changeCount} changes|">5 changes</span>
+                            <th:block th:if="${release.publishedAt != null}">
+                                published
+                                <time th:datetime="${release.publishedAt}"
+                                      th:text="|${#temporals.format(release.publishedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">1 Sep 2026, 09:14 UTC</time>
+                            </th:block>
+                            <th:block th:if="${release.publishedAt == null}">
+                                updated
+                                <time th:datetime="${release.updatedAt}"
+                                      th:text="|${#temporals.format(release.updatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
+                            </th:block>
                         </p>
                     </div>
-                    <span class="badge badge-success badge-soft font-semibold">Published</span>
+                    <span th:replace="~{fragments/release-status :: badge(${release.status})}">Draft</span>
                 </li>
             </ul>
         </section>

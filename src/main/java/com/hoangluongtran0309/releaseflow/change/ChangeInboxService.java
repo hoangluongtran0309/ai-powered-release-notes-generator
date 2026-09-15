@@ -40,13 +40,17 @@ public class ChangeInboxService {
     }
 
     /**
-     * Changes that no longer need review, oldest merge first. A settled change never
-     * returns to review, so it is safe to put in a release.
+     * Changes that have finished processing, oldest merge first. They may still need
+     * review; a release's review settles them before it can be approved.
      */
     @Transactional(readOnly = true)
-    public List<ChangeView> settledChanges(UUID organizationId, UUID projectId) {
+    public List<ChangeView> releasableChanges(UUID organizationId, UUID projectId) {
         return changeRepository
-                .findAllByOrganizationIdAndProjectIdAndNeedsReviewFalseOrderByMergedAtAscIdAsc(organizationId, projectId)
+                .findAllByOrganizationIdAndProjectIdAndProcessingStatusOrderByMergedAtAscIdAsc(
+                        organizationId,
+                        projectId,
+                        ProcessingStatus.COMPLETED
+                )
                 .stream()
                 .map(ChangeView::from)
                 .toList();

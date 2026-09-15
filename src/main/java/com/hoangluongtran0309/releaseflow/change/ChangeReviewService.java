@@ -7,8 +7,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.util.UUID;
 
+/**
+ * Records a person's review of one change. The Change Inbox and a release's review both
+ * use it, so every review settles a change the same way.
+ */
 @Service
-class ChangeReviewService {
+public class ChangeReviewService {
 
     private final ChangeRepository changeRepository;
     private final Clock clock;
@@ -19,7 +23,7 @@ class ChangeReviewService {
     }
 
     @Transactional
-    ChangeView review(ReleaseFlowPrincipal reviewer, UUID projectId, UUID changeId, ChangeReviewRequest request) {
+    public ChangeView review(ReleaseFlowPrincipal reviewer, UUID projectId, UUID changeId, ChangeReviewRequest request) {
         Change change = changeRepository.findByIdAndOrganizationIdAndProjectId(
                         changeId,
                         reviewer.organizationId(),

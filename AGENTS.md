@@ -6,8 +6,9 @@ ReleaseFlow currently implements the bootstrap, Organization administrator, Proj
 plus GitHub configuration, signed GitHub merged-pull-request intake,
 deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
-human review, Draft Release, Release Note publication, and changed-file review
-slices: one Spring Boot application, PostgreSQL/Flyway V1-V11, administrator
+human review, release review lifecycle, Release Note publication, and
+changed-file review slices: one Spring Boot application, PostgreSQL/Flyway
+V1-V12, administrator
 registration, member
 invitations with administrator and member roles, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
@@ -17,8 +18,9 @@ pull requests idempotently, optional write-only GitHub access tokens, a durable
 rule-based classification with mandatory review for breaking, Unknown, and
 sensitive-file changes, a per-Project Change Inbox, optional automatic AI
 classification (OpenAI, Anthropic, or DeepSeek) that the rules always override,
-recorded human review of any change, one Draft Release per Project built from
-settled changes, immutable published Release Note snapshots, REST/UI paths,
+recorded human review of any change, releases that move from draft through a
+per-change review and approval to publication (several per Project, with a
+planned release time), immutable published Release Note snapshots, REST/UI paths,
 and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
 Read `README.md`, `docs/architecture.md`, and
@@ -55,6 +57,10 @@ Read `README.md`, `docs/architecture.md`, and
 - Review triggers only add a need for review; only a recorded human review
   clears it. Missing, refused, or incomplete changed-file lists force review.
 - A `PROCESSING` change cannot be reviewed, sent to AI, or released.
+- A release's changes are chosen while it is a draft; during review a change
+  can only be rejected, which removes it. A release is approved only when every
+  change has a decision, and published only from `APPROVED`. A decision reviews
+  the change itself through `ChangeReviewService`.
 - Background work uses its own job table, short claim and result
   transactions, and `FOR UPDATE SKIP LOCKED`; retries stay bounded.
 - The sensitive-path list must compile and must not be empty.

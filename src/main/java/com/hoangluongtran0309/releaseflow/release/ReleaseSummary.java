@@ -9,8 +9,11 @@ public record ReleaseSummary(
         String summary,
         ReleaseStatus status,
         long changeCount,
+        long reviewedCount,
         Instant createdAt,
         Instant updatedAt,
+        Instant plannedReleaseAt,
+        Instant approvedAt,
         Instant publishedAt
 ) {
 }

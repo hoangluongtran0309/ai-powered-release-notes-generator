@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/projects/{projectId}/releases")
+@RequestMapping("/api/projects/{projectId}")
 public class ReleaseApiController {
 
     private final ReleaseService releaseService;
@@ -28,22 +28,22 @@ public class ReleaseApiController {
         this.releaseService = releaseService;
     }
 
-    @GetMapping
+    @GetMapping("/releases")
     List<ReleaseSummary> list(@AuthenticationPrincipal ReleaseFlowPrincipal principal, @PathVariable UUID projectId) {
         return releaseService.list(principal.organizationId(), projectId);
     }
 
-    @PostMapping
+    @PostMapping("/releases")
     ResponseEntity<ReleaseView> create(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
-            @Valid @RequestBody ReleaseRequest request
+            @Valid @RequestBody NewReleaseRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(releaseService.createDraft(principal.organizationId(), projectId, request));
     }
 
-    @GetMapping("/{releaseId}")
+    @GetMapping("/releases/{releaseId}")
     ReleaseView get(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
@@ -52,7 +52,7 @@ public class ReleaseApiController {
         return releaseService.get(principal.organizationId(), projectId, releaseId);
     }
 
-    @PutMapping("/{releaseId}")
+    @PutMapping("/releases/{releaseId}")
     ReleaseView edit(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
@@ -62,7 +62,7 @@ public class ReleaseApiController {
         return releaseService.edit(principal.organizationId(), projectId, releaseId, request);
     }
 
-    @DeleteMapping("/{releaseId}")
+    @DeleteMapping("/releases/{releaseId}")
     ResponseEntity<Void> discard(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
@@ -72,7 +72,17 @@ public class ReleaseApiController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/{releaseId}/available-changes")
+    @PutMapping("/releases/{releaseId}/schedule")
+    ReleaseView schedule(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @RequestBody ReleaseScheduleRequest request
+    ) {
+        return releaseService.schedule(principal.organizationId(), projectId, releaseId, request);
+    }
+
+    @GetMapping("/releases/{releaseId}/available-changes")
     List<ChangeView> availableChanges(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
@@ -81,7 +91,7 @@ public class ReleaseApiController {
         return releaseService.availableChanges(principal.organizationId(), projectId, releaseId);
     }
 
-    @PostMapping("/{releaseId}/changes")
+    @PostMapping("/releases/{releaseId}/changes")
     ReleaseView addChanges(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
@@ -91,7 +101,56 @@ public class ReleaseApiController {
         return releaseService.addChanges(principal.organizationId(), projectId, releaseId, request);
     }
 
-    @PostMapping("/{releaseId}/publish")
+    // Removes a change from a draft, or rejects it while the release is in review.
+    @DeleteMapping("/releases/{releaseId}/changes/{changeId}")
+    ReleaseView removeChange(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID changeId
+    ) {
+        return releaseService.removeChange(principal.organizationId(), projectId, releaseId, changeId);
+    }
+
+    @PostMapping("/releases/{releaseId}/request-review")
+    ReleaseView requestReview(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId
+    ) {
+        return releaseService.requestReview(principal.organizationId(), projectId, releaseId);
+    }
+
+    @PutMapping("/releases/{releaseId}/changes/{changeId}/decision")
+    ReleaseView decide(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId,
+            @PathVariable UUID changeId,
+            @Valid @RequestBody ReleaseDecisionRequest request
+    ) {
+        return releaseService.decide(principal, projectId, releaseId, changeId, request);
+    }
+
+    @PostMapping("/releases/{releaseId}/approve")
+    ReleaseView approve(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId
+    ) {
+        return releaseService.approve(principal, projectId, releaseId);
+    }
+
+    @PostMapping("/releases/{releaseId}/return-to-draft")
+    ReleaseView returnToDraft(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID releaseId
+    ) {
+        return releaseService.returnToDraft(principal.organizationId(), projectId, releaseId);
+    }
+
+    @PostMapping("/releases/{releaseId}/publish")
     ReleaseView publish(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
@@ -100,13 +159,11 @@ public class ReleaseApiController {
         return releaseService.publish(principal, projectId, releaseId);
     }
 
-    @DeleteMapping("/{releaseId}/changes/{changeId}")
-    ReleaseView removeChange(
+    @GetMapping("/release-assignments")
+    List<ReleaseAssignment> assignments(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
-            @PathVariable UUID projectId,
-            @PathVariable UUID releaseId,
-            @PathVariable UUID changeId
+            @PathVariable UUID projectId
     ) {
-        return releaseService.removeChange(principal.organizationId(), projectId, releaseId, changeId);
+        return releaseService.assignments(principal.organizationId(), projectId);
     }
 }

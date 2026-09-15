@@ -116,6 +116,10 @@
     .label-text-alt { @apply text-xs; color: var(--rf-text-muted); }
     .field-error { @apply text-xs font-medium text-red-600; }
 
+    /* @tailwindcss/forms paints every radio input; DaisyUI radio tabs draw their own label. */
+    .tabs > input.tab { background-image: none; color: inherit; box-shadow: none; }
+    .tabs > input.tab:not(:checked) { background-color: transparent; border-color: transparent; }
+
     .btn:not(.btn-xs) { min-height: 2.75rem; }
     .btn-sm { min-height: 2.75rem; height: 2.75rem; }
     .input { min-height: 2.75rem; }

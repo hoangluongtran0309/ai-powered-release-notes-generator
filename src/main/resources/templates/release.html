@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Release</title>
+</head>
+<body>
+<p layout:fragment="page-title">Releases</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">
+                <a class="link-hover" th:href="@{/releases(project=${projectId})}">Releases</a> / Release
+            </p>
+            <h1 class="page-heading" th:text="${release != null} ? ${release.version} : 'Release'">1.4.0</h1>
+            <p class="page-subtitle" th:if="${release != null}" th:switch="${release.status.name()}">
+                <span th:case="'DRAFT'">Add the changes this release should contain, then request review.</span>
+                <span th:case="'IN_REVIEW'">Approve, correct, or reject each change. The release can be approved once every change has a decision.</span>
+                <span th:case="*">Approved. Publishing freezes the release note exactly as previewed.</span>
+            </p>
+        </div>
+        <th:block th:if="${release != null}">
+            <span th:replace="~{fragments/release-status :: badge(${release.status})}">Draft</span>
+        </th:block>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Release was not found.</span></div>
+
+    <th:block th:if="${release != null}"
+              th:with="stage=${release.status.ordinal()},
+                       draft=${release.status.name() == 'DRAFT'},
+                       inReview=${release.status.name() == 'IN_REVIEW'},
+                       approved=${release.status.name() == 'APPROVED'},
+                       releasePath=@{/projects/{projectId}/releases/{releaseId}(projectId=${projectId},releaseId=${release.id})}">
+        <ol class="steps steps-horizontal mb-6 w-full" aria-label="Release progress">
+            <li class="step step-primary" th:attr="aria-current=${stage == 0} ? 'step' : null">Draft</li>
+            <li class="step" th:classappend="${stage >= 1} ? 'step-primary'" th:attr="aria-current=${stage == 1} ? 'step' : null">In review</li>
+            <li class="step" th:classappend="${stage >= 2} ? 'step-primary'" th:attr="aria-current=${stage == 2} ? 'step' : null">Approved</li>
+            <li class="step">Published</li>
+        </ol>
+
+        <div class="alert alert-warning mb-6" role="status" th:if="${release.breaking()}" id="breaking-warning">
+            <span>This release contains breaking changes. Make sure the release note explains what users must do.</span>
+        </div>
+
+        <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+            <div class="grid content-start gap-6">
+                <section class="surface-card p-6" id="next-step">
+                    <th:block th:if="${draft}">
+                        <h2 class="section-heading">Request review</h2>
+                        <p class="section-copy">Review freezes the list of changes. Each change then needs a decision before the release can be approved.</p>
+                        <p class="mt-3 text-sm font-medium text-amber-700" th:if="${#lists.isEmpty(release.changes)}">
+                            Add at least one change before requesting review.
+                        </p>
+                        <form class="mt-3" method="post" th:action="${releasePath + '/request-review'}">
+                            <button type="submit" class="btn btn-primary btn-sm" th:disabled="${#lists.isEmpty(release.changes)}">Request review</button>
+                        </form>
+                    </th:block>
+
+                    <th:block th:if="${inReview or approved}">
+                        <h2 class="section-heading">Review progress</h2>
+                        <progress class="progress progress-primary mt-3 w-full" th:value="${release.reviewedCount}"
+                                  th:max="${#lists.size(release.changes)}" aria-label="Review progress"></progress>
+                        <p class="mt-2 text-sm text-slate-600"
+                           th:text="|${release.reviewedCount} of ${#lists.size(release.changes)} changes reviewed|">1 of 3 changes reviewed</p>
+                    </th:block>
+
+                    <th:block th:if="${inReview}">
+                        <p class="mt-3 text-sm font-medium text-amber-700" th:unless="${release.fullyReviewed()}">
+                            Record a decision for every change before approving.
+                        </p>
+                        <details class="mt-4" id="approve-release">
+                            <summary class="cursor-pointer font-semibold text-indigo-700">Approve release</summary>
+                            <p class="mt-3 text-sm text-slate-600">Approval fixes the list of changes and their decisions. The release can then be published.</p>
+                            <form class="mt-3" method="post" th:action="${releasePath + '/approve'}">
+                                <button type="submit" class="btn btn-primary btn-sm" th:disabled="${!release.fullyReviewed()}"
+                                        th:text="|Approve ${release.version}|">Approve 1.4.0</button>
+                            </form>
+                        </details>
+                    </th:block>
+
+                    <th:block th:if="${approved}">
+                        <p class="mt-3 text-sm text-slate-600">
+                            Approved by <span class="font-semibold" th:text="${release.approverName}">Mai Tran</span> on
+                            <time th:datetime="${release.approvedAt}"
+                                  th:text="|${#temporals.format(release.approvedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>.
+                        </p>
+                        <details class="mt-4" id="publish-release">
+                            <summary class="cursor-pointer font-semibold text-indigo-700">Publish release</summary>
+                            <p class="mt-3 text-sm text-slate-600">
+                                Publishing freezes this release note exactly as previewed. It cannot be edited, unpublished, or deleted,
+                                and later changes to classifications do not alter it.
+                            </p>
+                            <form class="mt-3" method="post" th:action="${releasePath + '/publish'}">
+                                <button type="submit" class="btn btn-primary btn-sm" th:text="|Publish ${release.version}|">Publish 1.4.0</button>
+                            </form>
+                        </details>
+                    </th:block>
+
+                    <details class="mt-4" th:if="${inReview or approved}" id="return-to-draft">
+                        <summary class="cursor-pointer font-semibold text-slate-600">Return to draft</summary>
+                        <p class="mt-3 text-sm text-slate-600">
+                            The release becomes a draft again so its changes can be edited. Its decisions and approval are cleared;
+                            reviews already recorded on the changes stay.
+                        </p>
+                        <form class="mt-3" method="post" th:action="${releasePath + '/return-to-draft'}">
+                            <button type="submit" class="btn btn-outline btn-sm">Return to draft</button>
+                        </form>
+                    </details>
+                </section>
+
+                <section class="surface-card p-6" id="release-details">
+                    <h2 class="section-heading">Release details</h2>
+                    <form class="mt-4 grid gap-4" method="post" th:object="${releaseRequest}" th:if="${draft}"
+                          th:action="${releasePath}">
+                        <label class="form-control"><span class="label-text font-medium">Version</span>
+                            <input type="text" th:field="*{version}" maxlength="50" required
+                                   class="input input-bordered w-full sm:max-w-xs" th:errorclass="input-error">
+                            <span class="field-error" th:if="${#fields.hasErrors('version')}" th:errors="*{version}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">Summary <span class="text-slate-500">(optional)</span></span>
+                            <textarea th:field="*{summary}" maxlength="2000" rows="3" class="textarea textarea-bordered w-full"
+                                      th:errorclass="textarea-error"></textarea>
+                            <span class="field-error" th:if="${#fields.hasErrors('summary')}" th:errors="*{summary}"></span>
+                        </label>
+                        <div><button type="submit" class="btn btn-primary btn-sm">Save details</button></div>
+                    </form>
+                    <th:block th:unless="${draft}">
+                        <p class="mt-3 whitespace-pre-line text-sm text-slate-700" th:text="${release.summary != null} ? ${release.summary} : 'No summary.'">Summary</p>
+                        <p class="mt-2 text-xs text-slate-500">Return the release to draft to change its version or summary.</p>
+                    </th:block>
+
+                    <form class="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" method="post"
+                          th:action="${releasePath + '/schedule'}" id="release-schedule">
+                        <label class="form-control"><span class="label-text font-medium">Planned release <span class="text-slate-500">(UTC)</span></span>
+                            <input type="datetime-local" name="plannedReleaseAt" class="input input-bordered w-full"
+                                   th:value="${release.plannedReleaseAt != null} ? ${#temporals.format(release.plannedReleaseAt, 'yyyy-MM-dd''T''HH:mm', 'UTC')} : ''">
+                        </label>
+                        <button type="submit" class="btn btn-outline btn-sm">Save schedule</button>
+                    </form>
+                    <form class="mt-2" method="post" th:action="${releasePath + '/schedule'}" th:if="${release.plannedReleaseAt != null}">
+                        <input type="hidden" name="plannedReleaseAt" value="">
+                        <button type="submit" class="btn btn-ghost btn-sm">Clear schedule</button>
+                    </form>
+                </section>
+
+                <div class="tabs tabs-lift" role="tablist" aria-label="Release changes">
+                    <input type="radio" name="release-tabs" class="tab" role="tab" aria-label="Changes" th:checked="${draft}">
+                    <div class="tab-content border-base-300 bg-base-100 p-6" role="tabpanel" id="included-changes">
+                        <h2 class="section-heading">Included changes</h2>
+                        <p class="section-copy" th:if="${#lists.isEmpty(release.changes)}">No changes yet. Add changes from the list below.</p>
+                        <ul class="mt-4 divide-y divide-slate-200" th:unless="${#lists.isEmpty(release.changes)}">
+                            <li class="flex flex-wrap items-center justify-between gap-3 py-3" th:each="change : ${release.changes}"
+                                th:id="|included-${change.id}|">
+                                <div class="min-w-0">
+                                    <a class="link-hover font-semibold" th:href="${change.url}" target="_blank" rel="noopener noreferrer">
+                                        <span class="text-slate-500" th:text="|#${change.pullRequestNumber}|">#101</span>
+                                        <span th:text="${change.title}">feat: add CSV export</span>
+                                    </a>
+                                    <div class="mt-1 flex flex-wrap gap-1.5">
+                                        <span class="badge badge-ghost badge-sm" th:text="${change.category.label}">Feature</span>
+                                        <span class="badge badge-error badge-sm" th:if="${change.breaking}">Breaking</span>
+                                        <span class="badge badge-warning badge-sm" th:if="${change.needsReview}">Needs review</span>
+                                    </div>
+                                </div>
+                                <form method="post" th:if="${draft}"
+                                      th:action="${releasePath + '/changes/' + change.id + '/remove'}">
+                                    <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
+                                </form>
+                            </li>
+                        </ul>
+
+                        <th:block th:if="${draft}">
+                            <div class="mt-8 flex flex-wrap items-start justify-between gap-3" id="available-changes">
+                                <div>
+                                    <h2 class="section-heading">Available changes</h2>
+                                    <p class="section-copy">Processed changes of this project that are not in a release. Changes that still need review are reviewed with the release.</p>
+                                </div>
+                                <form method="post" th:unless="${#lists.isEmpty(availableChanges)}"
+                                      th:action="${releasePath + '/changes'}">
+                                    <input type="hidden" name="allAvailable" value="true">
+                                    <button type="submit" class="btn btn-outline btn-sm">Add all available</button>
+                                </form>
+                            </div>
+                            <p class="mt-4 text-sm text-slate-600" th:if="${#lists.isEmpty(availableChanges)}">
+                                No changes are waiting. New merged pull requests appear here once they are processed; see the
+                                <a class="link" th:href="@{/changes(project=${projectId})}">Change Inbox</a>.
+                            </p>
+                            <form class="mt-4" method="post" th:unless="${#lists.isEmpty(availableChanges)}"
+                                  th:action="${releasePath + '/changes'}">
+                                <ul class="divide-y divide-slate-200">
+                                    <li class="py-2" th:each="change : ${availableChanges}">
+                                        <label class="flex cursor-pointer items-start gap-3">
+                                            <input type="checkbox" name="changeIds" th:value="${change.id}" class="checkbox checkbox-sm mt-0.5">
+                                            <span class="min-w-0">
+                                                <span class="text-slate-500" th:text="|#${change.pullRequestNumber}|">#102</span>
+                                                <span class="font-medium" th:text="${change.title}">fix: handle empty tables</span>
+                                                <span class="badge badge-ghost badge-sm ml-1" th:text="${change.category.label}">Fix</span>
+                                                <span class="badge badge-error badge-sm" th:if="${change.breaking}">Breaking</span>
+                                                <span class="badge badge-warning badge-sm" th:if="${change.needsReview}">Needs review</span>
+                                            </span>
+                                        </label>
+                                    </li>
+                                </ul>
+                                <button type="submit" class="btn btn-primary btn-sm mt-3">Add selected</button>
+                            </form>
+                        </th:block>
+                        <p class="mt-4 text-xs text-slate-500" th:unless="${draft}">Return the release to draft to add or remove changes.</p>
+                    </div>
+
+                    <input type="radio" name="release-tabs" class="tab" role="tab" aria-label="Review" th:checked="${!draft}">
+                    <div class="tab-content border-base-300 bg-base-100 p-6" role="tabpanel" id="review-changes">
+                        <h2 class="section-heading">Review</h2>
+                        <p class="section-copy" th:if="${draft}">Request review to record a decision on each change.</p>
+                        <ul class="mt-4 divide-y divide-slate-200" th:unless="${draft}">
+                            <li class="py-4" th:each="change : ${release.changes}" th:id="|review-${change.id}|"
+                                th:with="decision=${release.decision(change.id)}">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <a class="link-hover font-semibold" th:href="${change.url}" target="_blank" rel="noopener noreferrer">
+                                            <span class="text-slate-500" th:text="|#${change.pullRequestNumber}|">#101</span>
+                                            <span th:text="${change.title}">feat: add CSV export</span>
+                                        </a>
+                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                            <span class="badge badge-ghost badge-sm" th:text="${change.category.label}">Feature</span>
+                                            <span class="badge badge-error badge-sm" th:if="${change.breaking}">Breaking</span>
+                                            <span class="badge badge-warning badge-sm" th:if="${change.needsReview}">Needs review</span>
+                                        </div>
+                                        <p class="mt-1 text-xs text-slate-500" th:unless="${#lists.isEmpty(change.reasons)}"
+                                           th:text="${#strings.listJoin(change.reasons, '; ')}">Conventional Commit type feat</p>
+                                    </div>
+                                    <div class="text-right text-sm" th:if="${decision != null}">
+                                        <span class="badge badge-success badge-soft font-semibold"
+                                              th:text="${decision.action.name() == 'APPROVE'} ? 'Approved' : 'Edited'">Approved</span>
+                                        <p class="mt-1 text-xs text-slate-500" th:text="|by ${decision.reviewerName}|">by Mai Tran</p>
+                                    </div>
+                                    <span class="badge badge-ghost font-semibold" th:if="${decision == null}">No decision</span>
+                                </div>
+                                <p class="mt-2 whitespace-pre-line text-sm text-slate-600" th:if="${decision != null and decision.note != null}"
+                                   th:text="${decision.note}">Checked with the docs team.</p>
+
+                                <div class="mt-3 grid gap-3" th:if="${inReview}">
+                                    <form class="flex flex-wrap items-end gap-2" method="post" aria-label="Approve change"
+                                          th:action="${releasePath + '/changes/' + change.id + '/decision'}">
+                                        <input type="hidden" name="action" value="APPROVE">
+                                        <input type="hidden" name="category" th:value="${change.category.value}">
+                                        <input type="hidden" name="breaking" th:value="${change.breaking}">
+                                        <label class="form-control sm:max-w-sm"><span class="label-text">Note <span class="text-slate-500">(optional)</span></span>
+                                            <input type="text" name="note" maxlength="2000" class="input input-bordered input-sm w-full">
+                                        </label>
+                                        <button type="submit" class="btn btn-primary btn-sm"
+                                                th:disabled="${change.category.name() == 'UNKNOWN'}">Approve as shown</button>
+                                    </form>
+                                    <p class="text-xs text-amber-700" th:if="${change.category.name() == 'UNKNOWN'}">
+                                        An Unknown change needs a category. Use Edit classification.
+                                    </p>
+                                    <details>
+                                        <summary class="cursor-pointer text-sm font-semibold text-indigo-700">Edit classification</summary>
+                                        <form class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,14rem)_auto] sm:items-end" method="post"
+                                              aria-label="Edit change classification"
+                                              th:action="${releasePath + '/changes/' + change.id + '/decision'}">
+                                            <input type="hidden" name="action" value="EDIT">
+                                            <label class="form-control"><span class="label-text font-medium">Category</span>
+                                                <select name="category" class="select select-bordered select-sm w-full" required>
+                                                    <option value="" disabled th:selected="${change.category.name() == 'UNKNOWN'}">Choose a category</option>
+                                                    <option th:each="option : ${categories}" th:unless="${option.name() == 'UNKNOWN'}"
+                                                            th:value="${option.value}" th:text="${option.label}"
+                                                            th:selected="${option == change.category}">Feature</option>
+                                                </select>
+                                            </label>
+                                            <label class="label cursor-pointer justify-start gap-2">
+                                                <input type="checkbox" name="breaking" value="true" class="checkbox checkbox-sm" th:checked="${change.breaking}">
+                                                <span class="label-text">Breaking change</span>
+                                            </label>
+                                            <label class="form-control sm:col-span-2"><span class="label-text">Note <span class="text-slate-500">(optional)</span></span>
+                                                <input type="text" name="note" maxlength="2000" class="input input-bordered input-sm w-full">
+                                            </label>
+                                            <div><button type="submit" class="btn btn-primary btn-sm">Save classification</button></div>
+                                        </form>
+                                    </details>
+                                    <details>
+                                        <summary class="cursor-pointer text-sm font-semibold text-red-600">Reject</summary>
+                                        <p class="mt-2 text-sm text-slate-600">The change leaves this release and becomes available for another one. Its classification is kept.</p>
+                                        <form class="mt-2" method="post" th:action="${releasePath + '/changes/' + change.id + '/remove'}">
+                                            <button type="submit" class="btn btn-error btn-sm">Reject change</button>
+                                        </form>
+                                    </details>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <details class="surface-card p-6" id="discard-release">
+                    <summary class="cursor-pointer font-semibold text-slate-600">Discard release</summary>
+                    <p class="mt-3 text-sm text-slate-600">The release and its decisions are deleted and its changes become available again. The changes and their reviews are kept.</p>
+                    <form class="mt-3" method="post" th:action="${releasePath + '/discard'}">
+                        <button type="submit" class="btn btn-error btn-sm">Discard this release</button>
+                    </form>
+                </details>
+            </div>
+
+            <article class="surface-card content-start p-6 xl:sticky xl:top-24 xl:self-start" aria-label="Release note preview">
+                <p class="text-sm font-semibold text-indigo-600">Preview</p>
+                <h2 class="mt-1 text-2xl font-bold" th:text="${release.version}">1.4.0</h2>
+                <p class="mt-1 text-xs text-slate-500" th:if="${release.plannedReleaseAt != null}">
+                    Planned for
+                    <time th:datetime="${release.plannedReleaseAt}"
+                          th:text="|${#temporals.format(release.plannedReleaseAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">1 Oct 2026, 09:00 UTC</time>
+                </p>
+                <p class="mt-2 whitespace-pre-line text-slate-700" th:if="${release.summary != null}" th:text="${release.summary}">Summary</p>
+                <p class="mt-4 text-sm text-slate-500" th:if="${#lists.isEmpty(release.preview)}">Add changes to see the release note.</p>
+                <section class="mt-5" th:each="section : ${release.preview}">
+                    <h3 class="font-bold" th:text="${section.title}">Features</h3>
+                    <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
+                        <li th:each="item : ${section.items}">
+                            <span th:text="${item.title}">Add CSV export</span>
+                            <a class="link text-slate-500" th:href="${item.url}" target="_blank" rel="noopener noreferrer"
+                               th:text="|#${item.pullRequestNumber}|">#101</a>
+                            <span class="text-slate-500" th:if="${section.title == 'Breaking changes'}"
+                                  th:text="|(${item.category.label})|">(Fix)</span>
+                        </li>
+                    </ul>
+                </section>
+            </article>
+        </div>
+    </th:block>
+</div>
+</body>
+</html>
