@@ -25,7 +25,7 @@ class ChangeAiClassificationService {
 
     private final ChangeRepository changeRepository;
     private final AiClassifiers aiClassifiers;
-    private final SensitivePathRules sensitivePaths;
+    private final ProjectSensitivePathService sensitivePaths;
     private final OutputLanguageService outputLanguageService;
     private final AudienceService audienceService;
     private final CategoryService categoryService;
@@ -37,7 +37,7 @@ class ChangeAiClassificationService {
     ChangeAiClassificationService(
             ChangeRepository changeRepository,
             AiClassifiers aiClassifiers,
-            SensitivePathRules sensitivePaths,
+            ProjectSensitivePathService sensitivePaths,
             OutputLanguageService outputLanguageService,
             AudienceService audienceService,
             CategoryService categoryService,
@@ -75,7 +75,8 @@ class ChangeAiClassificationService {
             List<CategoryRef> catalog = categoryService.active(organizationId);
             return new Snapshot(
                     pullRequest,
-                    ChangeClassifier.classify(pullRequest, current.recordedFiles(), sensitivePaths, catalog),
+                    ChangeClassifier.classify(pullRequest, current.recordedFiles(),
+                            sensitivePaths.forProject(organizationId, projectId), catalog),
                     catalog
             );
         });

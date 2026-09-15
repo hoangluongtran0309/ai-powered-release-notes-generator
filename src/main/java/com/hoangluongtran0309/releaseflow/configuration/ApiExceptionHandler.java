@@ -30,7 +30,9 @@ import com.hoangluongtran0309.releaseflow.change.DuplicateCandidateNotFoundExcep
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
+import com.hoangluongtran0309.releaseflow.change.InvalidSensitivePathsException;
 import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadException;
+import com.hoangluongtran0309.releaseflow.change.SensitivePathApiController;
 import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchException;
 import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
 import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationAlreadyConfiguredException;
@@ -78,7 +80,8 @@ import java.util.Map;
         ChangeApiController.class,
         ReleaseApiController.class,
         AudienceApiController.class,
-        CategoryApiController.class
+        CategoryApiController.class,
+        SensitivePathApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -521,6 +524,16 @@ public class ApiExceptionHandler {
                 "Possible duplicate already decided",
                 exception.getMessage(),
                 "duplicate_candidate_decided"
+        ));
+    }
+
+    @ExceptionHandler(InvalidSensitivePathsException.class)
+    ResponseEntity<ProblemDetail> invalidSensitivePaths(InvalidSensitivePathsException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid sensitive paths",
+                exception.getMessage(),
+                "invalid_sensitive_paths"
         ));
     }
 

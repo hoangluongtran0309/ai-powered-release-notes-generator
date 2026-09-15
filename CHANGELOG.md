@@ -181,6 +181,15 @@ version has been released.
   `audience_last`, `audience_in_use`, `audience_not_preset`,
   `audience_not_found`, `release_note_render_failed`, `release_notes_missing`,
   and `release_note_not_found`.
+- Sensitive paths per Project (ADR-0014):
+  - administrators add glob patterns to the deployment's baseline on a
+    Sensitive paths page and through
+    `PUT /api/projects/{projectId}/sensitive-paths`; members read them;
+  - the baseline can never be removed, and additions apply to changes
+    classified afterwards;
+  - at most 100 patterns of at most 256 characters, rejected with
+    `invalid_sensitive_paths` when they do not compile.
+- Flyway migration `V16` for `project_sensitive_paths`.
 - Context sufficiency (ADR-0013):
   - an AI context score from 0 to 100 with reasons, lowered by fixed caps for
     empty descriptions and short or generic titles;

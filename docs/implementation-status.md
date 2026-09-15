@@ -64,6 +64,10 @@
   sections and Markdown, the publisher and time, a read-only page with
   copyable Markdown, unique versions per Project, and Flyway `V8` triggers that
   reject any change to published releases, their changes, and their notes.
+- Sensitive paths per Project (ADR-0014), with Flyway `V16`: administrators add
+  glob patterns to the deployment's baseline through Thymeleaf and REST,
+  members read them, and the worker and AI retries check changes against the
+  baseline plus the Project's additions.
 - Context sufficiency and possible duplicates (ADR-0013), with Flyway `V15`:
   - an AI context score, lowered by fixed caps, with a review trigger below a
     configurable threshold;
@@ -122,8 +126,7 @@
 
 ## In progress
 
-- Nothing. The context sufficiency and duplicate candidate slice is complete
-  and awaiting review.
+- Nothing. The Project sensitive path slice is complete and awaiting review.
 
 ## Planned
 
@@ -136,9 +139,8 @@ deliberately deferred list below, one reviewed slice at a time.
 - Additional source providers and automatic AI retries.
 - Historical imports, polling, and queues or retries for work other than
   changed-file collection.
-- Validating a repository with GitHub when it is connected, per-Project
-  sensitive-path additions, keyword review triggers, integration replacement,
-  and secret or token rotation reminders.
+- Validating a repository with GitHub when it is connected, keyword review
+  triggers, integration replacement, and secret or token rotation reminders.
 - Localization of the UI, translation of notes into several languages,
   per-language template variants, and asynchronous note generation.
 - Automation, distribution integrations, and a public changelog.

@@ -48,7 +48,7 @@ class ChangeProcessingWorker {
     private final ChangeRepository changeRepository;
     private final GitHubRepositoryAccess repositoryAccess;
     private final GitHubApiClient gitHubApiClient;
-    private final SensitivePathRules sensitivePaths;
+    private final ProjectSensitivePathService sensitivePaths;
     private final AiClassifiers aiClassifiers;
     private final OutputLanguageService outputLanguageService;
     private final AudienceService audienceService;
@@ -65,7 +65,7 @@ class ChangeProcessingWorker {
             ChangeRepository changeRepository,
             GitHubRepositoryAccess repositoryAccess,
             GitHubApiClient gitHubApiClient,
-            SensitivePathRules sensitivePaths,
+            ProjectSensitivePathService sensitivePaths,
             AiClassifiers aiClassifiers,
             OutputLanguageService outputLanguageService,
             AudienceService audienceService,
@@ -156,7 +156,8 @@ class ChangeProcessingWorker {
             return;
         }
         List<CategoryRef> catalog = categoryService.active(claim.organizationId());
-        ChangeClassification rules = ChangeClassifier.classify(claim.pullRequest(), files, sensitivePaths, catalog);
+        ChangeClassification rules = ChangeClassifier.classify(claim.pullRequest(), files,
+                sensitivePaths.forProject(claim.organizationId(), claim.projectId()), catalog);
 
         Optional<AiChangeClassifier> ai = aiClassifiers.active();
         if (ai.isEmpty()) {
@@ -233,7 +234,8 @@ class ChangeProcessingWorker {
     // A job whose AI call may already have happened is finished from the recorded files.
     private void completeWithoutAi(ChangeProcessingJob job, Change change, Instant now) {
         PullRequestFiles files = change.recordedFiles();
-        ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files, sensitivePaths,
+        ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files,
+                sensitivePaths.forProject(change.getOrganizationId(), change.getProjectId()),
                 categoryService.active(change.getOrganizationId()));
         AiOutcome outcome = aiClassifiers.active()
                 .map(ai -> AiOutcome.failed(ai, AiOutcome.DID_NOT_FINISH))

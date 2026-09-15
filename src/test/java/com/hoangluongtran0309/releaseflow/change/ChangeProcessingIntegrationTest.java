@@ -70,6 +70,9 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
     private ChangeProcessingJobRepository jobRepository;
 
     @Autowired
+    private ProjectSensitivePathService sensitivePathService;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @DynamicPropertySource
@@ -148,6 +151,44 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.needsReview").value(false));
         assertThat(onlyChange().getReviewTriggers()).containsExactly(ReviewTrigger.sensitivePath(MIGRATION));
+    }
+
+    @Test
+    void aPatternAddedForTheProjectForcesReviewOfLaterChanges() throws Exception {
+        Repository repository = connect(true);
+        String invoice = "src/main/java/billing/Invoice.java";
+        GITHUB.respondWithFiles(invoice);
+        deliver(repository, 20, "feat: add invoices");
+        worker.processOne();
+
+        mockMvc.perform(put("/api/projects/{projectId}/sensitive-paths", repository.projectId())
+                        .session(repository.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"additions\":[\"**/billing/**\"]}"))
+                .andExpect(status().isOk());
+        deliver(repository, 21, "feat: add refunds");
+        worker.processOne();
+
+        Change earlier = change(20);
+        assertThat(earlier.isNeedsReview()).isFalse();
+        assertThat(earlier.getReviewTriggers()).isEmpty();
+        Change later = change(21);
+        assertThat(later.isNeedsReview()).isTrue();
+        assertThat(later.getReviewTriggers()).containsExactly(ReviewTrigger.sensitivePath(invoice));
+        mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
+                .andExpect(content().string(containsString("Sensitive file " + invoice)));
+
+        // Another Project of the Organization keeps the baseline only.
+        MvcResult other = mockMvc.perform(post("/api/projects").session(repository.session()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Billing\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID otherProject = UUID.fromString(JsonPath.read(other.getResponse().getContentAsString(), "$.id"));
+        List<ChangedFile> files = List.of(new ChangedFile(invoice, null, ChangedFileKind.MODIFIED));
+        assertThat(sensitivePathService.forProject(repository.organizationId(), otherProject).matches(files)).isEmpty();
+        assertThat(sensitivePathService.forProject(repository.organizationId(), repository.projectId()).matches(files))
+                .containsExactly(invoice);
     }
 
     @Test
@@ -367,6 +408,13 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                 Timestamp.from(Instant.now().minusSeconds(1)),
                 changeId
         );
+    }
+
+    private Change change(int pullRequestNumber) {
+        return changeRepository.findAll().stream()
+                .filter(change -> change.getPullRequestNumber() == pullRequestNumber)
+                .findFirst()
+                .orElseThrow();
     }
 
     private Change onlyChange() {

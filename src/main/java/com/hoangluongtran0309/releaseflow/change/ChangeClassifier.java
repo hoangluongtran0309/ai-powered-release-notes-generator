@@ -66,12 +66,13 @@ final class ChangeClassifier {
     }
 
     /**
+     * @param sensitivePaths the Project's effective sensitive-path rules
      * @param catalog the Organization's active categories
      */
     static ChangeClassification classify(
             MergedPullRequest pullRequest,
             PullRequestFiles files,
-            SensitivePathRules sensitivePaths,
+            SensitivePaths sensitivePaths,
             List<CategoryRef> catalog
     ) {
         List<String> reasons = new ArrayList<>();

@@ -76,6 +76,11 @@ public class SecurityConfiguration {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/projects/*/github-integration/token")
                         .hasRole("ADMIN")
+                        // Members read a Project's sensitive paths; administrators add to them.
+                        .requestMatchers(HttpMethod.PUT, "/api/projects/*/sensitive-paths")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/projects/*/sensitive-paths")
+                        .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/organization/output-language")
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/organization/output-language")
