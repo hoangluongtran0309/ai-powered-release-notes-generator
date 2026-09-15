@@ -4,6 +4,7 @@ import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.category.CategoryService;
 import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
+import com.hoangluongtran0309.releaseflow.project.SourceNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.ProjectView;
 import jakarta.servlet.http.HttpServletResponse;
@@ -35,6 +36,7 @@ public class ChangeInboxPageController {
     private final CategoryService categoryService;
     private final CategorySuggestionService suggestionService;
     private final DuplicateCandidateService duplicateService;
+    private final SourceImportService importService;
 
     ChangeInboxPageController(
             ProjectService projectService,
@@ -43,7 +45,8 @@ public class ChangeInboxPageController {
             ChangeReviewService reviewService,
             CategoryService categoryService,
             CategorySuggestionService suggestionService,
-            DuplicateCandidateService duplicateService
+            DuplicateCandidateService duplicateService,
+            SourceImportService importService
     ) {
         this.projectService = projectService;
         this.inboxService = inboxService;
@@ -52,6 +55,57 @@ public class ChangeInboxPageController {
         this.categoryService = categoryService;
         this.suggestionService = suggestionService;
         this.duplicateService = duplicateService;
+        this.importService = importService;
+    }
+
+    /** Queues an import of a repository's last 90 days, then returns to the Inbox. */
+    @PostMapping("/projects/{projectId}/sources/{sourceId}/imports")
+    String startImport(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID sourceId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return importAction(principal, projectId, model, response,
+                () -> importService.startImport(principal, projectId, sourceId));
+    }
+
+    @PostMapping("/projects/{projectId}/sources/{sourceId}/imports/resume")
+    String resumeImport(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID projectId,
+            @PathVariable UUID sourceId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return importAction(principal, projectId, model, response,
+                () -> importService.resume(principal, projectId, sourceId));
+    }
+
+    private String importAction(
+            ReleaseFlowPrincipal principal,
+            UUID projectId,
+            Model model,
+            HttpServletResponse response,
+            Runnable action
+    ) {
+        try {
+            action.run();
+        } catch (ProjectNotFoundException | SourceNotFoundException exception) {
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            model.addAttribute("pageError", exception.getMessage());
+            return renderInbox(principal, projectId, null, null, null, model, response);
+        } catch (SourceTokenMissingException | SourceSyncInProgressException | SourceImportNotResumableException exception) {
+            response.setStatus(HttpStatus.CONFLICT.value());
+            model.addAttribute("pageError", exception.getMessage());
+            return renderInbox(principal, projectId, null, null, null, model, response);
+        }
+        return "redirect:" + UriComponentsBuilder.fromPath("/changes")
+                .queryParam("project", projectId)
+                .fragment("source-imports")
+                .encode()
+                .toUriString();
     }
 
     @GetMapping("/changes")
@@ -200,6 +254,7 @@ public class ChangeInboxPageController {
         model.addAttribute("duplicates", List.of());
         model.addAttribute("aiEnabled", aiClassificationService.isEnabled());
         model.addAttribute("changes", List.of());
+        model.addAttribute("imports", List.of());
         if (selectedProjectId == null) {
             return "changes";
         }
@@ -212,6 +267,7 @@ public class ChangeInboxPageController {
             ));
             model.addAttribute("suggestions", suggestionService.byChange(principal.organizationId(), selectedProjectId));
             model.addAttribute("duplicates", duplicateService.list(principal.organizationId(), selectedProjectId, null));
+            model.addAttribute("imports", importService.status(principal.organizationId(), selectedProjectId));
         } catch (ProjectNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             model.addAttribute("pageError", exception.getMessage());

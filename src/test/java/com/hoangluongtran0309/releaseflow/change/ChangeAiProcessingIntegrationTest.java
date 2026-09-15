@@ -96,7 +96,7 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
@@ -677,14 +677,15 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
         UUID projectId = UUID.fromString(JsonPath.read(project.getResponse().getContentAsString(), "$.id"));
-        MvcResult integration = mockMvc.perform(post("/api/projects/{projectId}/github-integration", projectId)
+        MvcResult integration = mockMvc.perform(post("/api/projects/{projectId}/sources", projectId)
                         .session(session)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"owner\":\"acme\",\"repository\":\"releaseflow\"}"))
                 .andExpect(status().isCreated())
                 .andReturn();
-        mockMvc.perform(put("/api/projects/{projectId}/github-integration/token", projectId)
+        mockMvc.perform(put("/api/projects/{projectId}/sources/{sourceId}/token", projectId,
+                            JsonPath.read(integration.getResponse().getContentAsString(), "$.id"))
                         .session(session)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

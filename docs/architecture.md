@@ -20,12 +20,15 @@ GET  /api/csrf                -> CSRF token for session-based REST clients
 GET  /api/status              -> JSON status
 GET  /projects                -> Project and GitHub configuration UI
 POST /projects                -> ProjectService
-POST /projects/{id}/github-integration -> GitHubIntegrationService
+POST /projects/{id}/sources   -> IntegrationSourceService (administrator)
 GET  /api/projects            -> tenant-scoped Project list
 POST /api/projects            -> ProjectService
-POST /api/projects/{id}/github-integration -> GitHubIntegrationService
-POST /projects/{id}/github-integration/token -> GitHubIntegrationService (administrator)
-PUT  /api/projects/{id}/github-integration/token -> GitHubIntegrationService (administrator)
+GET  /api/projects/{id}/sources -> IntegrationSourceService (every member)
+POST /api/projects/{id}/sources -> IntegrationSourceService (administrator)
+POST /projects/{id}/sources/{sourceId}/token -> IntegrationSourceService (administrator)
+PUT  /api/projects/{id}/sources/{sourceId}/token -> IntegrationSourceService (administrator)
+GET  /api/projects/{id}/imports -> SourceImportService (every member)
+POST /[api/]projects/{id}/sources/{sourceId}/imports[/resume] -> SourceImportService (administrator)
 POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
 GET  /changes                 -> ChangeInboxService (Change Inbox UI)
 GET  /api/projects/{id}/changes -> ChangeInboxService
@@ -72,7 +75,7 @@ PUT  /api/organization/release-languages -> ReleaseLanguageService (administrato
 
 REST and Thymeleaf registration call the same transactional application
 service. Project REST and UI controllers likewise call the same Project and
-GitHub integration services. One short registration transaction creates an
+integration source services. One short registration transaction creates an
 Organization and its ADMIN AppUser, and publishes `OrganizationRegistered`,
 which `CategoryService` and `AudienceService` handle in the same transaction to
 seed the default categories and the preset audiences.
@@ -83,8 +86,8 @@ submitted password is returned.
 
 Registration creates an `ADMIN`. Accepting an invitation creates a `MEMBER` in
 the invitation's Organization. Only administrators may use `/members`,
-`/api/members`, `/api/invitations/**`, and the GitHub integration `POST`
-endpoints. `SecurityConfiguration` enforces this, and `InvitationService`
+`/api/members`, `/api/invitations/**`, and the endpoints that connect a
+source, set its token, or import its history. `SecurityConfiguration` enforces this, and `InvitationService`
 checks the principal's role again. Members can use every other workspace
 feature.
 
@@ -136,13 +139,15 @@ projects
   name
   created_at
 
-github_integrations
+integration_sources (github_integrations before V18)
   id (UUID PK)
   organization_id
-  project_id (composite FK with organization_id -> projects)
-  repository_owner + repository_name (unique per Organization)
+  project_id (composite FK with organization_id -> projects; several per Project)
+  source_type (GITHUB) + external_project_key (owner/repository, unique per Organization)
+  repository_owner + repository_name
   webhook_id (globally unique)
   secret_nonce + secret_ciphertext
+  connection_status, last_sync_at, last_error_code
   created_at
   last_delivery_at (nullable, last accepted webhook delivery)
 
@@ -236,10 +241,14 @@ database boundary. This decision is recorded in
 
 ## GitHub connection credentials
 
-Each Project has at most one create-only GitHub integration. The submitted
-owner and repository are trimmed, lowercased, and validated before persistence.
-The same canonical repository may be connected by different Organizations but
-only once inside one Organization.
+A Project may have several create-only integration sources; for now each is a
+GitHub repository. The submitted owner and repository are trimmed, lowercased,
+and validated before persistence. The same canonical repository may be
+connected by different Organizations but only once inside one Organization
+(`integration_sources_external_unique`). V18 renamed `github_integrations` to
+`integration_sources` in place, so every row kept its ID, webhook ID,
+repository, and ciphertexts; see
+[ADR-0016](adr/0016-integration-sources-and-history-import.md).
 
 ReleaseFlow creates a random UUID webhook identity and a 32-byte random signing
 secret. The secret is returned only from the successful creation response and
@@ -254,8 +263,8 @@ Base64-encoded 32-byte key from `RELEASEFLOW_CREDENTIAL_MASTER_KEY`. Key and
 credential material are never logged. See
 [ADR-0002](adr/0002-per-integration-webhook-credentials.md).
 
-An administrator may add or replace one GitHub access token per integration.
-`GitHubIntegrationService.replaceToken` reads the integration in one short
+An administrator may add or replace one GitHub access token per source.
+`IntegrationSourceService.replaceToken` reads the source in one short
 transaction, asks GitHub with `GitHubApiClient.checkPullRequestAccess`
 (`GET /repos/{owner}/{repo}/pulls?state=closed&per_page=1`) outside any
 transaction, and stores the token in a second short transaction. The token uses
@@ -263,7 +272,8 @@ the same cipher and authenticated data as the secret plus a
 `github-access-token` purpose line, so the two ciphertexts cannot be swapped.
 Project reads report only whether a token exists and when it was set.
 `GitHubRepositoryAccess` is the single way the `change` capability obtains the
-decrypted token, always by Organization and Project ID. See
+decrypted token, always by Organization, Project, and source ID. Saving a token
+marks the source `ACTIVE` again. See
 [ADR-0008](adr/0008-durable-change-processing.md).
 
 ## GitHub webhook intake
@@ -292,9 +302,11 @@ acknowledged and ignored. Signed but malformed deliveries receive
 `400 webhook_payload_malformed`, and nothing is written for any rejected
 delivery.
 
-Idempotency relies on the `changes_project_pull_request_unique` constraint. The
-service checks for an existing row first and treats a concurrent unique
-violation as a duplicate, so redeliveries return `200 duplicate`. The first
+Idempotency relies on the `changes_source_external_unique` constraint on
+`(source_id, external_id)`, the pull request number within its source.
+`ChangeIntake`, shared by webhook deliveries and history imports, checks for an
+existing row first and treats a concurrent unique violation as a duplicate, so
+redeliveries return `200 duplicate`. The first
 delivery ID is retained on the row. Every accepted delivery advances the
 integration's `last_delivery_at`, which the Projects page shows as setup step
 three. Intake stays short: one transaction inserts the change, `PROCESSING`,
@@ -316,7 +328,7 @@ happen between them:
    its attempt counted, and its claim time recorded, so several workers never
    take the same job.
 3. Without a transaction, `GitHubRepositoryAccess` supplies the repository and
-   token, and `GitHubApiClient.pullRequestFiles` lists the files, 100 per page
+   token of the change's source, and `GitHubApiClient.pullRequestFiles` lists the files, 100 per page
    for at most five pages. A full fifth page, a refused or missing token, or an
    invalid response is final. Timeouts, network errors, rate limits, and 5xx
    responses are retried after 2 and 4 seconds, up to three attempts.
@@ -342,6 +354,44 @@ released, reviewed, or sent to AI. The service layer
 also rejects such a review with `409 change_processing`.
 `changes_triggers_require_review` allows review triggers only on changes that
 need or have received review.
+
+## History import
+
+ADR-0016 imports a source's merged pull requests of the last 90 days.
+
+- **Jobs.** `SourceImportService` queues a `HISTORICAL_IMPORT` row in
+  `source_sync_jobs` for a source with a token, with its window, cursor
+  `1:0`, and `releaseflow.import.item-limit` (500). The partial unique index
+  `source_sync_jobs_one_active` allows one `PENDING`, `RUNNING`, or
+  `RETRY_SCHEDULED` job per source; a second request returns
+  `409 source_sync_in_progress`. Resuming a `PARTIAL` or `FAILED` job puts it
+  back to `PENDING` with its cursor, a zero imported count, and zero attempts.
+- **Worker.** `SourceImportWorker` runs every second (off in tests, like the
+  change worker). It releases `RUNNING` jobs claimed more than ten minutes ago,
+  claims one due job with `FOR UPDATE SKIP LOCKED`, and then, outside any
+  transaction, reads pages through `GitHubApiClient.closedPullRequests`
+  (`GET /repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=N`).
+  From the cursor's offset, each pull request is counted as scanned; the first
+  one updated before the window completes the job; one merged inside the window
+  goes through `ChangeIntake.record(..., IMPORT)`, which creates the change and
+  its processing job or reports a duplicate. At the item limit the job becomes
+  `PARTIAL` with the cursor on the next pull request, and a short last page
+  completes it. The cursor and counts are saved in a short transaction after
+  every page.
+- **Failures.** A 429, or a 403 with `Retry-After` or an exhausted rate limit,
+  waits `min(Retry-After or the reset time, one hour)`; a 5xx or network
+  failure waits `min(300, 2^attempt)` seconds; the fifth attempt fails. 401,
+  404, and other 403 responses fail at once and mark the source `ERROR` through
+  `IntegrationSourceService.recordSync`, which also records `last_sync_at` and
+  the error code. An unreadable pull request is skipped with a warning.
+- **Changes.** Imported changes have `origin = IMPORT` and no `delivery_id`;
+  `changes_delivery_matches_origin` keeps the two consistent. The Change Inbox
+  shows each source's latest import with Import and Resume actions for
+  administrators, and an **Imported** badge on the cards.
+
+Because GitHub orders the list by update time, a pull request updated while an
+import is running can move between pages and be skipped or seen twice. Seeing
+it twice is harmless, and webhooks cover anything merged after connection.
 
 ## Deterministic classification
 

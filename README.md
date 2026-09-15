@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V17`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V18`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -105,17 +105,21 @@ REST clients use the same session and CSRF policy as the server-rendered UI:
 3. Sign in through `POST /login` using `email` and `password` form fields.
 4. Read the authenticated identity from `GET /api/session`.
 5. Create and list tenant-scoped Projects through `POST|GET /api/projects`.
-6. Configure a repository with
-   `POST /api/projects/{projectId}/github-integration`. Save the returned
-   `webhookSecret` immediately; it is never returned again.
-7. Optionally set its access token with
-   `PUT /api/projects/{projectId}/github-integration/token` (see
+6. Connect a repository with `POST /api/projects/{projectId}/sources` and
+   `{"type": "GITHUB", "owner", "repository"}`. Save the returned
+   `webhookSecret` immediately; it is never returned again. A Project may have
+   several repositories; `GET /api/projects/{projectId}/sources` lists them.
+7. Optionally set a repository's access token with
+   `PUT /api/projects/{projectId}/sources/{sourceId}/token` (see
    [GitHub access token](#github-access-token)).
 
 Authenticated users can perform the same workflow at `/projects`. GitHub owner
 and repository names are canonicalized to lowercase. A repository can be
-connected once per Organization, while different Organizations may connect the
-same repository.
+connected to one Project per Organization, while different Organizations may
+connect the same repository. Connecting a repository and setting its token are
+for administrators; every member can list sources. An unknown source returns
+`404 source_not_found`, and a repository already connected returns
+`409 github_repository_already_connected`.
 
 `GET /api/status` remains public.
 
@@ -198,8 +202,9 @@ never from the payload. It answers:
 | Merged pull request (`closed` with `merged: true`) | `200` `recorded`, or `duplicate` when already recorded |
 | Any other event or action | `200` `ignored` |
 
-Each merged pull request is stored once per Project, so GitHub redeliveries are
-harmless. The Projects page shows the time of the last accepted delivery,
+Each merged pull request is stored once per repository, so GitHub redeliveries
+are harmless, and two repositories of one Project may both have a pull request
+#12. The Projects page shows the time of the last accepted delivery,
 which appears as soon as GitHub sends its initial `ping`.
 
 To exercise the endpoint locally without GitHub, sign the exact bytes you send:
@@ -225,19 +230,55 @@ one, every new change needs review, because nothing can be ruled out.
 
 Create a fine-grained personal access token limited to the repository, with
 **Pull requests: Read-only** permission (a classic token needs `repo` for a
-private repository). An administrator enters it in the Project's card on the
-Projects page, or calls:
+private repository). An administrator enters it under the repository in the
+Project's card on the Projects page, or calls:
 
 ```text
-PUT /api/projects/{projectId}/github-integration/token {"token"}   (administrator; 204)
+PUT /api/projects/{projectId}/sources/{sourceId}/token {"token"}   (administrator; 204)
 ```
 
 ReleaseFlow first asks GitHub for the repository's pull requests with the
 token, then stores it encrypted with AES-256-GCM. The token is never returned;
-the Project only reports `accessTokenConfigured` and `accessTokenUpdatedAt`.
+the source only reports `accessTokenConfigured` and `accessTokenUpdatedAt`.
 Sending a new token replaces the old one. Errors are `400 github_token_rejected`
 when GitHub refuses the token, `503 github_unavailable` when GitHub cannot be
-reached, `404 github_integration_not_found`, and `403` for members.
+reached, `404 source_not_found`, and `403` for members.
+
+## History import
+
+Webhooks bring in pull requests merged after a repository is connected. To add
+the ones merged before, an administrator opens the **History import** panel of
+the Change Inbox and chooses **Import last 90 days** for a repository with an
+access token, or calls the REST endpoints below. A background worker lists the
+repository's closed pull requests, most recently updated first, 100 per page,
+and records every one merged in the last 90 days through the same processing as
+a webhook delivery: its changed files are listed and, when AI is configured, it
+is classified once. A pull request already recorded, by webhook or by an
+earlier import, is skipped, so imports and webhooks never duplicate each other.
+Imported changes carry an **Imported** badge.
+
+An import stops at the first pull request updated before its window, and after
+500 new changes it stops as **Stopped at the limit** with its position saved;
+**Resume** continues from there with a fresh count, and so does resuming a
+failed import. When GitHub rate-limits the import, it waits as long as GitHub
+asks (`Retry-After` or the rate-limit reset, at most an hour); other temporary
+failures wait with growing delays. After five attempts, or at once when GitHub
+refuses the token, the import fails, and a refused token marks the repository
+as **Connection failing** until a new token is saved. Only one import of a
+repository runs at a time.
+
+```text
+GET  /api/projects/{projectId}/imports                              (every member)
+POST /api/projects/{projectId}/sources/{sourceId}/imports           (administrator; 202)
+POST /api/projects/{projectId}/sources/{sourceId}/imports/resume    (administrator; 202)
+```
+
+Each import reports `status` (`PENDING`, `RUNNING`, `RETRY_SCHEDULED`,
+`COMPLETED`, `PARTIAL`, or `FAILED`), `scannedCount`, `importedCount`, the
+window, `lastSyncAt`, `lastErrorCode`, and `canResumeImport`. Errors are
+`409 source_token_missing`, `409 source_sync_in_progress`,
+`409 source_import_not_resumable`, and `404 source_not_found`. See
+[ADR-0016](docs/adr/0016-integration-sources-and-history-import.md).
 
 `RELEASEFLOW_GITHUB_API_BASE_URL` (default `https://api.github.com`) and
 `RELEASEFLOW_GITHUB_TIMEOUT` (default `PT5S`) are optional.

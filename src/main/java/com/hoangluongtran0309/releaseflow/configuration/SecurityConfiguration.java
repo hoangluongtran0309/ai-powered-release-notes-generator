@@ -68,13 +68,16 @@ public class SecurityConfiguration {
                         .requestMatchers("/categories", "/categories/**", "/api/categories", "/api/categories/**",
                                 "/api/category-suggestions", "/api/category-suggestions/**")
                         .hasRole("ADMIN")
-                        // Configuring a repository creates its webhook signing secret.
-                        .requestMatchers(HttpMethod.POST, "/projects/*/github-integration", "/api/projects/*/github-integration")
+                        // Connecting a source creates its webhook signing secret; an access token is a
+                        // credential; an import reads a repository's history. All are administrator only.
+                        .requestMatchers(HttpMethod.POST, "/projects/*/sources", "/api/projects/*/sources")
                         .hasRole("ADMIN")
-                        // An access token is a credential, set only by administrators.
-                        .requestMatchers(HttpMethod.POST, "/projects/*/github-integration/token")
+                        .requestMatchers(HttpMethod.POST, "/projects/*/sources/*/token")
                         .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/projects/*/github-integration/token")
+                        .requestMatchers(HttpMethod.PUT, "/api/projects/*/sources/*/token")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/projects/*/sources/*/imports", "/projects/*/sources/*/imports/resume",
+                                "/api/projects/*/sources/*/imports", "/api/projects/*/sources/*/imports/resume")
                         .hasRole("ADMIN")
                         // Members read a Project's sensitive paths; administrators add to them.
                         .requestMatchers(HttpMethod.PUT, "/api/projects/*/sensitive-paths")

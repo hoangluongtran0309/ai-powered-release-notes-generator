@@ -35,10 +35,13 @@ import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.change.InvalidSensitivePathsException;
 import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadException;
 import com.hoangluongtran0309.releaseflow.change.SensitivePathApiController;
+import com.hoangluongtran0309.releaseflow.change.SourceImportApiController;
+import com.hoangluongtran0309.releaseflow.change.SourceImportNotResumableException;
+import com.hoangluongtran0309.releaseflow.change.SourceSyncInProgressException;
+import com.hoangluongtran0309.releaseflow.change.SourceTokenMissingException;
 import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchException;
 import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
-import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationAlreadyConfiguredException;
-import com.hoangluongtran0309.releaseflow.project.GitHubIntegrationNotFoundException;
+import com.hoangluongtran0309.releaseflow.project.SourceNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAlreadyConnectedException;
 import com.hoangluongtran0309.releaseflow.project.GitHubTokenRejectedException;
 import com.hoangluongtran0309.releaseflow.project.GitHubUnavailableException;
@@ -85,7 +88,8 @@ import java.util.Map;
         AudienceApiController.class,
         CategoryApiController.class,
         SensitivePathApiController.class,
-        ReleaseLanguageApiController.class
+        ReleaseLanguageApiController.class,
+        SourceImportApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -187,18 +191,6 @@ public class ApiExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(GitHubIntegrationAlreadyConfiguredException.class)
-    ResponseEntity<ProblemDetail> integrationAlreadyConfigured(
-            GitHubIntegrationAlreadyConfiguredException exception
-    ) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "GitHub integration already configured",
-                exception.getMessage(),
-                "github_integration_already_configured"
-        ));
-    }
-
     @ExceptionHandler(GitHubRepositoryAlreadyConnectedException.class)
     ResponseEntity<ProblemDetail> repositoryAlreadyConnected(
             GitHubRepositoryAlreadyConnectedException exception
@@ -211,13 +203,13 @@ public class ApiExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(GitHubIntegrationNotFoundException.class)
-    ResponseEntity<ProblemDetail> integrationNotFound(GitHubIntegrationNotFoundException exception) {
+    @ExceptionHandler(SourceNotFoundException.class)
+    ResponseEntity<ProblemDetail> sourceNotFound(SourceNotFoundException exception) {
         return response(problem(
                 HttpStatus.NOT_FOUND,
-                "GitHub integration not found",
+                "Source not found",
                 exception.getMessage(),
-                "github_integration_not_found"
+                "source_not_found"
         ));
     }
 
@@ -558,6 +550,26 @@ public class ApiExceptionHandler {
                 "Translations not ready",
                 exception.getMessage(),
                 "translations_not_ready"
+        ));
+    }
+
+    @ExceptionHandler(SourceTokenMissingException.class)
+    ResponseEntity<ProblemDetail> sourceTokenMissing(SourceTokenMissingException exception) {
+        return response(problem(HttpStatus.CONFLICT, "Access token missing", exception.getMessage(), "source_token_missing"));
+    }
+
+    @ExceptionHandler(SourceSyncInProgressException.class)
+    ResponseEntity<ProblemDetail> sourceSyncInProgress(SourceSyncInProgressException exception) {
+        return response(problem(HttpStatus.CONFLICT, "Import in progress", exception.getMessage(), "source_sync_in_progress"));
+    }
+
+    @ExceptionHandler(SourceImportNotResumableException.class)
+    ResponseEntity<ProblemDetail> sourceImportNotResumable(SourceImportNotResumableException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Import not resumable",
+                exception.getMessage(),
+                "source_import_not_resumable"
         ));
     }
 

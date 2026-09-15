@@ -64,6 +64,15 @@
   sections and Markdown, the publisher and time, a read-only page with
   copyable Markdown, unique versions per Project, and Flyway `V8` triggers that
   reject any change to published releases, their changes, and their notes.
+- Integration sources and history import (ADR-0016), with Flyway `V18`:
+  - `github_integrations` renamed in place to `integration_sources`, keeping
+    webhook paths and ciphertexts, with several GitHub repositories per
+    Project and changes identified by source;
+  - a project-scoped sources API replacing `/github-integration`;
+  - a durable, resumable import of the last 90 days of merged pull requests,
+    paged with a cursor, limited to 500 new changes per run, honouring
+    `Retry-After`, sharing the webhook intake and processing, and shown in the
+    Change Inbox.
 - Release notes in several languages (ADR-0015), with Flyway `V17`:
   - one to five release note languages per Organization, and one note per
     audience and language at approval;
@@ -137,7 +146,8 @@
 
 ## In progress
 
-- Nothing. The multilingual release note slice is complete and awaiting review.
+- Nothing. The integration source and history import slice is complete and
+  awaiting review.
 
 ## Planned
 
@@ -147,11 +157,13 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Additional source providers and automatic AI retries.
-- Historical imports, polling, and queues or retries for work other than
-  changed-file collection.
+- Source providers other than GitHub (GitLab, Linear, Jira), and automatic AI
+  retries.
+- Polling sources, imports from providers other than GitHub, and queues or
+  retries for work other than changed-file collection and imports.
 - Validating a repository with GitHub when it is connected, keyword review
-  triggers, integration replacement, and secret or token rotation reminders.
+  triggers, disconnecting or replacing a source, and secret or token rotation
+  reminders.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
 - Automation, distribution integrations, and a public changelog.

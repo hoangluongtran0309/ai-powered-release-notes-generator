@@ -16,6 +16,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.http.HttpClient;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,11 +38,13 @@ public class GitHubApiClient {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     GitHubApiClient(
             @Value("${releaseflow.github.api-base-url}") String baseUrl,
             @Value("${releaseflow.github.timeout}") Duration timeout,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            Clock clock
     ) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(timeout).build()
@@ -54,6 +57,7 @@ public class GitHubApiClient {
                 .defaultHeader("X-GitHub-Api-Version", API_VERSION)
                 .build();
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     /**
@@ -122,6 +126,88 @@ public class GitHubApiClient {
         } catch (RestClientException exception) {
             return unavailable(owner, repository, number, PullRequestFiles.UNAVAILABLE, true);
         }
+    }
+
+    /**
+     * One page of the repository's closed pull requests, most recently updated first.
+     * Merged and unmerged ones both appear; the caller keeps the merged ones.
+     */
+    public PullRequestListing closedPullRequests(String owner, String repository, int page, String token) {
+        requireNoTransaction();
+        final String body;
+        try {
+            body = restClient.get()
+                    .uri(
+                            "/repos/{owner}/{repository}/pulls?state=closed&sort=updated&direction=desc&per_page={size}&page={page}",
+                            owner,
+                            repository,
+                            PAGE_SIZE,
+                            page
+                    )
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .retrieve()
+                    .body(String.class);
+        } catch (RestClientResponseException exception) {
+            Optional<Duration> retryAfter = retryAfter(exception);
+            if (exception.getStatusCode().value() == 429 || retryAfter.isPresent() || isRateLimited(exception)) {
+                log.warn("GitHub rate-limited listing the pull requests of {}/{}.", owner, repository);
+                return PullRequestListing.failed(PullRequestListing.Status.RATE_LIMITED, retryAfter.orElse(null));
+            }
+            if (isRejection(exception)) {
+                log.warn("GitHub refused listing the pull requests of {}/{} (HTTP {}).", owner, repository,
+                        exception.getStatusCode().value());
+                return PullRequestListing.failed(PullRequestListing.Status.REJECTED, null);
+            }
+            log.warn("GitHub returned HTTP {} listing the pull requests of {}/{}.", exception.getStatusCode().value(),
+                    owner, repository);
+            return PullRequestListing.failed(PullRequestListing.Status.UNAVAILABLE, null);
+        } catch (RestClientException exception) {
+            log.warn("Could not reach GitHub to list the pull requests of {}/{}.", owner, repository);
+            return PullRequestListing.failed(PullRequestListing.Status.UNAVAILABLE, null);
+        }
+        try {
+            JsonNode items = objectMapper.readTree(body == null ? "" : body);
+            if (items == null || !items.isArray()) {
+                return PullRequestListing.failed(PullRequestListing.Status.INVALID_RESPONSE, null);
+            }
+            List<JsonNode> pullRequests = new ArrayList<>();
+            items.values().forEach(pullRequests::add);
+            return PullRequestListing.listed(pullRequests);
+        } catch (JacksonException exception) {
+            return PullRequestListing.failed(PullRequestListing.Status.INVALID_RESPONSE, null);
+        }
+    }
+
+    // Retry-After in seconds, or the time until the rate-limit window resets.
+    private Optional<Duration> retryAfter(RestClientResponseException exception) {
+        HttpHeaders headers = exception.getResponseHeaders();
+        if (headers == null) {
+            return Optional.empty();
+        }
+        String retryAfter = headers.getFirst(HttpHeaders.RETRY_AFTER);
+        if (retryAfter != null) {
+            try {
+                return Optional.of(Duration.ofSeconds(Math.max(0, Long.parseLong(retryAfter.strip()))));
+            } catch (NumberFormatException ignored) {
+                // A date is allowed by HTTP but not sent by GitHub; fall back to the reset time.
+            }
+        }
+        String reset = headers.getFirst("x-ratelimit-reset");
+        if (isRateLimited(exception) && reset != null) {
+            try {
+                long seconds = Long.parseLong(reset.strip()) - clock.instant().getEpochSecond();
+                return Optional.of(Duration.ofSeconds(Math.max(0, seconds)));
+            } catch (NumberFormatException ignored) {
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isRateLimited(RestClientResponseException exception) {
+        return "0".equals(exception.getResponseHeaders() == null
+                ? null
+                : exception.getResponseHeaders().getFirst("x-ratelimit-remaining"));
     }
 
     private Optional<List<ChangedFile>> parsePage(String body) {

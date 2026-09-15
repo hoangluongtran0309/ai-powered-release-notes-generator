@@ -62,7 +62,19 @@ class Change {
     @Column(nullable = false, length = 2048)
     private String url;
 
-    @Column(name = "delivery_id", nullable = false)
+    // Where the change came from, and the source's own ID for it (the pull request number).
+    @Column(name = "source_id", updatable = false)
+    private UUID sourceId;
+
+    @Column(name = "external_id", length = 100, updatable = false)
+    private String externalId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10, updatable = false)
+    private ChangeOrigin origin;
+
+    // Only a webhook delivery has one.
+    @Column(name = "delivery_id")
     private UUID deliveryId;
 
     @Column(name = "received_at", nullable = false)
@@ -176,7 +188,9 @@ class Change {
             UUID id,
             UUID organizationId,
             UUID projectId,
+            UUID sourceId,
             MergedPullRequest pullRequest,
+            ChangeOrigin origin,
             UUID deliveryId,
             Instant receivedAt
     ) {
@@ -184,6 +198,9 @@ class Change {
         change.id = id;
         change.organizationId = organizationId;
         change.projectId = projectId;
+        change.sourceId = sourceId;
+        change.externalId = sourceId == null ? null : externalId(pullRequest);
+        change.origin = origin;
         change.pullRequestNumber = pullRequest.number();
         change.title = pullRequest.title();
         change.description = pullRequest.description();
@@ -435,6 +452,19 @@ class Change {
 
     String getUrl() {
         return url;
+    }
+
+    /** A pull request's ID within its source. */
+    static String externalId(MergedPullRequest pullRequest) {
+        return Integer.toString(pullRequest.number());
+    }
+
+    UUID getSourceId() {
+        return sourceId;
+    }
+
+    ChangeOrigin getOrigin() {
+        return origin;
     }
 
     UUID getDeliveryId() {

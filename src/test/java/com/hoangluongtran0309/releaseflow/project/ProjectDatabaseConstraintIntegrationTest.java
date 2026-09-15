@@ -23,7 +23,7 @@ class ProjectDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
     @BeforeEach
     @AfterEach
     void clearDatabase() {
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
@@ -31,7 +31,7 @@ class ProjectDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
     }
 
     @Test
-    void enforcesOneIntegrationPerProjectAndRepositoryUniquenessPerOrganization() {
+    void allowsSeveralSourcesPerProjectButARepositoryOncePerOrganization() {
         UUID firstOrganization = insertOrganization("First");
         UUID secondOrganization = insertOrganization("Second");
         UUID firstProject = insertProject(firstOrganization, "First project");
@@ -39,9 +39,9 @@ class ProjectDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
         UUID secondProject = insertProject(secondOrganization, "Second project");
         insertIntegration(firstOrganization, firstProject, "acme", "releaseflow", validNonce(), validCiphertext());
 
-        assertThatThrownBy(() -> insertIntegration(
+        assertThatCode(() -> insertIntegration(
                 firstOrganization, firstProject, "other", "repository", validNonce(), validCiphertext()
-        )).isInstanceOf(DataIntegrityViolationException.class);
+        )).doesNotThrowAnyException();
         assertThatThrownBy(() -> insertIntegration(
                 firstOrganization, anotherFirstProject, "acme", "releaseflow", validNonce(), validCiphertext()
         )).isInstanceOf(DataIntegrityViolationException.class);
@@ -97,14 +97,15 @@ class ProjectDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
     ) {
         jdbcTemplate.update(
                 """
-                        INSERT INTO github_integrations
-                            (id, organization_id, project_id, repository_owner, repository_name,
-                             webhook_id, secret_nonce, secret_ciphertext, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO integration_sources
+                            (id, organization_id, project_id, source_type, external_project_key, repository_owner,
+                             repository_name, webhook_id, secret_nonce, secret_ciphertext, created_at)
+                        VALUES (?, ?, ?, 'GITHUB', ?, ?, ?, ?, ?, ?, ?)
                         """,
                 UUID.randomUUID(),
                 organizationId,
                 projectId,
+                owner + "/" + repository,
                 owner,
                 repository,
                 UUID.randomUUID(),

@@ -181,6 +181,24 @@ version has been released.
   `audience_last`, `audience_in_use`, `audience_not_preset`,
   `audience_not_found`, `release_note_render_failed`, `release_notes_missing`,
   and `release_note_not_found`.
+- Integration sources and history import (ADR-0016):
+  - several GitHub repositories per Project, each with its own webhook secret
+    and token, managed through `/api/projects/{projectId}/sources` and the
+    Projects page, replacing the `/github-integration` endpoints;
+  - changes identified by source and pull request number, so two repositories
+    may share numbers, and marked as delivered by webhook or imported;
+  - **Import last 90 days** in the Change Inbox and
+    `POST /api/projects/{projectId}/sources/{sourceId}/imports`: a durable,
+    paged import through the same processing as webhooks, stopping after 500
+    new changes with **Resume**, honouring GitHub's `Retry-After`, and failing
+    after five attempts or on a refused token;
+  - import status through `GET /api/projects/{projectId}/imports`.
+- Error codes `source_not_found`, `source_token_missing`,
+  `source_sync_in_progress`, and `source_import_not_resumable`, replacing
+  `github_integration_already_configured` and `github_integration_not_found`.
+- Flyway migration `V18` renaming `github_integrations` to
+  `integration_sources` with their secrets intact, identifying changes by
+  source, and adding `source_sync_jobs`.
 - Release notes in several languages (ADR-0015):
   - one to five release note languages per Organization, chosen on the
     Audiences page or through `/api/organization/release-languages`, and one

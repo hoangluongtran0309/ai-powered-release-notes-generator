@@ -4,43 +4,32 @@ import com.hoangluongtran0309.releaseflow.project.GitHubWebhookVerifier;
 import com.hoangluongtran0309.releaseflow.project.VerifiedGitHubWebhook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.UUID;
 
 @Service
 class GitHubWebhookService {
 
     private static final Logger log = LoggerFactory.getLogger(GitHubWebhookService.class);
-    private static final String PULL_REQUEST_UNIQUE_CONSTRAINT = "changes_project_pull_request_unique";
 
     private final GitHubWebhookVerifier verifier;
-    private final ChangeRepository changeRepository;
-    private final ChangeProcessingJobRepository jobRepository;
-    private final TransactionTemplate transactionTemplate;
+    private final ChangeIntake intake;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     GitHubWebhookService(
             GitHubWebhookVerifier verifier,
-            ChangeRepository changeRepository,
-            ChangeProcessingJobRepository jobRepository,
-            PlatformTransactionManager transactionManager,
+            ChangeIntake intake,
             ObjectMapper objectMapper,
             Clock clock
     ) {
         this.verifier = verifier;
-        this.changeRepository = changeRepository;
-        this.jobRepository = jobRepository;
-        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.intake = intake;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -109,34 +98,16 @@ class GitHubWebhookService {
     }
 
     private WebhookOutcome recordChange(VerifiedGitHubWebhook webhook, MergedPullRequest pullRequest, UUID deliveryId) {
-        if (changeRepository.existsByProjectIdAndOrganizationIdAndPullRequestNumber(
-                webhook.projectId(),
+        ChangeIntake.Outcome outcome = intake.record(
                 webhook.organizationId(),
-                pullRequest.number()
-        )) {
+                webhook.projectId(),
+                webhook.sourceId(),
+                pullRequest,
+                ChangeOrigin.WEBHOOK,
+                deliveryId
+        );
+        if (outcome == ChangeIntake.Outcome.DUPLICATE) {
             return WebhookOutcome.DUPLICATE;
-        }
-        // The change and its processing job are recorded together; changed files are
-        // collected and the change classified later, outside this request.
-        try {
-            transactionTemplate.executeWithoutResult(status -> {
-                Instant receivedAt = clock.instant();
-                Change change = changeRepository.saveAndFlush(Change.received(
-                        UUID.randomUUID(),
-                        webhook.organizationId(),
-                        webhook.projectId(),
-                        pullRequest,
-                        deliveryId,
-                        receivedAt
-                ));
-                jobRepository.save(new ChangeProcessingJob(UUID.randomUUID(), change, receivedAt));
-            });
-        } catch (DataIntegrityViolationException exception) {
-            // A concurrent delivery for the same pull request committed first.
-            if (violates(exception, PULL_REQUEST_UNIQUE_CONSTRAINT)) {
-                return WebhookOutcome.DUPLICATE;
-            }
-            throw exception;
         }
         log.info(
                 "Recorded merged pull request #{} for project {} from delivery {}.",
@@ -145,16 +116,5 @@ class GitHubWebhookService {
                 deliveryId
         );
         return WebhookOutcome.RECORDED;
-    }
-
-    private static boolean violates(DataIntegrityViolationException exception, String constraint) {
-        Throwable cause = exception;
-        while (cause != null) {
-            if (cause.getMessage() != null && cause.getMessage().contains(constraint)) {
-                return true;
-            }
-            cause = cause.getCause();
-        }
-        return false;
     }
 }

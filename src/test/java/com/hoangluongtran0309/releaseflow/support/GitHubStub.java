@@ -10,13 +10,16 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,6 +41,9 @@ public final class GitHubStub implements AutoCloseable {
     private volatile List<Map<String, Object>> files = List.of();
     private volatile Failure filesFailure;
     private volatile Failure accessFailure;
+    private volatile List<Map<String, Object>> pullRequests = List.of();
+    private volatile Failure listFailure;
+    private final AtomicInteger listFailuresLeft = new AtomicInteger();
     private volatile Duration delay = Duration.ZERO;
 
     private GitHubStub() {
@@ -95,6 +101,42 @@ public final class GitHubStub implements AutoCloseable {
         accessFailure = new Failure(status, Map.of());
     }
 
+    /**
+     * The repository's closed pull requests, served most recently updated first, a page
+     * at a time, to history imports.
+     */
+    public void respondWithPullRequests(List<Map<String, Object>> closed) {
+        pullRequests = closed.stream()
+                .sorted(Comparator.comparing((Map<String, Object> pr) -> Instant.parse(pr.get("updated_at").toString())).reversed())
+                .toList();
+    }
+
+    /** The next {@code times} pull request list requests fail with this status and headers. */
+    public void failPullRequestList(int status, Map<String, String> headers, int times) {
+        listFailure = new Failure(status, headers);
+        listFailuresLeft.set(times);
+    }
+
+    /** A closed pull request, merged when {@code mergedAt} is not null. */
+    public static Map<String, Object> closedPullRequest(int number, Instant mergedAt, Instant updatedAt) {
+        Map<String, Object> pullRequest = new LinkedHashMap<>();
+        pullRequest.put("number", number);
+        pullRequest.put("title", "feat: change " + number);
+        pullRequest.put("body", null);
+        pullRequest.put("merged_at", mergedAt == null ? null : mergedAt.toString());
+        pullRequest.put("updated_at", updatedAt.toString());
+        pullRequest.put("merge_commit_sha", "%040x".formatted(number));
+        pullRequest.put("html_url", "https://github.com/acme/releaseflow/pull/" + number);
+        pullRequest.put("user", Map.of("login", "mai-dev"));
+        pullRequest.put("base", Map.of("ref", "main"));
+        pullRequest.put("labels", List.of());
+        return pullRequest;
+    }
+
+    public List<RecordedRequest> listRequests() {
+        return requests.stream().filter(request -> request.query().contains("sort=updated")).toList();
+    }
+
     public void delay(Duration delay) {
         this.delay = delay;
     }
@@ -112,6 +154,9 @@ public final class GitHubStub implements AutoCloseable {
         files = List.of();
         filesFailure = null;
         accessFailure = null;
+        pullRequests = List.of();
+        listFailure = null;
+        listFailuresLeft.set(0);
         delay = Duration.ZERO;
     }
 
@@ -146,6 +191,18 @@ public final class GitHubStub implements AutoCloseable {
                 return;
             }
             send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(page(query)));
+        } else if (PULLS.matcher(path).matches() && query.contains("sort=updated")) {
+            Failure failure = listFailure;
+            if (failure != null && listFailuresLeft.getAndUpdate(left -> Math.max(0, left - 1)) > 0) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            Matcher matcher = PAGE.matcher(query);
+            int page = matcher.find() ? Integer.parseInt(matcher.group(1)) : 1;
+            List<Map<String, Object>> all = pullRequests;
+            int from = Math.min(all.size(), (page - 1) * PAGE_SIZE);
+            int to = Math.min(all.size(), from + PAGE_SIZE);
+            send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(all.subList(from, to)));
         } else if (PULLS.matcher(path).matches()) {
             Failure failure = accessFailure;
             if (failure != null) {

@@ -4,13 +4,13 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * A GitHub integration whose signing secret verified a delivery. It is the only
+ * A GitHub source whose signing secret verified a delivery. It is the only
  * source of tenant identity for webhook processing.
  */
 public record VerifiedGitHubWebhook(
         UUID organizationId,
         UUID projectId,
-        UUID integrationId,
+        UUID sourceId,
         String owner,
         String repository
 ) {

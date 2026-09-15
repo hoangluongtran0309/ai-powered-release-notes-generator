@@ -57,6 +57,48 @@
             <button type="submit" class="btn btn-primary">Apply</button>
         </form>
 
+        <section class="surface-card mt-6 p-5" id="source-imports" th:unless="${#lists.isEmpty(imports)}" aria-label="History import">
+            <h2 class="section-heading">History import</h2>
+            <p class="section-copy">
+                Merged pull requests reach ReleaseFlow by webhook from the moment a repository is connected. An import adds the
+                ones merged in the last 90 days, up to a limit per run, through the same processing.
+            </p>
+            <ul class="mt-4 grid gap-3">
+                <li class="subtle-panel flex flex-wrap items-center gap-3 p-3" th:each="sync : ${imports}"
+                    th:id="|import-${sync.sourceId}|">
+                    <span class="font-semibold" th:text="${sync.externalProjectKey}">owner/repository</span>
+                    <span class="badge badge-sm badge-ghost" th:if="${sync.status == null}">Never imported</span>
+                    <span class="badge badge-sm" th:if="${sync.status != null}" th:switch="${sync.status}">
+                        <span th:case="'PENDING'">Queued</span>
+                        <span th:case="'RUNNING'">Importing</span>
+                        <span th:case="'RETRY_SCHEDULED'">Waiting to retry</span>
+                        <span th:case="'COMPLETED'">Completed</span>
+                        <span th:case="'PARTIAL'">Stopped at the limit</span>
+                        <span th:case="'FAILED'">Failed</span>
+                    </span>
+                    <span class="text-sm text-slate-600" th:if="${sync.status != null}"
+                          th:text="|${sync.scannedCount} scanned, ${sync.importedCount} imported|">120 scanned, 42 imported</span>
+                    <span class="text-sm text-slate-500" th:if="${sync.nextAttemptAt != null and sync.status == 'RETRY_SCHEDULED'}">
+                        next try at <time th:datetime="${sync.nextAttemptAt}"
+                                          th:text="|${#temporals.format(sync.nextAttemptAt, 'HH:mm', 'UTC')} UTC|">10:02 UTC</time>
+                    </span>
+                    <span class="text-sm text-red-700" th:if="${sync.lastError != null}" th:text="|Error: ${sync.lastError}|">Error: access_rejected</span>
+                    <span class="grow"></span>
+                    <th:block th:if="${viewer.admin}">
+                        <span class="text-xs text-amber-700" th:unless="${sync.accessTokenConfigured}">Add an access token on the Projects page to import.</span>
+                        <form method="post" th:if="${sync.canResumeImport}"
+                              th:action="@{/projects/{projectId}/sources/{sourceId}/imports/resume(projectId=${selectedProjectId},sourceId=${sync.sourceId})}">
+                            <button type="submit" class="btn btn-outline btn-sm">Resume</button>
+                        </form>
+                        <form method="post" th:if="${sync.accessTokenConfigured and !sync.inProgress()}"
+                              th:action="@{/projects/{projectId}/sources/{sourceId}/imports(projectId=${selectedProjectId},sourceId=${sync.sourceId})}">
+                            <button type="submit" class="btn btn-primary btn-sm">Import last 90 days</button>
+                        </form>
+                    </th:block>
+                </li>
+            </ul>
+        </section>
+
         <p class="mt-6 text-sm text-slate-500" th:if="${pageError == null and !#lists.isEmpty(changes)}"
            th:text="${#lists.size(changes) == 1} ? '1 change' : |${#lists.size(changes)} changes|">3 changes</p>
 
@@ -73,7 +115,7 @@
             </th:block>
             <th:block th:unless="${filtered}">
                 <h2 class="mt-5 text-xl font-bold">No merged pull requests yet.</h2>
-                <p class="mx-auto mt-2 max-w-lg text-slate-600">Finish the GitHub webhook setup on the Projects page. Merged pull requests appear here as soon as GitHub delivers them.</p>
+                <p class="mx-auto mt-2 max-w-lg text-slate-600">Finish the GitHub webhook setup on the Projects page. Merged pull requests appear here as soon as GitHub delivers them, or import the last 90 days above.</p>
             </th:block>
         </section>
 
@@ -123,6 +165,8 @@
                         <span class="badge badge-success font-semibold" th:if="${change.reviewedAt != null}">Reviewed</span>
                         <span class="badge badge-soft badge-success font-semibold"
                               th:if="${!change.needsReview and change.reviewedAt == null}">Classified</span>
+                        <span class="badge badge-ghost font-semibold" th:if="${change.origin != null and change.origin.name() == 'IMPORT'}"
+                              title="Found by a history import rather than a webhook delivery">Imported</span>
                     </div>
                 </div>
 

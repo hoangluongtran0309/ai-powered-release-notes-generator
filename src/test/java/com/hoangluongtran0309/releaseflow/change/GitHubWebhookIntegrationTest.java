@@ -63,7 +63,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
     void clearDatabase() {
         jdbcTemplate.update("DELETE FROM change_processing_jobs");
         jdbcTemplate.update("DELETE FROM changes");
-        jdbcTemplate.update("DELETE FROM github_integrations");
+        jdbcTemplate.update("DELETE FROM integration_sources");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
@@ -109,7 +109,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
 
         mockMvc.perform(get("/api/projects").session(repository.session()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].githubIntegration.lastDeliveryAt", notNullValue()));
+                .andExpect(jsonPath("$[0].sources[0].lastDeliveryAt", notNullValue()));
         mockMvc.perform(get("/projects").session(repository.session()))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Signed deliveries arriving")))
@@ -142,7 +142,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
 
         assertThat(changeRepository.count()).isZero();
         mockMvc.perform(get("/api/projects").session(repository.session()))
-                .andExpect(jsonPath("$[0].githubIntegration.lastDeliveryAt", notNullValue()));
+                .andExpect(jsonPath("$[0].sources[0].lastDeliveryAt", notNullValue()));
     }
 
     @Test
@@ -166,7 +166,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
 
         assertThat(changeRepository.count()).isZero();
         mockMvc.perform(get("/api/projects").session(repository.session()))
-                .andExpect(jsonPath("$[0].githubIntegration.lastDeliveryAt", nullValue()));
+                .andExpect(jsonPath("$[0].sources[0].lastDeliveryAt", nullValue()));
     }
 
     @Test
@@ -227,7 +227,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
                 sign(first.secret(), body), UUID.randomUUID()));
         assertThat(changeRepository.count()).isZero();
         mockMvc.perform(get("/api/projects").session(second.session()))
-                .andExpect(jsonPath("$[0].githubIntegration.lastDeliveryAt", nullValue()));
+                .andExpect(jsonPath("$[0].sources[0].lastDeliveryAt", nullValue()));
 
         deliver(first, "pull_request", body, UUID.randomUUID())
                 .andExpect(jsonPath("$.outcome").value("recorded"));
@@ -237,7 +237,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
                     assertThat(change.getProjectId()).isEqualTo(first.projectId());
                 });
         mockMvc.perform(get("/api/projects").session(second.session()))
-                .andExpect(jsonPath("$[0].githubIntegration.lastDeliveryAt", nullValue()));
+                .andExpect(jsonPath("$[0].sources[0].lastDeliveryAt", nullValue()));
 
         deliver(second, "pull_request", body, UUID.randomUUID())
                 .andExpect(jsonPath("$.outcome").value("recorded"));
@@ -281,7 +281,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
 
         assertThat(changeRepository.count()).isZero();
         mockMvc.perform(get("/api/projects").session(repository.session()))
-                .andExpect(jsonPath("$[0].githubIntegration.lastDeliveryAt", nullValue()));
+                .andExpect(jsonPath("$[0].sources[0].lastDeliveryAt", nullValue()));
     }
 
     private void expectUnauthorized(MockHttpServletRequestBuilder request) throws Exception {
@@ -379,7 +379,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
         UUID projectId = UUID.fromString(JsonPath.read(project.getResponse().getContentAsString(), "$.id"));
-        MvcResult integration = mockMvc.perform(post("/api/projects/{projectId}/github-integration", projectId)
+        MvcResult integration = mockMvc.perform(post("/api/projects/{projectId}/sources", projectId)
                         .session(session)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

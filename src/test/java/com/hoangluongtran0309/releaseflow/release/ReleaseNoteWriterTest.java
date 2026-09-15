@@ -62,7 +62,7 @@ class ReleaseNoteWriterTest {
                 TestCategories.FEATURE.code(), TestCategories.FEATURE.displayName(), TestCategories.FEATURE.group(),
                 false, false, List.of(), ClassificationSource.RULES, AiStatus.SUCCEEDED, null, null, false, null, null,
                 null, ProcessingStatus.COMPLETED, ChangedFileStatus.COLLECTED, List.of(), List.of(), summary, "en", null,
-                narratives, null, null, null
+                narratives, null, null, null, null, null
         );
     }
 }

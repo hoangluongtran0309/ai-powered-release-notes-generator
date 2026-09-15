@@ -130,8 +130,8 @@ class ChangeProcessingWorker {
                         return Claim.FINISHED;
                     }
                     job.claim(now);
-                    return new Claim(job.getId(), job.getOrganizationId(), job.getProjectId(), job.getChangeId(),
-                            job.getAttempts(), now, change.pullRequest());
+                    return new Claim(job.getId(), job.getOrganizationId(), job.getProjectId(), change.getSourceId(),
+                            job.getChangeId(), job.getAttempts(), now, change.pullRequest());
                 }));
         if (claim.isEmpty()) {
             return false;
@@ -247,7 +247,8 @@ class ChangeProcessingWorker {
     }
 
     private PullRequestFiles collectFiles(Claim claim) {
-        Optional<GitHubRepositoryCredentials> repository = repositoryAccess.find(claim.organizationId(), claim.projectId());
+        Optional<GitHubRepositoryCredentials> repository = repositoryAccess.find(claim.organizationId(), claim.projectId(),
+                claim.sourceId());
         Optional<String> token = repository.flatMap(GitHubRepositoryCredentials::accessToken);
         if (token.isEmpty()) {
             return PullRequestFiles.unavailable(PullRequestFiles.NO_ACCESS_TOKEN, false);
@@ -293,12 +294,13 @@ class ChangeProcessingWorker {
             UUID jobId,
             UUID organizationId,
             UUID projectId,
+            UUID sourceId,
             UUID changeId,
             int attempt,
             Instant claimedAt,
             MergedPullRequest pullRequest
     ) {
         // Marks a job that was completed while claiming it.
-        static final Claim FINISHED = new Claim(null, null, null, null, 0, null, null);
+        static final Claim FINISHED = new Claim(null, null, null, null, null, 0, null, null);
     }
 }
