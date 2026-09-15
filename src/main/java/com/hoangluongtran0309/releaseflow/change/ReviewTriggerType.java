@@ -9,5 +9,7 @@ public enum ReviewTriggerType {
     /** The changed files could not be listed, so nothing could be ruled out. */
     CHANGED_FILES_UNAVAILABLE,
     /** The AI provider failed or its answer was unusable, so no AI judgement exists. */
-    CLASSIFIER_FALLBACK
+    CLASSIFIER_FALLBACK,
+    /** No catalog category fit, and the AI proposed a new one; the detail is its code. */
+    CATEGORY_SUGGESTION_PENDING
 }

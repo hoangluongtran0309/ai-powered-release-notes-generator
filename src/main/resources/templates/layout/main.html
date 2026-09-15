@@ -98,6 +98,10 @@
                    th:with="active=${#strings.startsWith(currentPath, '/audiences')}"
                    th:classappend="${active} ? 'is-active'"
                    th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#audiences}"></use></svg><span>Audiences</span></a>
+                <a th:href="@{/categories}" class="app-nav-link" th:if="${viewer != null and viewer.admin}"
+                   th:with="active=${#strings.startsWith(currentPath, '/categories')}"
+                   th:classappend="${active} ? 'is-active'"
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#compare}"></use></svg><span>Categories</span></a>
             </nav>
             <div class="app-sidebar-divider border-t p-4">
                 <div class="subtle-panel flex items-start gap-3 p-3">

@@ -65,6 +65,23 @@ public final class OpenAiStub implements AutoCloseable {
         respond(200, completion(category, breaking, needsReview, summary));
     }
 
+    /** An Unknown answer that proposes a new category, as the AI does when none fits. */
+    public void respondWithSuggestion(String code, String name, String group, String rationale) {
+        respond(200, completionWithContent(OBJECT_MAPPER.writeValueAsString(Map.of(
+                "category", "UNKNOWN",
+                "breaking_change", false,
+                "needs_human_review", true,
+                "neutral_core", Map.of(
+                        "what_changed", "Rotates the signing keys.",
+                        "why_changed", "",
+                        "technical_detail", "",
+                        "migration_step", ""
+                ),
+                "suggested_category", Map.of("code", code, "display_name", name, "group", group, "rationale", rationale),
+                "narratives", Map.of()
+        ))));
+    }
+
     /** A valid answer that also explains the change to the given audiences. */
     public void respondWithNarratives(String category, String summary, Map<String, String> narratives) {
         respond(200, completionWithContent(classification(category, false, false, summary, narratives)));

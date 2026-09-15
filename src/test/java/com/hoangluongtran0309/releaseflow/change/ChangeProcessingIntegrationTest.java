@@ -8,6 +8,7 @@ import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
 import com.hoangluongtran0309.releaseflow.support.GitHubStub;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -92,7 +93,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -112,7 +113,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                 new ChangedFile("src/main/java/Audit.java", null, ChangedFileKind.MODIFIED),
                 new ChangedFile(MIGRATION, null, ChangedFileKind.MODIFIED)
         );
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.FEATURE);
         assertThat(change.isNeedsReview()).isTrue();
         assertThat(change.getReviewTriggers()).containsExactly(ReviewTrigger.sensitivePath(MIGRATION));
         assertThat(jobRepository.findByChangeId(change.getId())).hasValueSatisfying(job -> {
@@ -158,7 +159,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         worker.processOne();
 
         Change change = onlyChange();
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.FEATURE);
         assertThat(change.isNeedsReview()).isFalse();
         assertThat(change.getReviewTriggers()).isEmpty();
         assertThat(change.getClassificationReasons()).containsExactly("Title type \"feat\"");
@@ -175,7 +176,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.COMPLETED);
         assertThat(change.getChangedFileStatus()).isEqualTo(ChangedFileStatus.UNAVAILABLE);
         assertThat(change.getChangedFiles()).isEmpty();
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FIX);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.FIX);
         assertThat(change.isNeedsReview()).isTrue();
         assertThat(change.getReviewTriggers()).containsExactly(ReviewTrigger.changedFilesUnavailable());
         assertThat(jobRepository.findByChangeId(change.getId()))
@@ -215,7 +216,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
 
         Change change = onlyChange();
         assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.COMPLETED);
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.MAINTENANCE);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.MAINTENANCE);
         assertThat(change.isNeedsReview()).isTrue();
         assertThat(change.getReviewTriggers()).containsExactly(ReviewTrigger.changedFilesUnavailable());
         assertThat(jobRepository.findByChangeId(changeId)).hasValueSatisfying(job -> {

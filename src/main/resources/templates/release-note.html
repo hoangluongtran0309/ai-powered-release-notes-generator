@@ -78,7 +78,7 @@
                         <a class="link text-slate-500" th:href="${item.url}" target="_blank" rel="noopener noreferrer"
                            th:text="|#${item.pullRequestNumber}|">#101</a>
                         <span class="text-slate-500" th:if="${section.title == 'Breaking changes'}"
-                              th:text="|(${item.category.label})|">(Fix)</span>
+                              th:text="|(${item.categoryLabel()})|">(Fix)</span>
                     </li>
                 </ul>
             </section>

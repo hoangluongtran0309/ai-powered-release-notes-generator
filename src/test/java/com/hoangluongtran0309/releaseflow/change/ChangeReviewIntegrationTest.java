@@ -4,6 +4,7 @@ import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
 import com.hoangluongtran0309.releaseflow.account.RegistrationResult;
 import com.hoangluongtran0309.releaseflow.account.RegistrationService;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,7 +57,7 @@ class ChangeReviewIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -192,7 +193,7 @@ class ChangeReviewIntegrationTest extends PostgreSqlIntegrationTest {
                                 + "<option value=\"\" disabled selected=\"selected\">Choose a category</option>.*"
                                 + "name=\"breaking\" value=\"true\" class=\"checkbox checkbox-sm\" checked=\"checked\".*"
                                 + "Confirm review.*id=\"change-" + classified + "\".*Edit classification.*"
-                                + "<option value=\"feature\" selected=\"selected\">Feature</option>.*")))
+                                + "<option value=\"FEATURE\" selected=\"selected\">Feature</option>.*")))
                 .andExpect(content().string(not(containsString("<option value=\"unknown\" selected"))));
 
         // An unchecked checkbox sends no value, so it clears the breaking flag.
@@ -205,7 +206,7 @@ class ChangeReviewIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(redirectedUrl("/changes?project=" + projectId + "&status=needs-review#change-" + unknown));
 
         Change reviewed = changeRepository.findById(unknown).orElseThrow();
-        assertThat(reviewed.getCategory()).isEqualTo(ChangeCategory.MAINTENANCE);
+        assertThat(reviewed.getCategory()).isEqualTo(TestCategories.MAINTENANCE);
         assertThat(reviewed.isBreaking()).isFalse();
         assertThat(reviewed.isNeedsReview()).isFalse();
         assertThat(reviewed.getClassificationSource()).isEqualTo(ClassificationSource.HUMAN);

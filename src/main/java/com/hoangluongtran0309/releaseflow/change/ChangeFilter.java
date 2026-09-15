@@ -1,20 +1,18 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-import java.util.Arrays;
-import java.util.stream.Collectors;
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 
 /**
- * Optional Change Inbox filters. A null category or status means "all".
+ * Optional Change Inbox filters. A null category or status means "all". The category is
+ * a code of the catalog, compared with the code each change recorded.
  */
-record ChangeFilter(ChangeCategory category, ReviewStatus status) {
+record ChangeFilter(String category, ReviewStatus status) {
 
     static ChangeFilter parse(String category, String status) {
-        ChangeCategory parsedCategory = null;
+        String parsedCategory = null;
         if (category != null && !category.isBlank()) {
-            parsedCategory = ChangeCategory.fromValue(category).orElseThrow(() -> new InvalidChangeFilterException(
-                    "Category must be one of: " + Arrays.stream(ChangeCategory.values())
-                            .map(ChangeCategory::getValue)
-                            .collect(Collectors.joining(", ")) + "."
+            parsedCategory = CategoryRef.normalize(category).orElseThrow(() -> new InvalidChangeFilterException(
+                    "Category must be a category code such as feature or fix."
             ));
         }
         ReviewStatus parsedStatus = null;

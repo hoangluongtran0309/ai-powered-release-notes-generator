@@ -9,10 +9,10 @@
     <input type="hidden" name="returnStatus" th:value="${selectedStatus}">
     <label class="form-control"><span class="label-text font-medium">Category</span>
         <select name="category" class="select select-bordered select-sm w-full" required>
-            <option value="" disabled th:selected="${change.category.name() == 'UNKNOWN'}">Choose a category</option>
-            <option th:each="option : ${categories}" th:unless="${option.name() == 'UNKNOWN'}"
-                    th:value="${option.value}" th:text="${option.label}"
-                    th:selected="${option == change.category}">Feature</option>
+            <option value="" disabled th:selected="${change.unknownCategory()}">Choose a category</option>
+            <option th:each="option : ${reviewCategories}"
+                    th:value="${option.code}" th:text="${option.displayName}"
+                    th:selected="${option.code == change.category}">Feature</option>
         </select>
     </label>
     <label class="label cursor-pointer justify-start gap-2">

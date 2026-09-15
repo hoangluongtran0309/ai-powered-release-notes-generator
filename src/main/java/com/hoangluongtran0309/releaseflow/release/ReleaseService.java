@@ -5,7 +5,6 @@ import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.audience.AudienceService;
 import com.hoangluongtran0309.releaseflow.audience.AudienceTemplateRenderException;
 import com.hoangluongtran0309.releaseflow.audience.AudienceView;
-import com.hoangluongtran0309.releaseflow.change.ChangeCategory;
 import com.hoangluongtran0309.releaseflow.change.ChangeInboxService;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeReviewService;
@@ -279,10 +278,10 @@ class ReleaseService {
                 .findFirst()
                 .orElseThrow(ChangeNotFoundException::new);
         if (request.getAction() == ReviewAction.APPROVE) {
-            if (change.category() == ChangeCategory.UNKNOWN) {
+            if (change.unknownCategory()) {
                 throw new InvalidChangeReviewException();
             }
-            if (!change.category().getValue().equals(request.getCategory())
+            if (!change.category().equalsIgnoreCase(request.getCategory())
                     || change.breaking() != request.getBreaking()) {
                 throw new ClassificationChangedException();
             }

@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V13`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V14`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - one create-only GitHub repository integration per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
@@ -32,6 +32,8 @@ The application currently provides:
   review;
 - a per-Project Change Inbox in the UI and REST, filterable by category and
   review status;
+- a category catalog per Organization, managed by administrators, with
+  categories the AI proposes held for an administrator's decision;
 - optional automatic AI classification with OpenAI, Anthropic, or DeepSeek:
   one request per change, a neutral summary and a narrative for each audience
   in the Organization's output language, and rules and review triggers that
@@ -253,7 +255,8 @@ Classification uses fixed rules:
 - a Conventional Commit type at the start of the pull request title (`feat`,
   `fix`, `perf`, `docs`, `refactor`, `chore`, `ci`, `build`, `test`, with an
   optional scope) selects Feature, Fix, Performance, Documentation, or
-  Maintenance;
+  Maintenance (see [Categories](#categories) for how a rule picks a category
+  from the catalog);
 - without a title type, familiar labels such as `enhancement`, `bug`,
   `documentation`, or `dependencies` select the category, unless they disagree;
 - when every changed file is in `docs/` or ends in `.md`, `.adoc`, or `.rst`,
@@ -282,12 +285,13 @@ supported). An invalid pattern or an empty list stops the application from
 starting, so the rule cannot be switched off by accident.
 
 Open `/changes` to browse a Project's inbox, or call
-`GET /api/projects/{projectId}/changes`. Both accept `category`
-(`feature`, `fix`, `performance`, `documentation`, `maintenance`, `unknown`) and
-`status` (`needs-review`, `classified` for changes settled by rules without a
-person, `reviewed`). An unsupported value returns
+`GET /api/projects/{projectId}/changes`. Both accept `category` (a category
+code such as `feature` or `security`, in any case) and `status`
+(`needs-review`, `classified` for changes settled by rules without a person,
+`reviewed`). A value that is not a code or status returns
 `400 invalid_change_filter`, and another Organization's Project returns
-`404 project_not_found`.
+`404 project_not_found`. Each change returns its `category` code with its
+`categoryName` and `categoryGroup`, as recorded when it was classified.
 
 ## AI classification and summaries
 
@@ -316,10 +320,11 @@ alone.
 With a provider, the change worker asks the AI **once** for every new change,
 after its changed files are known. It sends the pull request title, labels,
 target branch, up to 4000 characters of the description, the Organization's
-output language, the category the rules chose, if any, and the code and
-communication intent of each [audience](#audiences). It does not send the
-author, and OpenAI requests set `store: false`. The answer is a category, a
-breaking flag, whether a person should review it, a **neutral summary** (what
+output language, the Organization's active [categories](#categories), the
+category the rules chose, if any, and the code and communication intent of
+each [audience](#audiences). It does not send the
+author, and OpenAI requests set `store: false`. The answer is one category code from the
+catalog (or a proposal for a new category when none fits), a breaking flag, whether a person should review it, a **neutral summary** (what
 changed, why, technical detail, migration step), and a **narrative** for each
 audience, all written in the output language. A missing narrative is simply
 left out. The Change Inbox shows the summary and narratives under each change,
@@ -381,8 +386,9 @@ category and breaking flag. Changes that need review show the form directly;
 other changes show it under **Edit classification**. The reviewer keeps or
 changes the values and presses **Confirm review**. ReleaseFlow stores exactly
 the submitted values, clears the need for review, and records the reviewer and
-time. A reviewer must choose a real category, since a reviewed change cannot
-stay Unknown, and may clear a breaking flag set by the rules or AI.
+time. A reviewer chooses an active category of the catalog, since a reviewed
+change cannot stay Unknown, and may clear a breaking flag set by the rules or
+AI.
 
 Confirming without changes keeps the original classification source (rules or
 AI). Changing the category or breaking flag makes the reviewer the source,
@@ -391,9 +397,66 @@ kept.
 
 REST clients call `POST /api/projects/{projectId}/changes/{changeId}/review`
 with the session, a CSRF token, and `{"category": "fix", "breaking": false}`.
-It returns the updated change, `400 invalid_change_review` for `unknown` or an
-unsupported category, `400 validation_failed` when a field is missing, and
+The category is a code of the catalog in any case. It returns the updated
+change, `400 invalid_change_review` for `unknown`, an archived category, or a
+code that is not in the catalog, `400 validation_failed` when a field is missing, and
 `404 change_not_found` for another Organization's change.
+
+## Categories
+
+Every Organization has its own category catalog. It starts with the six
+categories that used to be fixed: Feature, Fix, Performance, Documentation,
+Maintenance, and Unknown. Administrators manage it on the **Categories** page
+or through `/api/categories`; every member can read it.
+
+A category has a code (letters, digits, and underscores, starting with a
+letter; upper-cased and fixed once created), a display name, and one of six
+groups: Feature, Fix, Performance, Documentation, Maintenance, or Other.
+Release notes are sectioned by group, so a new `SECURITY` category in the Fix
+group appears under **Bug Fixes**. Breaking stays a separate flag.
+
+- **Rules.** Each fixed rule names a group and a preferred code, for example
+  `fix` names Fix and `FIX`. The preferred category is used if it is active;
+  otherwise the first active category of the group by code; if the group has
+  none, the rule locks nothing and the change is left to the AI or a person.
+- **Archiving** stops offering a category to the rules, the AI, and reviewers.
+  Changes that already carry it keep it, with the name and group they were
+  given, and it can be restored. Unknown is a system category: it can be
+  renamed but not regrouped or archived.
+- **AI proposals.** When no category fits, the AI returns Unknown with a
+  proposed category. The change needs review with an **AI proposed a new
+  category** trigger, and the proposal waits on the Categories page and on the
+  change's card in the Change Inbox. An administrator can:
+  - **Add to catalog**: the category is created, or restored if it was
+    archived;
+  - **Map** the proposal to an existing active category;
+  - **Reject** it.
+
+  After Add to catalog or Map, the change takes that category, shown as
+  **Suggested category**, and still needs a person's review. A proposal never
+  becomes a category by itself, and each is decided once.
+
+See [ADR-0012](docs/adr/0012-category-catalog.md).
+
+```text
+GET    /api/categories                                   (every member)
+POST   /api/categories                                   {"code", "displayName", "group"}
+PUT    /api/categories/{categoryId}                      {"displayName", "group"}
+DELETE /api/categories/{categoryId}                      (archives it)
+POST   /api/categories/{categoryId}/unarchive
+GET    /api/category-suggestions?status=PENDING_REVIEW
+POST   /api/category-suggestions/{suggestionId}/decision {"decision": "APPROVED" | "MAPPED" | "REJECTED", "categoryId"}
+```
+
+| Situation | Response |
+| --- | --- |
+| A member changing the catalog or deciding a proposal | `403` |
+| A missing field, a code that is not a valid code, or MAPPED without `categoryId` | `400 validation_failed` |
+| The code is already in the catalog | `409 category_code_taken` |
+| Regrouping or archiving Unknown | `409 category_system` |
+| Deciding a proposal again | `409 category_suggestion_decided` |
+| An unknown or foreign category, or mapping to an archived one | `404 category_not_found` |
+| An unknown or foreign proposal | `404 category_suggestion_not_found` |
 
 ## Audiences
 

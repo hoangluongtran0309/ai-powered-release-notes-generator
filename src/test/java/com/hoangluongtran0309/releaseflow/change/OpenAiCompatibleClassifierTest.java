@@ -2,7 +2,9 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
 import com.hoangluongtran0309.releaseflow.audience.AudienceBrief;
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.support.OpenAiStub;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,15 +45,16 @@ class OpenAiCompatibleClassifierTest {
     void sendsAStrictStructuredRequestAndParsesTheAnswer() {
         stub.respondWithClassification("fix", true, true, "Empty tables now export a header row.");
 
-        AiClassification answer = openAi.classify(request("x".repeat(5000), ChangeCategory.FIX, "vi"));
+        AiClassification answer = openAi.classify(request("x".repeat(5000), TestCategories.FIX, "vi"));
 
         assertThat(answer).isEqualTo(new AiClassification(
-                ChangeCategory.FIX,
+                TestCategories.FIX,
                 true,
                 true,
                 new NeutralSummary("Empty tables now export a header row.", "Requested by users.",
                         "Handled in the exporter.", ""),
-                Map.of()
+                Map.of(),
+                null
         ));
         OpenAiStub.RecordedRequest recorded = stub.requests().getFirst();
         assertThat(recorded.method()).isEqualTo("POST");
@@ -74,7 +77,10 @@ class OpenAiCompatibleClassifierTest {
 
         JsonNode user = OBJECT_MAPPER.readTree(body.path("messages").path(1).path("content").stringValue());
         assertThat(user.path("output_language").stringValue()).isEqualTo("Vietnamese (vi)");
-        assertThat(user.path("locked_category").stringValue()).isEqualTo("fix");
+        assertThat(user.path("locked_category").stringValue()).isEqualTo("FIX");
+        assertThat(user.path("categories").size()).isEqualTo(6);
+        assertThat(user.path("categories").path(0).path("code").stringValue()).isEqualTo("DOCUMENTATION");
+        assertThat(user.path("categories").path(0).path("group").stringValue()).isEqualTo("documentation");
         assertThat(user.path("pull_request").path("title").stringValue()).isEqualTo("Tidy exporter");
         assertThat(user.path("pull_request").path("labels").path(0).stringValue()).isEqualTo("good first issue");
         assertThat(user.path("pull_request").path("description").stringValue()).hasSize(4000).endsWith("…");
@@ -92,7 +98,7 @@ class OpenAiCompatibleClassifierTest {
 
         AiClassification answer = deepSeek.classify(request(null, null, "en"));
 
-        assertThat(answer.category()).isEqualTo(ChangeCategory.MAINTENANCE);
+        assertThat(answer.category()).isEqualTo(TestCategories.MAINTENANCE);
         assertThat(deepSeek.provider()).isEqualTo(AiProvider.DEEPSEEK);
         JsonNode body = OBJECT_MAPPER.readTree(stub.requests().getFirst().body());
         assertThat(body.path("response_format").path("type").stringValue()).isEqualTo("json_object");
@@ -197,7 +203,7 @@ class OpenAiCompatibleClassifierTest {
                         .doesNotContain("secret-body"));
     }
 
-    static AiClassificationRequest request(String description, ChangeCategory lockedCategory, String language) {
+    static AiClassificationRequest request(String description, CategoryRef lockedCategory, String language) {
         return new AiClassificationRequest(
                 UUID.randomUUID(),
                 "Tidy exporter",
@@ -206,6 +212,7 @@ class OpenAiCompatibleClassifierTest {
                 "main",
                 OutputLanguage.parse(language),
                 lockedCategory,
+                TestCategories.CATALOG,
                 List.of(new AudienceBrief("operator", "Rollback and monitoring."), new AudienceBrief("end_user", ""))
         );
     }

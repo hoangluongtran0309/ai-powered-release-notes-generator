@@ -158,7 +158,7 @@
                                         <span th:text="${change.title}">feat: add CSV export</span>
                                     </a>
                                     <div class="mt-1 flex flex-wrap gap-1.5">
-                                        <span class="badge badge-ghost badge-sm" th:text="${change.category.label}">Feature</span>
+                                        <span class="badge badge-ghost badge-sm" th:text="${change.categoryName}">Feature</span>
                                         <span class="badge badge-error badge-sm" th:if="${change.breaking}">Breaking</span>
                                         <span class="badge badge-warning badge-sm" th:if="${change.needsReview}">Needs review</span>
                                     </div>
@@ -195,7 +195,7 @@
                                             <span class="min-w-0">
                                                 <span class="text-slate-500" th:text="|#${change.pullRequestNumber}|">#102</span>
                                                 <span class="font-medium" th:text="${change.title}">fix: handle empty tables</span>
-                                                <span class="badge badge-ghost badge-sm ml-1" th:text="${change.category.label}">Fix</span>
+                                                <span class="badge badge-ghost badge-sm ml-1" th:text="${change.categoryName}">Fix</span>
                                                 <span class="badge badge-error badge-sm" th:if="${change.breaking}">Breaking</span>
                                                 <span class="badge badge-warning badge-sm" th:if="${change.needsReview}">Needs review</span>
                                             </span>
@@ -222,7 +222,7 @@
                                             <span th:text="${change.title}">feat: add CSV export</span>
                                         </a>
                                         <div class="mt-1 flex flex-wrap gap-1.5">
-                                            <span class="badge badge-ghost badge-sm" th:text="${change.category.label}">Feature</span>
+                                            <span class="badge badge-ghost badge-sm" th:text="${change.categoryName}">Feature</span>
                                             <span class="badge badge-error badge-sm" th:if="${change.breaking}">Breaking</span>
                                             <span class="badge badge-warning badge-sm" th:if="${change.needsReview}">Needs review</span>
                                         </div>
@@ -279,15 +279,15 @@
                                     <form class="flex flex-wrap items-end gap-2" method="post" aria-label="Approve change"
                                           th:action="${releasePath + '/changes/' + change.id + '/decision'}">
                                         <input type="hidden" name="action" value="APPROVE">
-                                        <input type="hidden" name="category" th:value="${change.category.value}">
+                                        <input type="hidden" name="category" th:value="${change.category}">
                                         <input type="hidden" name="breaking" th:value="${change.breaking}">
                                         <label class="form-control sm:max-w-sm"><span class="label-text">Note <span class="text-slate-500">(optional)</span></span>
                                             <input type="text" name="note" maxlength="2000" class="input input-bordered input-sm w-full">
                                         </label>
                                         <button type="submit" class="btn btn-primary btn-sm"
-                                                th:disabled="${change.category.name() == 'UNKNOWN'}">Approve as shown</button>
+                                                th:disabled="${change.unknownCategory()}">Approve as shown</button>
                                     </form>
-                                    <p class="text-xs text-amber-700" th:if="${change.category.name() == 'UNKNOWN'}">
+                                    <p class="text-xs text-amber-700" th:if="${change.unknownCategory()}">
                                         An Unknown change needs a category. Use Edit classification.
                                     </p>
                                     <details>
@@ -298,10 +298,9 @@
                                             <input type="hidden" name="action" value="EDIT">
                                             <label class="form-control"><span class="label-text font-medium">Category</span>
                                                 <select name="category" class="select select-bordered select-sm w-full" required>
-                                                    <option value="" disabled th:selected="${change.category.name() == 'UNKNOWN'}">Choose a category</option>
-                                                    <option th:each="option : ${categories}" th:unless="${option.name() == 'UNKNOWN'}"
-                                                            th:value="${option.value}" th:text="${option.label}"
-                                                            th:selected="${option == change.category}">Feature</option>
+                                                    <option value="" disabled th:selected="${change.unknownCategory()}">Choose a category</option>
+                                                    <option th:each="option : ${categories}" th:value="${option.code}" th:text="${option.displayName}"
+                                                            th:selected="${option.code == change.category}">Feature</option>
                                                 </select>
                                             </label>
                                             <label class="label cursor-pointer justify-start gap-2">

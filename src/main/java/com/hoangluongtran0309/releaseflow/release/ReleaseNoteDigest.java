@@ -30,13 +30,13 @@ final class ReleaseNoteDigest {
             if (change.breaking()) {
                 return BREAKING;
             }
-            return switch (change.category()) {
+            return switch (change.categoryGroup()) {
                 case FEATURE -> FEATURES;
                 case FIX -> FIXES;
                 case PERFORMANCE -> PERFORMANCE;
                 case DOCUMENTATION -> DOCUMENTATION;
                 case MAINTENANCE -> MAINTENANCE;
-                case UNKNOWN -> OTHER;
+                case OTHER -> OTHER;
             };
         }
     }

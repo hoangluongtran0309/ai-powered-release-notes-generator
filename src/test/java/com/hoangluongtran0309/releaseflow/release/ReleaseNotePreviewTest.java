@@ -1,11 +1,12 @@
 package com.hoangluongtran0309.releaseflow.release;
 
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.change.AiStatus;
-import com.hoangluongtran0309.releaseflow.change.ChangeCategory;
 import com.hoangluongtran0309.releaseflow.change.ChangeView;
 import com.hoangluongtran0309.releaseflow.change.ChangedFileStatus;
-import com.hoangluongtran0309.releaseflow.change.ProcessingStatus;
 import com.hoangluongtran0309.releaseflow.change.ClassificationSource;
+import com.hoangluongtran0309.releaseflow.change.ProcessingStatus;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -22,12 +23,12 @@ class ReleaseNotePreviewTest {
     @Test
     void listsBreakingChangesFirstThenCategoriesInAFixedOrder() {
         List<ReleaseNoteSection> sections = ReleaseNotePreview.sections(List.of(
-                change(4, "chore: bump dependencies", ChangeCategory.MAINTENANCE, false, 4),
-                change(2, "fix: handle empty tables", ChangeCategory.FIX, false, 2),
-                change(3, "feat(api)!: drop the v1 export", ChangeCategory.FEATURE, true, 3),
-                change(1, "feat(ui): add the inbox", ChangeCategory.FEATURE, false, 1),
-                change(5, "docs: explain releases", ChangeCategory.DOCUMENTATION, false, 5),
-                change(6, "perf: cache previews", ChangeCategory.PERFORMANCE, false, 6)
+                change(4, "chore: bump dependencies", TestCategories.MAINTENANCE, false, 4),
+                change(2, "fix: handle empty tables", TestCategories.FIX, false, 2),
+                change(3, "feat(api)!: drop the v1 export", TestCategories.FEATURE, true, 3),
+                change(1, "feat(ui): add the inbox", TestCategories.FEATURE, false, 1),
+                change(5, "docs: explain releases", TestCategories.DOCUMENTATION, false, 5),
+                change(6, "perf: cache previews", TestCategories.PERFORMANCE, false, 6)
         ));
 
         assertThat(sections).extracting(ReleaseNoteSection::title).containsExactly(
@@ -35,7 +36,8 @@ class ReleaseNotePreviewTest {
         );
         assertThat(sections.getFirst().items()).singleElement().satisfies(item -> {
             assertThat(item.title()).isEqualTo("drop the v1 export");
-            assertThat(item.category()).isEqualTo(ChangeCategory.FEATURE);
+            assertThat(item.category()).isEqualTo("FEATURE");
+            assertThat(item.categoryLabel()).isEqualTo("Feature");
             assertThat(item.pullRequestNumber()).isEqualTo(3);
             assertThat(item.url()).isEqualTo("https://github.com/acme/releaseflow/pull/3");
         });
@@ -45,8 +47,8 @@ class ReleaseNotePreviewTest {
     @Test
     void ordersItemsByMergeTimeAndOmitsEmptySections() {
         List<ReleaseNoteSection> sections = ReleaseNotePreview.sections(List.of(
-                change(9, "fix: later fix", ChangeCategory.FIX, false, 20),
-                change(8, "fix: earlier fix", ChangeCategory.FIX, false, 10)
+                change(9, "fix: later fix", TestCategories.FIX, false, 20),
+                change(8, "fix: earlier fix", TestCategories.FIX, false, 10)
         ));
 
         assertThat(sections).singleElement().satisfies(section -> {
@@ -70,7 +72,7 @@ class ReleaseNotePreviewTest {
         assertThat(ReleaseNotePreview.displayTitle(title)).isEqualTo(expected);
     }
 
-    private static ChangeView change(int number, String title, ChangeCategory category, boolean breaking, int minute) {
+    private static ChangeView change(int number, String title, CategoryRef category, boolean breaking, int minute) {
         return new ChangeView(
                 UUID.randomUUID(),
                 number,
@@ -82,7 +84,9 @@ class ReleaseNotePreviewTest {
                 "a".repeat(40),
                 Instant.parse("2026-09-01T10:00:00Z").plusSeconds(minute * 60L),
                 "https://github.com/acme/releaseflow/pull/" + number,
-                category,
+                category.code(),
+                category.displayName(),
+                category.group(),
                 breaking,
                 false,
                 List.of(),

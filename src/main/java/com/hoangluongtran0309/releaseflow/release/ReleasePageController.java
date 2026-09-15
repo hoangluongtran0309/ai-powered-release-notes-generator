@@ -3,7 +3,7 @@ package com.hoangluongtran0309.releaseflow.release;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.audience.AudienceService;
-import com.hoangluongtran0309.releaseflow.change.ChangeCategory;
+import com.hoangluongtran0309.releaseflow.category.CategoryService;
 import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
 import com.hoangluongtran0309.releaseflow.change.ChangeSummaryRequest;
@@ -36,13 +36,16 @@ public class ReleasePageController {
     private final ReleaseService releaseService;
     private final AudienceService audienceService;
     private final OutputLanguageService outputLanguageService;
+    private final CategoryService categoryService;
 
     ReleasePageController(
             ProjectService projectService,
             ReleaseService releaseService,
             AudienceService audienceService,
-            OutputLanguageService outputLanguageService
+            OutputLanguageService outputLanguageService,
+            CategoryService categoryService
     ) {
+        this.categoryService = categoryService;
         this.projectService = projectService;
         this.releaseService = releaseService;
         this.audienceService = audienceService;
@@ -392,7 +395,9 @@ public class ReleasePageController {
             if (release.status() == ReleaseStatus.PUBLISHED) {
                 return "release-note";
             }
-            model.addAttribute("categories", ChangeCategory.values());
+            model.addAttribute("categories", categoryService.active(principal.organizationId()).stream()
+                    .filter(category -> !category.isUnknown())
+                    .toList());
             model.addAttribute("audiences", audienceService.list(principal.organizationId()));
             model.addAttribute("language", outputLanguageService.outputLanguage(principal.organizationId()).tag());
             model.addAttribute("notePreviews", notePreviews(principal, projectId, release, model));

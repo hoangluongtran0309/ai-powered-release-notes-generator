@@ -15,6 +15,10 @@ import com.hoangluongtran0309.releaseflow.audience.AudienceApiController;
 import com.hoangluongtran0309.releaseflow.audience.AudienceConflictException;
 import com.hoangluongtran0309.releaseflow.audience.AudienceNotFoundException;
 import com.hoangluongtran0309.releaseflow.audience.InvalidAudienceTemplateException;
+import com.hoangluongtran0309.releaseflow.category.CategoryApiController;
+import com.hoangluongtran0309.releaseflow.category.CategoryConflictException;
+import com.hoangluongtran0309.releaseflow.category.CategoryNotFoundException;
+import com.hoangluongtran0309.releaseflow.category.CategorySuggestionNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.AiClassificationFailedException;
 import com.hoangluongtran0309.releaseflow.change.AiClassificationUnavailableException;
 import com.hoangluongtran0309.releaseflow.change.ChangeApiController;
@@ -71,7 +75,8 @@ import java.util.Map;
         GitHubWebhookController.class,
         ChangeApiController.class,
         ReleaseApiController.class,
-        AudienceApiController.class
+        AudienceApiController.class,
+        CategoryApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -475,6 +480,26 @@ public class ApiExceptionHandler {
                 exception.getMessage(),
                 exception.code()
         ));
+    }
+
+    @ExceptionHandler(CategoryNotFoundException.class)
+    ResponseEntity<ProblemDetail> categoryNotFound(CategoryNotFoundException exception) {
+        return response(problem(HttpStatus.NOT_FOUND, "Category not found", exception.getMessage(), "category_not_found"));
+    }
+
+    @ExceptionHandler(CategorySuggestionNotFoundException.class)
+    ResponseEntity<ProblemDetail> categorySuggestionNotFound(CategorySuggestionNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Category suggestion not found",
+                exception.getMessage(),
+                "category_suggestion_not_found"
+        ));
+    }
+
+    @ExceptionHandler(CategoryConflictException.class)
+    ResponseEntity<ProblemDetail> categoryConflict(CategoryConflictException exception) {
+        return response(problem(HttpStatus.CONFLICT, "Category conflict", exception.getMessage(), exception.code()));
     }
 
     private static ProblemDetail problem(HttpStatus status, String title, String detail, String code) {

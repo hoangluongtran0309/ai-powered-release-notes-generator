@@ -181,12 +181,33 @@ version has been released.
   `audience_last`, `audience_in_use`, `audience_not_preset`,
   `audience_not_found`, `release_note_render_failed`, `release_notes_missing`,
   and `release_note_not_found`.
+- A category catalog per Organization (ADR-0012), managed by administrators
+  on a Categories page and through `/api/categories`:
+  - codes that are fixed once created, display names, and six groups;
+  - archiving and restoring, with Unknown as the one system category;
+  - the former fixed values seeded at registration and by `V14`.
+- AI proposals of new categories when none fits:
+  - an `AI proposed a new category` review trigger;
+  - a gate where administrators add, map, or reject each proposal, from the
+    Categories page, the Change Inbox, or `/api/category-suggestions`;
+  - a change that takes the decided category keeps needing review.
+- Error codes `category_code_taken`, `category_system`,
+  `category_suggestion_decided`, `category_not_found`, and
+  `category_suggestion_not_found`.
+- Flyway migration `V14` for `category_definitions`, `category_suggestions`,
+  category snapshots on changes, and the `SUGGESTION` classification source.
 - Flyway migration `V13` for `audience_definitions` with seeded presets,
   narratives and summary authorship on changes, and `release_audience_notes`,
   with triggers that allow note writes only while a release is approved.
 
 ### Changed
 
+- Categories come from the Organization's catalog instead of a fixed list. The
+  rules pick the preferred category of their group, or the first active one in
+  it. The AI chooses among active codes, and a code outside the catalog is an
+  invalid answer. Reviews accept active codes in any case. Changes return
+  `categoryName` and `categoryGroup` beside the `category` code, and release
+  notes are sectioned by group.
 - Release notes are written per audience at approval instead of once at
   publication. Publication freezes them, and the V8 `release_notes` table only
   keeps notes published before V13. Releases that were approved before V13

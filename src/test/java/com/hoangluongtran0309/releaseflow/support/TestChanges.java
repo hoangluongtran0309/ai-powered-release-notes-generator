@@ -4,6 +4,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -12,7 +14,19 @@ import java.util.UUID;
  */
 public final class TestChanges {
 
+    private static final Set<String> GROUPS = Set.of("FEATURE", "FIX", "PERFORMANCE", "DOCUMENTATION", "MAINTENANCE");
+
     private TestChanges() {
+    }
+
+    /** The name a seeded category code has, such as "Feature" for FEATURE. */
+    public static String displayName(String code) {
+        return code.charAt(0) + code.substring(1).toLowerCase(Locale.ROOT);
+    }
+
+    /** The group a seeded category code belongs to; any other code counts as OTHER. */
+    public static String group(String code) {
+        return GROUPS.contains(code) ? code : "OTHER";
     }
 
     public static UUID insert(
@@ -33,11 +47,11 @@ public final class TestChanges {
                         INSERT INTO changes
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
-                             category, breaking, needs_review, classification_reasons,
+                             category, category_display_name, category_group, breaking, needs_review, classification_reasons,
                              classification_source, ai_status, reviewed_by, reviewer_name, reviewed_at,
                              processing_status, changed_file_status, changed_files, review_triggers)
                         VALUES (?, ?, ?, ?, ?, 'mai-dev', '{}', 'main', ?, ?, ?, ?, now(),
-                                ?, ?, ?, '{"Seeded for a test"}', 'RULES', 'NOT_REQUESTED', ?, ?, ?,
+                                ?, ?, ?, ?, ?, '{"Seeded for a test"}', 'RULES', 'NOT_REQUESTED', ?, ?, ?,
                                 'COMPLETED', 'COLLECTED', '[]', '[]')
                         """,
                 id,
@@ -50,6 +64,8 @@ public final class TestChanges {
                 "https://github.com/acme/releaseflow/pull/" + number,
                 UUID.randomUUID(),
                 category,
+                displayName(category),
+                group(category),
                 breaking,
                 needsReview,
                 reviewed ? reviewerId : null,

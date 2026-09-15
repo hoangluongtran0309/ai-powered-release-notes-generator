@@ -115,7 +115,7 @@ final class OpenAiCompatibleClassifier implements AiChangeClassifier {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("model", model);
         String system = AiClassificationPrompt.SYSTEM;
-        ObjectNode schema = AiClassificationPrompt.responseSchema(request.audienceCodes(), objectMapper);
+        ObjectNode schema = AiClassificationPrompt.responseSchema(request, objectMapper);
         if (provider == AiProvider.OPENAI) {
             body.put("store", false);
             ObjectNode jsonSchema = body.putObject("response_format")
@@ -155,7 +155,7 @@ final class OpenAiCompatibleClassifier implements AiChangeClassifier {
             throw invalid(request);
         }
         try {
-            return parser.parse(content.stringValue(), request.audienceCodes());
+            return parser.parse(content.stringValue(), request);
         } catch (AiClassificationException exception) {
             throw invalid(request);
         }

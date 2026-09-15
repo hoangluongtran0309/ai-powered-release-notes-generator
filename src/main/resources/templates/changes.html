@@ -36,8 +36,9 @@
             <label class="form-control"><span class="label-text font-medium">Category</span>
                 <select name="category" class="select select-bordered w-full">
                     <option value="">All categories</option>
-                    <option th:each="option : ${categories}" th:value="${option.value}" th:text="${option.label}"
-                            th:selected="${option.value == selectedCategory}">Feature</option>
+                    <option th:each="option : ${categories}" th:value="${option.code}"
+                            th:text="${option.active} ? ${option.displayName} : |${option.displayName} (archived)|"
+                            th:selected="${selectedCategory != null and option.code == #strings.toUpperCase(selectedCategory)}">Feature</option>
                 </select>
             </label>
             <label class="form-control"><span class="label-text font-medium">Status</span>
@@ -96,19 +97,21 @@
                         </span>
                     </div>
                     <div class="flex flex-wrap gap-2" th:unless="${change.processing()}">
-                        <th:block th:switch="${change.category.name()}">
-                            <span th:case="'FEATURE'" class="badge badge-soft badge-primary font-semibold" th:text="${change.category.label}">Feature</span>
-                            <span th:case="'FIX'" class="badge badge-soft badge-info font-semibold" th:text="${change.category.label}">Fix</span>
-                            <span th:case="'PERFORMANCE'" class="badge badge-soft badge-accent font-semibold" th:text="${change.category.label}">Performance</span>
-                            <span th:case="'DOCUMENTATION'" class="badge badge-soft badge-secondary font-semibold" th:text="${change.category.label}">Documentation</span>
-                            <span th:case="'MAINTENANCE'" class="badge badge-soft badge-neutral font-semibold" th:text="${change.category.label}">Maintenance</span>
-                            <span th:case="*" class="badge badge-ghost font-semibold" th:text="${change.category.label}">Unknown</span>
+                        <th:block th:switch="${change.categoryGroup.name()}">
+                            <span th:case="'FEATURE'" class="badge badge-soft badge-primary font-semibold" th:text="${change.categoryName}">Feature</span>
+                            <span th:case="'FIX'" class="badge badge-soft badge-info font-semibold" th:text="${change.categoryName}">Fix</span>
+                            <span th:case="'PERFORMANCE'" class="badge badge-soft badge-accent font-semibold" th:text="${change.categoryName}">Performance</span>
+                            <span th:case="'DOCUMENTATION'" class="badge badge-soft badge-secondary font-semibold" th:text="${change.categoryName}">Documentation</span>
+                            <span th:case="'MAINTENANCE'" class="badge badge-soft badge-neutral font-semibold" th:text="${change.categoryName}">Maintenance</span>
+                            <span th:case="*" class="badge badge-ghost font-semibold" th:text="${change.categoryName}">Unknown</span>
                         </th:block>
                         <span class="badge badge-soft badge-secondary gap-1 font-semibold" th:if="${change.classificationSource.name() == 'AI'}"
                               th:title="|Category chosen by ${change.aiProvider != null ? change.aiProvider.label : 'AI'} ${change.aiModel}|">
                             <svg class="icon h-3.5 w-3.5" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#sparkles}"></use></svg>
                             <span>AI category</span>
                         </span>
+                        <span class="badge badge-soft badge-secondary font-semibold" th:if="${change.classificationSource.name() == 'SUGGESTION'}"
+                              title="A category the AI proposed and an administrator approved">Suggested category</span>
                         <span class="badge badge-error font-semibold" th:if="${change.breaking}">Breaking</span>
                         <span class="badge badge-warning font-semibold" th:if="${change.needsReview}">Needs review</span>
                         <span class="badge badge-success font-semibold" th:if="${change.reviewedAt != null}">Reviewed</span>
@@ -142,6 +145,51 @@
                         <ul class="mt-1 list-inside list-disc">
                             <li th:each="trigger : ${change.reviewTriggers}" th:text="${trigger.describe()}">Sensitive file db/migration/V9.sql</li>
                         </ul>
+                    </div>
+                    <div class="subtle-panel mt-3 text-sm" th:with="suggestion=${suggestions[change.id]}"
+                         th:if="${suggestions[change.id] != null}" th:id="|suggestion-${change.id}|">
+                        <p>
+                            <span class="font-semibold">Proposed category:</span>
+                            <span th:text="${suggestion.proposedName}">Security</span>
+                            <code class="text-xs" th:text="${suggestion.proposedCode}">SECURITY</code>
+                            <span class="text-slate-500" th:text="|(${suggestion.proposedGroup.label})|">(Fix)</span>
+                            <span class="badge badge-sm ml-1" th:switch="${suggestion.status.name()}">
+                                <th:block th:case="'PENDING_REVIEW'">Waiting for an administrator</th:block>
+                                <th:block th:case="'APPROVED'">Approved</th:block>
+                                <th:block th:case="'MAPPED'" th:text="|Mapped to ${suggestion.resolvedCode}|">Mapped</th:block>
+                                <th:block th:case="*">Rejected</th:block>
+                            </span>
+                        </p>
+                        <p class="mt-1 text-slate-600" th:unless="${#strings.isEmpty(suggestion.rationale)}"
+                           th:text="${suggestion.rationale}">No listed category covers security fixes.</p>
+                        <div class="mt-3 flex flex-wrap items-end gap-2" th:if="${suggestion.pending() and viewer != null and viewer.admin}"
+                             th:with="decisionPath=@{/categories/suggestions/{id}/decision(id=${suggestion.id})},
+                                      returnTo=|/changes?project=${selectedProjectId}#change-${change.id}|">
+                            <form method="post" th:action="${decisionPath}">
+                                <input type="hidden" name="decision" value="APPROVED">
+                                <input type="hidden" name="returnTo" th:value="${returnTo}">
+                                <button type="submit" class="btn btn-primary btn-sm">Add to catalog</button>
+                            </form>
+                            <form class="flex flex-wrap items-end gap-2" method="post" th:action="${decisionPath}">
+                                <input type="hidden" name="decision" value="MAPPED">
+                                <input type="hidden" name="returnTo" th:value="${returnTo}">
+                                <label class="form-control w-auto"><span class="label-text">Use existing</span>
+                                    <select name="categoryId" class="select select-bordered select-sm" required>
+                                        <option th:each="option : ${categories}" th:if="${option.active and option.code != 'UNKNOWN'}"
+                                                th:value="${option.id}" th:text="${option.displayName}">Fix</option>
+                                    </select>
+                                </label>
+                                <button type="submit" class="btn btn-outline btn-sm">Map</button>
+                            </form>
+                            <form method="post" th:action="${decisionPath}">
+                                <input type="hidden" name="decision" value="REJECTED">
+                                <input type="hidden" name="returnTo" th:value="${returnTo}">
+                                <button type="submit" class="btn btn-ghost btn-sm">Reject</button>
+                            </form>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-500" th:if="${suggestion.pending() and (viewer == null or !viewer.admin)}">
+                            An administrator decides whether this category is added.
+                        </p>
                     </div>
                     <details class="mt-3 text-sm" th:if="${change.neutralSummary != null}" open>
                         <summary class="cursor-pointer font-medium text-slate-600"

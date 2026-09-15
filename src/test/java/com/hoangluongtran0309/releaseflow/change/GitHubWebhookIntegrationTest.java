@@ -4,6 +4,7 @@ import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
 import com.hoangluongtran0309.releaseflow.account.RegistrationResult;
 import com.hoangluongtran0309.releaseflow.account.RegistrationService;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +66,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -95,7 +96,7 @@ class GitHubWebhookIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(change.getReceivedAt()).isNotNull();
         // Classification waits for the change processing worker.
         assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.PROCESSING);
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.UNKNOWN);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.UNKNOWN);
         assertThat(change.isNeedsReview()).isTrue();
         assertThat(change.getClassificationReasons()).containsExactly("Waiting for changed files");
         assertThat(change.getReviewTriggers()).isEmpty();

@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestChanges;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,7 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -174,13 +175,13 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
                         INSERT INTO changes
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
-                             category, breaking, needs_review, classification_reasons,
+                             category, category_display_name, category_group, breaking, needs_review, classification_reasons,
                              classification_source, ai_status, processing_status, changed_file_status,
                              changed_files, review_triggers)
                         VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main',
                                 '0123456789abcdef0123456789abcdef01234567', now(),
                                 'https://github.com/acme/releaseflow/pull/1', ?, now(),
-                                ?, false, ?, '{"Seeded"}', 'RULES', 'NOT_REQUESTED', ?, ?,
+                                ?, ?, ?, false, ?, '{"Seeded"}', 'RULES', 'NOT_REQUESTED', ?, ?,
                                 CAST(? AS jsonb), CAST(? AS jsonb))
                         """,
                 id,
@@ -189,6 +190,8 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
                 number,
                 UUID.randomUUID(),
                 category,
+                TestChanges.displayName(category),
+                TestChanges.group(category),
                 needsReview,
                 processingStatus,
                 changedFileStatus,
@@ -215,14 +218,14 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
                         INSERT INTO changes
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
-                             category, breaking, needs_review, classification_reasons,
+                             category, category_display_name, category_group, breaking, needs_review, classification_reasons,
                              classification_source, ai_status, ai_provider, ai_model, ai_failure, ai_attempted_at,
                              processing_status, changed_file_status, changed_files, review_triggers,
                              neutral_summary, content_language)
                         VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main',
                                 '0123456789abcdef0123456789abcdef01234567', now(),
                                 'https://github.com/acme/releaseflow/pull/1', ?, now(),
-                                'FEATURE', false, ?, '{"Seeded"}', ?, ?, ?, ?, ?, now(), ?, 'COLLECTED',
+                                'FEATURE', 'Feature', 'FEATURE', false, ?, '{"Seeded"}', ?, ?, ?, ?, ?, now(), ?, 'COLLECTED',
                                 CAST(? AS jsonb), '[]', CAST(? AS jsonb), ?)
                         """,
                 UUID.randomUUID(),
