@@ -36,7 +36,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -76,7 +76,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         UUID organization = insertOrganization("First");
         UUID project = insertProject(organization);
 
-        assertThatThrownBy(() -> insertChange(organization, project, 1, "Title", VALID_SHA, "OTHER", false, true))
+        assertThatThrownBy(() -> insertChange(organization, project, 1, "Title", VALID_SHA, "other", false, true))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(() -> insertChange(organization, project, 2, "Title", VALID_SHA, "FEATURE", true, false))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -250,12 +250,12 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                         INSERT INTO changes
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
-                             category, breaking, needs_review, classification_reasons,
+                             category, category_display_name, category_group, breaking, needs_review, classification_reasons,
                              classification_source, ai_status, ai_provider, ai_model, ai_attempted_at,
                              reviewed_by, reviewer_name, reviewed_at, processing_status, review_triggers)
                         VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main', ?, now(),
                                 'https://github.com/acme/releaseflow/pull/1', ?, now(),
-                                ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, ?, 'Reviewer', now(), 'COMPLETED', '[]')
+                                ?, ?, ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, ?, 'Reviewer', now(), 'COMPLETED', '[]')
                         """,
                 UUID.randomUUID(),
                 organizationId,
@@ -264,6 +264,8 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 VALID_SHA,
                 UUID.randomUUID(),
                 category,
+                TestChanges.displayName(category),
+                TestChanges.group(category),
                 breaking,
                 needsReview,
                 source,
@@ -336,10 +338,10 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                         INSERT INTO changes
                             (id, organization_id, project_id, pull_request_number, title, author_login, labels,
                              target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
-                             category, breaking, needs_review, classification_reasons,
+                             category, category_display_name, category_group, breaking, needs_review, classification_reasons,
                              classification_source, ai_status, ai_provider, ai_model, ai_failure, ai_attempted_at,
                              processing_status, review_triggers)
-                        VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}',
+                        VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}',
                                 ?, ?, ?, ?, ?, ?, 'COMPLETED', '[]')
                         """,
                 UUID.randomUUID(),
@@ -353,6 +355,8 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 UUID.randomUUID(),
                 Timestamp.from(Instant.now()),
                 category,
+                TestChanges.displayName(category),
+                TestChanges.group(category),
                 breaking,
                 needsReview,
                 source,

@@ -7,16 +7,17 @@ plus GitHub configuration, signed GitHub merged-pull-request intake,
 deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
-changed-file review, and audience release note slices: one Spring Boot
-application, PostgreSQL/Flyway V1-V13, administrator
+changed-file review, audience release note, and category catalog slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V14, administrator
 registration, member
 invitations with administrator and member roles, session
 authentication, tenant-scoped Projects, per-integration encrypted webhook
 secrets, a signature-verified webhook endpoint that records normalized merged
 pull requests idempotently, optional write-only GitHub access tokens, a durable
 `SKIP LOCKED` worker that lists changed files outside transactions,
-rule-based classification with mandatory review for breaking, Unknown, and
-sensitive-file changes, a per-Project Change Inbox, optional automatic AI
+rule-based classification against a per-Organization category catalog with
+mandatory review for breaking, Unknown, and sensitive-file changes, a
+per-Project Change Inbox, optional automatic AI
 classification (OpenAI, Anthropic, or DeepSeek) that the rules always override,
 recorded human review of any change, releases that move from draft through a
 per-change review and approval to publication (several per Project, with a
@@ -77,6 +78,10 @@ Read `README.md`, `docs/architecture.md`, and
 - AI failures store fixed, safe messages, never exception text or bodies.
 - Applied Flyway migrations are immutable; add `V2` or later for schema changes.
 - Published Release Notes are immutable snapshots.
+- Categories come from the Organization's catalog, and a change keeps a
+  snapshot of its category. A category the AI proposes is never added to the
+  catalog without an administrator's decision, and a change that takes it still
+  needs a person's review. The Unknown system category is never archived.
 - An Organization always has at least one audience. Rendering a release note
   never calls AI; notes are written at approval from a snapshot of each
   audience's template and are frozen at publication.

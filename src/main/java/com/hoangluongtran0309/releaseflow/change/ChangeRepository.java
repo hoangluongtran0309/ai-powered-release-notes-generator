@@ -45,7 +45,7 @@ interface ChangeRepository extends JpaRepository<Change, UUID> {
     List<Change> findInbox(
             @Param("organizationId") UUID organizationId,
             @Param("projectId") UUID projectId,
-            @Param("category") ChangeCategory category,
+            @Param("category") String category,
             @Param("needsReview") Boolean needsReview,
             @Param("reviewed") Boolean reviewed
     );

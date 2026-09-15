@@ -53,7 +53,7 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -114,7 +114,7 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$[*].pullRequestNumber").value(org.hamcrest.Matchers.contains(4)));
 
         mockMvc.perform(get("/api/projects/{projectId}/changes", projectId).session(owner.session())
-                        .param("category", "FEATURE"))
+                        .param("category", "not a category!"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("invalid_change_filter"));
@@ -189,10 +189,10 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("No changes match these filters.")));
 
-        mockMvc.perform(get("/changes").session(owner.session()).param("category", "everything"))
+        mockMvc.perform(get("/changes").session(owner.session()).param("category", "every-thing!"))
                 .andExpect(status().isBadRequest())
                 .andExpect(model().attributeExists("pageError"))
-                .andExpect(content().string(containsString("Category must be one of")));
+                .andExpect(content().string(containsString("Category must be a category code")));
     }
 
     @Test

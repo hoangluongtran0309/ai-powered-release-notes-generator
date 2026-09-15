@@ -64,6 +64,16 @@
   sections and Markdown, the publisher and time, a read-only page with
   copyable Markdown, unique versions per Project, and Flyway `V8` triggers that
   reject any change to published releases, their changes, and their notes.
+- A category catalog per Organization (ADR-0012), with Flyway `V14`:
+  - administrator-managed categories with fixed codes and six groups, which
+    can be archived and restored;
+  - the former fixed values seeded at registration and by the migration;
+  - rules that resolve a group's preferred category;
+  - AI that chooses among active codes;
+  - AI proposals of new categories held for an administrator's decision in the
+    Categories page, the Change Inbox, and REST;
+  - category snapshots on changes;
+  - release notes sectioned by group.
 - Audiences and a release note per audience (ADR-0011), with Flyway `V13`:
   - administrator-managed audiences with fixed codes, communication intents,
     and validated Mustache templates, through Thymeleaf and REST;
@@ -104,7 +114,7 @@
 
 ## In progress
 
-- Nothing. The audience release notes slice is complete and awaiting review.
+- Nothing. The category catalog slice is complete and awaiting review.
 
 ## Planned
 
@@ -114,7 +124,7 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Additional source providers, category suggestions, context sufficiency, and
+- Additional source providers, context sufficiency, duplicate detection, and
   automatic AI retries.
 - Historical imports, polling, and queues or retries for work other than
   changed-file collection.

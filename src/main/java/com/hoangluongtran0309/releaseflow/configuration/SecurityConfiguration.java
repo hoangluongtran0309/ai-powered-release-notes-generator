@@ -62,6 +62,12 @@ public class SecurityConfiguration {
                         // Audiences shape every release note the Organization writes.
                         .requestMatchers("/audiences", "/audiences/**", "/api/audiences", "/api/audiences/**")
                         .hasRole("ADMIN")
+                        // Members read the category catalog; only administrators change it or
+                        // decide what the AI proposes.
+                        .requestMatchers(HttpMethod.GET, "/api/categories").authenticated()
+                        .requestMatchers("/categories", "/categories/**", "/api/categories", "/api/categories/**",
+                                "/api/category-suggestions", "/api/category-suggestions/**")
+                        .hasRole("ADMIN")
                         // Configuring a repository creates its webhook signing secret.
                         .requestMatchers(HttpMethod.POST, "/projects/*/github-integration", "/api/projects/*/github-integration")
                         .hasRole("ADMIN")

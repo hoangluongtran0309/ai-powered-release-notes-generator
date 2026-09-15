@@ -1,8 +1,11 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.github.ChangedFile;
 import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -26,10 +29,11 @@ class ChangeClassifierTest {
                         new ChangedFile("src/main/java/Audit.java", null, ChangedFileKind.ADDED),
                         new ChangedFile("src/main/resources/db/migration/V9__audit.sql", null, ChangedFileKind.ADDED)
                 )),
-                RULES
+                RULES,
+                TestCategories.CATALOG
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(classification.category()).isEqualTo(TestCategories.FEATURE);
         assertThat(classification.breaking()).isFalse();
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.triggers()).containsExactly(
@@ -42,10 +46,11 @@ class ChangeClassifierTest {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("fix: handle empty tables"),
                 PullRequestFiles.unavailable(PullRequestFiles.NO_ACCESS_TOKEN, false),
-                RULES
+                RULES,
+                TestCategories.CATALOG
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.FIX);
+        assertThat(classification.category()).isEqualTo(TestCategories.FIX);
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.triggers())
                 .containsExactly(new ReviewTrigger(ReviewTriggerType.CHANGED_FILES_UNAVAILABLE, null));
@@ -60,10 +65,11 @@ class ChangeClassifierTest {
                         new ChangedFile("README.MD", null, ChangedFileKind.MODIFIED),
                         new ChangedFile("guide/setup.adoc", "guide/install.rst", ChangedFileKind.RENAMED)
                 )),
-                RULES
+                RULES,
+                TestCategories.CATALOG
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.DOCUMENTATION);
+        assertThat(classification.category()).isEqualTo(TestCategories.DOCUMENTATION);
         assertThat(classification.needsReview()).isFalse();
         assertThat(classification.reasons()).first().isEqualTo("All changed files are documentation");
     }
@@ -73,10 +79,11 @@ class ChangeClassifierTest {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("docs: rotate keys"),
                 PullRequestFiles.collected(List.of(new ChangedFile("docs/security/keys.md", null, ChangedFileKind.MODIFIED))),
-                RULES
+                RULES,
+                TestCategories.CATALOG
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.DOCUMENTATION);
+        assertThat(classification.category()).isEqualTo(TestCategories.DOCUMENTATION);
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.triggers()).extracting(ReviewTrigger::detail).containsExactly("docs/security/keys.md");
     }
@@ -86,10 +93,11 @@ class ChangeClassifierTest {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("chore: empty merge"),
                 PullRequestFiles.collected(List.of()),
-                RULES
+                RULES,
+                TestCategories.CATALOG
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.MAINTENANCE);
+        assertThat(classification.category()).isEqualTo(TestCategories.MAINTENANCE);
         assertThat(classification.needsReview()).isFalse();
         assertThat(classification.triggers()).isEmpty();
     }
@@ -110,12 +118,12 @@ class ChangeClassifierTest {
             "'FIX(api): trim input', FIX, fix",
             "'  docs(readme): typo', DOCUMENTATION, docs"
     })
-    void classifiesConventionalCommitTitleTypes(String title, ChangeCategory category, String type) {
+    void classifiesConventionalCommitTitleTypes(String title, String category, String type) {
         ChangeClassification classification = classify(pullRequest(title));
 
-        assertThat(classification.category()).isEqualTo(category);
+        assertThat(classification.category().code()).isEqualTo(category);
         assertThat(classification.breaking()).isFalse();
-        if (category == ChangeCategory.UNKNOWN) {
+        if ("UNKNOWN".equals(category)) {
             assertThat(classification.needsReview()).isTrue();
             assertThat(classification.reasons()).containsExactly("No category rule matched");
         } else {
@@ -128,7 +136,7 @@ class ChangeClassifierTest {
     void breakingTitleMarkerKeepsCategoryAndRequiresReview() {
         ChangeClassification classification = classify(pullRequest("feat(api)!: drop v1 endpoints"));
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(classification.category()).isEqualTo(TestCategories.FEATURE);
         assertThat(classification.breaking()).isTrue();
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.reasons()).containsExactly("Title type \"feat\"", "Title breaking marker \"!\"");
@@ -144,7 +152,7 @@ class ChangeClassifierTest {
                 pullRequest("fix: rename configuration keys", List.of(), description)
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.FIX);
+        assertThat(classification.category()).isEqualTo(TestCategories.FIX);
         assertThat(classification.breaking()).isTrue();
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.reasons()).containsExactly("Title type \"fix\"", "BREAKING CHANGE footer");
@@ -179,12 +187,12 @@ class ChangeClassifierTest {
             "chore, MAINTENANCE",
             "refactor, MAINTENANCE"
     })
-    void classifiesByLabelWhenTheTitleHasNoType(String label, ChangeCategory category) {
+    void classifiesByLabelWhenTheTitleHasNoType(String label, String category) {
         ChangeClassification classification = classify(
                 pullRequest("Improve the export flow", List.of(label, "good first issue"), null)
         );
 
-        assertThat(classification.category()).isEqualTo(category);
+        assertThat(classification.category().code()).isEqualTo(category);
         assertThat(classification.needsReview()).isFalse();
         assertThat(classification.reasons()).containsExactly("Label \"" + label + "\"");
     }
@@ -196,7 +204,7 @@ class ChangeClassifierTest {
                 pullRequest("Rework the API", List.of("enhancement", label), null)
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(classification.category()).isEqualTo(TestCategories.FEATURE);
         assertThat(classification.breaking()).isTrue();
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.reasons()).containsExactly("Label \"enhancement\"", "Breaking label \"" + label + "\"");
@@ -208,7 +216,7 @@ class ChangeClassifierTest {
                 pullRequest("feat: add retries", List.of("bug"), null)
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(classification.category()).isEqualTo(TestCategories.FEATURE);
         assertThat(classification.needsReview()).isFalse();
         assertThat(classification.reasons()).containsExactly("Title type \"feat\"", "Label \"bug\"");
     }
@@ -219,7 +227,7 @@ class ChangeClassifierTest {
                 pullRequest("Improve exports", List.of("bug", "enhancement", "docs"), null)
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.UNKNOWN);
+        assertThat(classification.category()).isEqualTo(TestCategories.UNKNOWN);
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.reasons()).containsExactly(
                 "Label \"bug\"",
@@ -235,7 +243,7 @@ class ChangeClassifierTest {
                 pullRequest("Improve exports", List.of("bug", "bugfix"), null)
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.FIX);
+        assertThat(classification.category()).isEqualTo(TestCategories.FIX);
         assertThat(classification.needsReview()).isFalse();
     }
 
@@ -246,7 +254,7 @@ class ChangeClassifierTest {
                 pullRequest(title, List.of("good first issue"), "Some context.")
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.UNKNOWN);
+        assertThat(classification.category()).isEqualTo(TestCategories.UNKNOWN);
         assertThat(classification.breaking()).isFalse();
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.reasons()).containsExactly("No category rule matched");
@@ -258,19 +266,70 @@ class ChangeClassifierTest {
                 pullRequest("Rework storage", List.of("breaking-change"), null)
         );
 
-        assertThat(classification.category()).isEqualTo(ChangeCategory.UNKNOWN);
+        assertThat(classification.category()).isEqualTo(TestCategories.UNKNOWN);
         assertThat(classification.breaking()).isTrue();
         assertThat(classification.needsReview()).isTrue();
         assertThat(classification.reasons())
                 .containsExactly("Breaking label \"breaking-change\"", "No category rule matched");
     }
 
+    @Test
+    void usesTheFirstActiveCategoryOfTheGroupWhenThePreferredOneIsArchived() {
+        CategoryRef bugfix = new CategoryRef("BUGFIX", "Bug fix", CategoryGroup.FIX);
+        CategoryRef security = new CategoryRef("SECURITY", "Security", CategoryGroup.FIX);
+        List<CategoryRef> catalog = List.of(bugfix, TestCategories.FEATURE, security, TestCategories.UNKNOWN);
+
+        assertThat(classify(pullRequest("fix: handle empty tables"), catalog).category()).isEqualTo(bugfix);
+        assertThat(classify(pullRequest("Handle empty tables", List.of("bug"), null), catalog).category()).isEqualTo(bugfix);
+        assertThat(classify(pullRequest("feat: add export"), catalog).category()).isEqualTo(TestCategories.FEATURE);
+    }
+
+    @Test
+    void aGroupWithoutAnActiveCategoryLocksNothing() {
+        List<CategoryRef> catalog = List.of(TestCategories.FEATURE, TestCategories.UNKNOWN);
+
+        ChangeClassification classification = classify(pullRequest("perf: cache previews"), catalog);
+
+        assertThat(classification.category()).isEqualTo(TestCategories.UNKNOWN);
+        assertThat(classification.needsReview()).isTrue();
+        assertThat(classification.reasons())
+                .containsExactly("Title type \"perf\"", "No active category in the Performance group");
+    }
+
+    @Test
+    void anUnresolvedTitleFallsBackToLabels() {
+        List<CategoryRef> catalog = List.of(TestCategories.FEATURE, TestCategories.UNKNOWN);
+
+        ChangeClassification classification = classify(
+                pullRequest("perf: cache previews", List.of("enhancement"), null), catalog);
+
+        assertThat(classification.category()).isEqualTo(TestCategories.FEATURE);
+        assertThat(classification.needsReview()).isFalse();
+    }
+
+    @Test
+    void labelsResolvingToTheSameCategoryAreNotAConflict() {
+        CategoryRef maintenance = new CategoryRef("CHORE", "Chore", CategoryGroup.MAINTENANCE);
+        List<CategoryRef> catalog = List.of(maintenance, TestCategories.UNKNOWN);
+
+        ChangeClassification classification = classify(
+                pullRequest("Tidy up", List.of("dependencies", "refactor"), null), catalog);
+
+        assertThat(classification.category()).isEqualTo(maintenance);
+        assertThat(classification.needsReview()).isFalse();
+    }
+
     // An ordinary source file: no sensitive path and no documentation-only rule.
     private static ChangeClassification classify(MergedPullRequest pullRequest) {
+        return classify(pullRequest, TestCategories.CATALOG);
+    }
+
+    private static ChangeClassification classify(MergedPullRequest pullRequest, List<CategoryRef> catalog) {
         return ChangeClassifier.classify(
                 pullRequest,
                 PullRequestFiles.collected(List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))),
-                RULES
+                RULES,
+                catalog
         );
     }
 

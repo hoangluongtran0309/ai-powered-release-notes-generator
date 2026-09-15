@@ -2,9 +2,11 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
 import com.hoangluongtran0309.releaseflow.account.RegistrationService;
+import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
 import com.hoangluongtran0309.releaseflow.support.GitHubStub;
 import com.hoangluongtran0309.releaseflow.support.OpenAiStub;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -95,7 +97,7 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM github_integrations");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
@@ -116,7 +118,7 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
 
         Change change = onlyChange();
         assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.COMPLETED);
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FIX);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.FIX);
         assertThat(change.isNeedsReview()).isFalse();
         assertThat(change.getClassificationSource()).isEqualTo(ClassificationSource.AI);
         assertThat(change.getAiStatus()).isEqualTo(AiStatus.SUCCEEDED);
@@ -153,13 +155,13 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         worker.processOne();
 
         Change change = onlyChange();
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.FEATURE);
         assertThat(change.getClassificationSource()).isEqualTo(ClassificationSource.RULES);
         assertThat(change.getAiStatus()).isEqualTo(AiStatus.SUCCEEDED);
         assertThat(change.getNeutralSummary().whatChanged()).isEqualTo("Adds an audit table.");
         assertThat(change.isNeedsReview()).isTrue();
         assertThat(change.getReviewTriggers()).containsExactly(ReviewTrigger.sensitivePath(MIGRATION));
-        assertThat(userMessage(OPENAI.requests().getFirst()).path("locked_category").stringValue()).isEqualTo("feature");
+        assertThat(userMessage(OPENAI.requests().getFirst()).path("locked_category").stringValue()).isEqualTo("FEATURE");
     }
 
     @Test
@@ -175,7 +177,7 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         worker.processOne();
 
         Change askedForReview = change(9);
-        assertThat(askedForReview.getCategory()).isEqualTo(ChangeCategory.FIX);
+        assertThat(askedForReview.getCategory()).isEqualTo(TestCategories.FIX);
         assertThat(askedForReview.isNeedsReview()).isTrue();
         assertThat(askedForReview.getClassificationReasons()).contains("AI asked for human review");
         Change breaking = change(10);
@@ -195,7 +197,7 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
 
         Change change = onlyChange();
         assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.COMPLETED);
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.FEATURE);
         assertThat(change.isNeedsReview()).isTrue();
         assertThat(change.getAiStatus()).isEqualTo(AiStatus.FAILED);
         assertThat(change.getAiFailure()).isEqualTo("OpenAI returned HTTP 500.");
@@ -241,7 +243,7 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
 
         Change change = onlyChange();
         assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.COMPLETED);
-        assertThat(change.getCategory()).isEqualTo(ChangeCategory.FEATURE);
+        assertThat(change.getCategory()).isEqualTo(TestCategories.FEATURE);
         assertThat(change.getAiStatus()).isEqualTo(AiStatus.FAILED);
         assertThat(change.getAiFailure()).isEqualTo(AiOutcome.DID_NOT_FINISH);
         assertThat(change.getReviewTriggers())
@@ -356,6 +358,105 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(jsonPath("$.neutralSummary.whatChanged").value("Written by a person."))
                 .andExpect(jsonPath("$.audienceNarratives.operator").value("By hand."))
                 .andExpect(jsonPath("$.summaryEditorName").value("Owner"));
+    }
+
+    @Test
+    void aCategoryTheAiProposesWaitsForAnAdministratorAndThenJoinsTheCatalog() throws Exception {
+        Repository repository = connect();
+        GITHUB.respondWithFiles("src/main/java/Keys.java");
+        OPENAI.respondWithSuggestion("security", "Security", "fix", "No listed category covers security hardening.");
+
+        deliver(repository, 21, "Rotate signing keys");
+        assertThat(worker.processOne()).isTrue();
+
+        Change change = onlyChange();
+        assertThat(change.getCategory().isUnknown()).isTrue();
+        assertThat(change.isNeedsReview()).isTrue();
+        assertThat(change.getReviewTriggers()).containsExactly(ReviewTrigger.categorySuggestion("SECURITY"));
+        JsonNode schema = OBJECT_MAPPER.readTree(OPENAI.requests().getFirst().body())
+                .path("response_format").path("json_schema").path("schema");
+        assertThat(schema.path("properties").path("category").path("enum").toString())
+                .isEqualTo("[\"DOCUMENTATION\",\"FEATURE\",\"FIX\",\"MAINTENANCE\",\"PERFORMANCE\",\"UNKNOWN\"]");
+        String suggestions = mockMvc.perform(get("/api/category-suggestions").session(repository.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].proposedCode").value("SECURITY"))
+                .andExpect(jsonPath("$[0].proposedGroup").value("FIX"))
+                .andExpect(jsonPath("$[0].status").value("PENDING_REVIEW"))
+                .andExpect(jsonPath("$[0].changeId").value(change.getId().toString()))
+                .andReturn().getResponse().getContentAsString();
+        String suggestionId = JsonPath.read(suggestions, "$[0].id");
+        mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
+                .andExpect(content().string(containsString("Proposed category:")))
+                .andExpect(content().string(containsString("Add to catalog")))
+                .andExpect(content().string(containsString("AI proposed a new category SECURITY")));
+
+        decide(repository, suggestionId, "{\"decision\":\"APPROVED\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"))
+                .andExpect(jsonPath("$.resolvedCode").value("SECURITY"))
+                .andExpect(jsonPath("$.deciderName").value("Owner"));
+        decide(repository, suggestionId, "{\"decision\":\"REJECTED\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("category_suggestion_decided"));
+
+        Change decided = onlyChange();
+        assertThat(decided.getCategory().code()).isEqualTo("SECURITY");
+        assertThat(decided.getCategory().group()).isEqualTo(CategoryGroup.FIX);
+        assertThat(decided.getClassificationSource()).isEqualTo(ClassificationSource.SUGGESTION);
+        assertThat(decided.isNeedsReview()).isTrue();
+        assertThat(decided.getReviewedAt()).isNull();
+        mockMvc.perform(get("/api/categories").session(repository.session()))
+                .andExpect(jsonPath("$[?(@.code == 'SECURITY')].active").value(org.hamcrest.Matchers.contains(true)));
+
+        // The new category is now part of the catalog the AI chooses from.
+        OPENAI.respondWithClassification("security", false, false, "Tightens token checks.");
+        deliver(repository, 22, "Tighten token checks");
+        assertThat(worker.processOne()).isTrue();
+        Change next = change(22);
+        assertThat(next.getCategory().code()).isEqualTo("SECURITY");
+        assertThat(next.getClassificationSource()).isEqualTo(ClassificationSource.AI);
+        assertThat(userMessage(OPENAI.requests().getLast()).path("categories").toString()).contains("\"SECURITY\"");
+    }
+
+    @Test
+    void aProposalCanBeMappedToAnExistingCategoryOrRejected() throws Exception {
+        Repository repository = connect();
+        GITHUB.respondWithFiles("src/main/java/Keys.java");
+        OPENAI.respondWithSuggestion("HOTFIX", "Hotfix", "fix", "");
+        deliver(repository, 31, "Patch login");
+        deliver(repository, 32, "Patch logout");
+        assertThat(worker.processOne()).isTrue();
+        assertThat(worker.processOne()).isTrue();
+        List<String> ids = JsonPath.read(mockMvc.perform(get("/api/category-suggestions").param("status", "PENDING_REVIEW")
+                .session(repository.session())).andReturn().getResponse().getContentAsString(), "$[*].id");
+        assertThat(ids).hasSize(2);
+        List<String> fix = JsonPath.read(mockMvc.perform(get("/api/categories").session(repository.session()))
+                .andReturn().getResponse().getContentAsString(), "$[?(@.code == 'FIX')].id");
+        String fixId = fix.getFirst();
+
+        decide(repository, ids.get(0), "{\"decision\":\"MAPPED\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+        decide(repository, ids.get(0), "{\"decision\":\"MAPPED\",\"categoryId\":\"%s\"}".formatted(fixId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resolvedCode").value("FIX"));
+        decide(repository, ids.get(1), "{\"decision\":\"REJECTED\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resolvedCode").doesNotExist());
+
+        assertThat(change(32).getCategory().code()).isEqualTo("FIX");
+        assertThat(change(32).getClassificationSource()).isEqualTo(ClassificationSource.SUGGESTION);
+        assertThat(change(31).getCategory().isUnknown()).isTrue();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM category_definitions WHERE code = 'HOTFIX'", Long.class))
+                .isZero();
+    }
+
+    private ResultActions decide(Repository repository, String suggestionId, String body) throws Exception {
+        return mockMvc.perform(post("/api/category-suggestions/{id}/decision", suggestionId)
+                .session(repository.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 
     private ResultActions retry(Repository repository, UUID changeId) throws Exception {

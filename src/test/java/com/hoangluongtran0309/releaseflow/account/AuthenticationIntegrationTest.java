@@ -36,7 +36,7 @@ class AuthenticationIntegrationTest extends PostgreSqlIntegrationTest {
     @BeforeEach
     void clearDatabase() {
         appUserRepository.deleteAll();
-        deleteAudiences();
+        deleteOrganizationSettings();
         organizationRepository.deleteAll();
     }
 

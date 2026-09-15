@@ -4,6 +4,9 @@ import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.audience.AudienceBrief;
 import com.hoangluongtran0309.releaseflow.audience.AudienceService;
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
+import com.hoangluongtran0309.releaseflow.category.CategoryService;
+import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,6 +28,8 @@ class ChangeAiClassificationService {
     private final SensitivePathRules sensitivePaths;
     private final OutputLanguageService outputLanguageService;
     private final AudienceService audienceService;
+    private final CategoryService categoryService;
+    private final CategorySuggestionService suggestionService;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -34,6 +39,8 @@ class ChangeAiClassificationService {
             SensitivePathRules sensitivePaths,
             OutputLanguageService outputLanguageService,
             AudienceService audienceService,
+            CategoryService categoryService,
+            CategorySuggestionService suggestionService,
             PlatformTransactionManager transactionManager,
             Clock clock
     ) {
@@ -42,6 +49,8 @@ class ChangeAiClassificationService {
         this.sensitivePaths = sensitivePaths;
         this.outputLanguageService = outputLanguageService;
         this.audienceService = audienceService;
+        this.categoryService = categoryService;
+        this.suggestionService = suggestionService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -60,9 +69,11 @@ class ChangeAiClassificationService {
                 throw new ChangeNotEligibleForAiException();
             }
             MergedPullRequest pullRequest = current.pullRequest();
+            List<CategoryRef> catalog = categoryService.active(organizationId);
             return new Snapshot(
                     pullRequest,
-                    ChangeClassifier.classify(pullRequest, current.recordedFiles(), sensitivePaths)
+                    ChangeClassifier.classify(pullRequest, current.recordedFiles(), sensitivePaths, catalog),
+                    catalog
             );
         });
         AiChangeClassifier ai = aiClassifiers.active().orElseThrow(AiClassificationUnavailableException::new);
@@ -74,7 +85,7 @@ class ChangeAiClassificationService {
             outcome = AiOutcome.succeeded(
                     ai,
                     ai.classify(AiClassificationRequest.of(changeId, snapshot.pullRequest(), language,
-                            snapshot.rules().category(), audiences)),
+                            snapshot.rules().category(), snapshot.catalog(), audiences)),
                     language
             );
         } catch (AiClassificationException exception) {
@@ -86,7 +97,11 @@ class ChangeAiClassificationService {
             Change current = find(organizationId, projectId, changeId);
             // A concurrent request or review may have settled the change meanwhile; its result is kept.
             if (current.isAiEligible()) {
-                current.applyAiRetry(ChangeAiMerge.merge(snapshot.rules(), recorded), clock.instant());
+                ChangeAiMerge.ClassifiedChange merged = ChangeAiMerge.merge(snapshot.rules(), recorded);
+                current.applyAiRetry(merged, clock.instant());
+                if (merged.suggestion() != null) {
+                    suggestionService.propose(organizationId, projectId, changeId, merged.suggestion());
+                }
             }
             return ChangeView.from(current);
         });
@@ -101,6 +116,6 @@ class ChangeAiClassificationService {
                 .orElseThrow(ChangeNotFoundException::new);
     }
 
-    private record Snapshot(MergedPullRequest pullRequest, ChangeClassification rules) {
+    private record Snapshot(MergedPullRequest pullRequest, ChangeClassification rules, List<CategoryRef> catalog) {
     }
 }

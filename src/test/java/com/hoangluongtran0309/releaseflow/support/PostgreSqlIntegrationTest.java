@@ -28,8 +28,10 @@ public abstract class PostgreSqlIntegrationTest {
         registry.add("releaseflow.processing.enabled", () -> "false");
     }
 
-    /** Every Organization owns audiences, which must go before the Organization itself. */
-    protected void deleteAudiences() {
+    /** Every Organization owns audiences and categories, which must go before the Organization itself. */
+    protected void deleteOrganizationSettings() {
+        supportJdbcTemplate.update("DELETE FROM category_suggestions");
+        supportJdbcTemplate.update("DELETE FROM category_definitions");
         supportJdbcTemplate.update("DELETE FROM audience_definitions");
     }
 

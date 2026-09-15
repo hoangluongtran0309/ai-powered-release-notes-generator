@@ -2,6 +2,7 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.support.AnthropicStub;
 import com.hoangluongtran0309.releaseflow.support.OpenAiStub;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ class AnthropicChangeClassifierTest {
 
         AiClassification answer = classifier.classify(request("Speeds things up.", null, "vi"));
 
-        assertThat(answer.category()).isEqualTo(ChangeCategory.PERFORMANCE);
+        assertThat(answer.category()).isEqualTo(TestCategories.PERFORMANCE);
         assertThat(answer.summary().whatChanged()).isEqualTo("Caches rendered notes.");
         assertThat(classifier.provider()).isEqualTo(AiProvider.ANTHROPIC);
         assertThat(classifier.model()).isEqualTo("claude-test");

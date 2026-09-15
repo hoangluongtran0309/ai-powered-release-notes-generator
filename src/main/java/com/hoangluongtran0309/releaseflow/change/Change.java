@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.github.ChangedFile;
 import com.hoangluongtran0309.releaseflow.change.ChangeAiMerge.ClassifiedChange;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
@@ -66,9 +68,16 @@ class Change {
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt;
 
+    // A snapshot of the catalog category, so later edits to the catalog never rewrite it.
+    @Column(nullable = false, length = 64)
+    private String category;
+
+    @Column(name = "category_display_name", nullable = false, length = 120)
+    private String categoryDisplayName;
+
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private ChangeCategory category;
+    @Column(name = "category_group", nullable = false, length = 20)
+    private CategoryGroup categoryGroup;
 
     @Column(nullable = false)
     private boolean breaking;
@@ -173,7 +182,7 @@ class Change {
         change.mergeCommitSha = pullRequest.mergeCommitSha();
         change.mergedAt = pullRequest.mergedAt();
         change.url = pullRequest.url();
-        change.category = ChangeCategory.UNKNOWN;
+        change.setCategory(CategoryRef.UNKNOWN);
         change.breaking = false;
         change.needsReview = true;
         change.classificationReasons = new String[]{"Waiting for changed files"};
@@ -244,14 +253,14 @@ class Change {
         return processingStatus == ProcessingStatus.COMPLETED
                 && reviewedAt == null
                 && (aiStatus == AiStatus.FAILED
-                || (aiStatus == AiStatus.NOT_REQUESTED && category == ChangeCategory.UNKNOWN));
+                || (aiStatus == AiStatus.NOT_REQUESTED && getCategory().isUnknown()));
     }
 
     private void apply(ClassifiedChange outcome, List<ReviewTrigger> keptTriggers, Instant at) {
         ChangeClassification classification = outcome.classification();
         List<ReviewTrigger> triggers = new ArrayList<>(keptTriggers);
         classification.triggers().stream().filter(trigger -> !triggers.contains(trigger)).forEach(triggers::add);
-        this.category = classification.category();
+        setCategory(classification.category());
         this.breaking = classification.breaking();
         this.needsReview = classification.needsReview() || !triggers.isEmpty();
         this.classificationReasons = classification.reasons().toArray(String[]::new);
@@ -287,19 +296,41 @@ class Change {
 
     // Stores exactly what the reviewer confirmed. Changing either value makes the
     // reviewer the source of the classification.
-    void review(ChangeCategory reviewedCategory, boolean reviewedBreaking, UUID reviewer, String name, Instant at) {
+    void review(CategoryRef reviewedCategory, boolean reviewedBreaking, UUID reviewer, String name, Instant at) {
         if (isProcessing()) {
             throw new ChangeProcessingException();
         }
-        if (reviewedCategory != category || reviewedBreaking != breaking) {
+        if (!reviewedCategory.code().equals(category) || reviewedBreaking != breaking) {
             this.classificationSource = ClassificationSource.HUMAN;
         }
-        this.category = reviewedCategory;
+        setCategory(reviewedCategory);
         this.breaking = reviewedBreaking;
         this.needsReview = false;
         this.reviewedBy = reviewer;
         this.reviewerName = name;
         this.reviewedAt = at;
+    }
+
+    /**
+     * An administrator approved or mapped the category the AI proposed for this change.
+     * A change still Unknown and unreviewed takes it; it still needs a person's review.
+     */
+    boolean applySuggestedCategory(CategoryRef suggested) {
+        if (isProcessing() || reviewedAt != null || !getCategory().isUnknown()) {
+            return false;
+        }
+        setCategory(suggested);
+        this.classificationSource = ClassificationSource.SUGGESTION;
+        List<String> reasons = new ArrayList<>(List.of(classificationReasons));
+        reasons.add("Category from an approved suggestion");
+        this.classificationReasons = reasons.toArray(String[]::new);
+        return true;
+    }
+
+    private void setCategory(CategoryRef value) {
+        this.category = value.code();
+        this.categoryDisplayName = value.displayName();
+        this.categoryGroup = value.group();
     }
 
     /**
@@ -383,8 +414,8 @@ class Change {
         return receivedAt;
     }
 
-    ChangeCategory getCategory() {
-        return category;
+    CategoryRef getCategory() {
+        return new CategoryRef(category, categoryDisplayName, categoryGroup);
     }
 
     boolean isBreaking() {

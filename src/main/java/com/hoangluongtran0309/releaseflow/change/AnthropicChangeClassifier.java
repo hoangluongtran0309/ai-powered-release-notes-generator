@@ -103,7 +103,7 @@ final class AnthropicChangeClassifier implements AiChangeClassifier, AutoCloseab
                 .findFirst()
                 .orElseThrow(() -> failure(request, INVALID));
         try {
-            return parser.parse(text, request.audienceCodes());
+            return parser.parse(text, request);
         } catch (AiClassificationException exception) {
             throw failure(request, INVALID);
         }
@@ -112,7 +112,7 @@ final class AnthropicChangeClassifier implements AiChangeClassifier, AutoCloseab
     // The schema names the Organization's audiences, so it is built for each request.
     private JsonOutputFormat.Schema schema(AiClassificationRequest request) {
         Map<String, Object> fields = objectMapper.convertValue(
-                AiClassificationPrompt.responseSchema(request.audienceCodes(), objectMapper),
+                AiClassificationPrompt.responseSchema(request, objectMapper),
                 new TypeReference<Map<String, Object>>() {
                 }
         );

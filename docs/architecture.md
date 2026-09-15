@@ -4,8 +4,8 @@
 
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
-`account`, `project`, `change`, `audience`, `release`, the `github` API client
-shared by `project` and `change`, and shared `configuration`:
+`account`, `project`, `change`, `category`, `audience`, `release`, the `github`
+API client shared by `project` and `change`, and shared `configuration`:
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
@@ -52,6 +52,12 @@ GET  /api/projects/{id}/releases/{releaseId}/{notes|note-previews} -> ReleaseSer
 PUT  /api/projects/{id}/releases/{releaseId}/notes/{noteId} -> ReleaseService
 GET  /api/projects/{id}/releases/{releaseId}/notes/{noteId}/download -> ReleaseService
 GET  /api/projects/{id}/release-assignments -> ReleaseService
+GET  /categories              -> CategoryService, CategorySuggestionService (Categories UI, administrator)
+POST /categories[/{categoryId}[/archive|/unarchive]] -> CategoryService (administrator)
+POST /categories/suggestions/{suggestionId}/decision -> CategorySuggestionService (administrator)
+GET  /api/categories          -> CategoryService (every member)
+POST /api/categories, PUT|DELETE /api/categories/{categoryId}, POST /api/categories/{categoryId}/unarchive -> CategoryService (administrator)
+GET  /api/category-suggestions, POST /api/category-suggestions/{suggestionId}/decision -> CategorySuggestionService (administrator)
 GET  /audiences[/new|/{audienceId}] -> AudienceService (Audiences UI, administrator)
 POST /audiences[/{audienceId}[/delete|/reset-to-preset]], /audiences/preview -> AudienceService (administrator)
 GET|POST /api/audiences, GET|PUT|DELETE /api/audiences/{audienceId} -> AudienceService (administrator)
@@ -62,8 +68,8 @@ REST and Thymeleaf registration call the same transactional application
 service. Project REST and UI controllers likewise call the same Project and
 GitHub integration services. One short registration transaction creates an
 Organization and its ADMIN AppUser, and publishes `OrganizationRegistered`,
-which `AudienceService` handles in the same transaction to seed the preset
-audiences.
+which `CategoryService` and `AudienceService` handle in the same transaction to
+seed the default categories and the preset audiences.
 Passwords are encoded with BCrypt before persistence; neither the hash nor the
 submitted password is returned.
 
@@ -143,12 +149,27 @@ changes
   target_branch, merge_commit_sha, merged_at, url
   delivery_id (X-GitHub-Delivery that recorded the change)
   received_at
-  category, breaking, needs_review, classification_reasons (text[])
-  classification_source (RULES | AI | HUMAN), ai_status (NOT_REQUESTED | SUCCEEDED | FAILED)
+  category (code), category_display_name, category_group (snapshot of the catalog category)
+  breaking, needs_review, classification_reasons (text[])
+  classification_source (RULES | AI | SUGGESTION | HUMAN), ai_status (NOT_REQUESTED | SUCCEEDED | FAILED)
   ai_model, ai_failure, ai_attempted_at
   reviewed_by (composite FK with organization_id -> app_users), reviewer_name, reviewed_at
   neutral_summary (jsonb), content_language, audience_narratives (jsonb, keyed by audience code)
   summary_edited_by (composite FK with organization_id -> app_users), summary_editor_name, summary_edited_at
+
+category_definitions
+  id (UUID PK)
+  organization_id (FK -> organizations.id)
+  code ([A-Z][A-Z0-9_]*, unique per Organization, fixed), display_name
+  category_group (FEATURE | FIX | PERFORMANCE | DOCUMENTATION | MAINTENANCE | OTHER)
+  system_category (only UNKNOWN; always active, group OTHER), active, created_at, updated_at
+
+category_suggestions
+  id (UUID PK)
+  (change_id, organization_id, project_id) FK -> changes, ON DELETE CASCADE; change_id unique
+  proposed_code, proposed_name, proposed_group, rationale
+  status (PENDING_REVIEW | APPROVED | MAPPED | REJECTED), resolved_code
+  decided_by (composite FK -> app_users), decider_name, created_at, decided_at
 
 audience_definitions
   id (UUID PK)
@@ -317,7 +338,7 @@ performs network I/O itself.
 
 | Signal | Rule | Effect |
 | --- | --- | --- |
-| Title type | `^(feat\|fix\|perf\|docs\|refactor\|chore\|ci\|build\|test)(scope)?(!)?: text`, case-insensitive | Feature, Fix, Performance, Documentation, or Maintenance |
+| Title type | `^(feat\|fix\|perf\|docs\|refactor\|chore\|ci\|build\|test)(scope)?(!)?: text`, case-insensitive | Feature, Fix, Performance, Documentation, or Maintenance group |
 | Title `!` | Marker after the type or scope | Breaking |
 | Label | `enhancement`, `feature`; `bug`, `bugfix`; `performance`; `documentation`, `docs`; `dependencies`, `maintenance`, `chore`, `refactor` | Category, only without a title type |
 | Breaking label | `breaking-change`, `breaking change`, `breaking` | Breaking |
@@ -326,8 +347,13 @@ performs network I/O itself.
 | Sensitive path | A changed or previous path matches `releaseflow.classification.sensitive-paths` | `SENSITIVE_PATH` review trigger |
 | No file list | The files could not be listed | `CHANGED_FILES_UNAVAILABLE` review trigger |
 
-A title type outranks labels, and every matched rule is kept as a reason, so a
-disagreement stays visible. Labels naming different categories without a title
+Each category rule names a group and a preferred code (the former fixed value,
+such as `FIX`). The Organization's active catalog, passed in by the caller,
+decides the category: the preferred one if active, else the first active
+category of the group by code. A group without an active category locks nothing
+and adds the reason "No active category in the … group". A title type outranks
+labels, and every matched rule is kept as a reason, so a disagreement stays
+visible. Labels naming different categories without a title
 type, or no matching rule at all, produce Unknown. `needs_review` is true for
 every breaking, Unknown, or triggered change; the `changes_review_required`
 and `changes_triggers_require_review` check constraints enforce that invariant
@@ -344,8 +370,9 @@ classification" to changes recorded before it ran.
 `GET /api/projects/{projectId}/changes`. It first resolves the Project through
 `ProjectService.get` with the principal's Organization ID, so another tenant's
 Project is reported as not found. It then queries changes by both Organization
-and Project ID, optionally filtered by category and review status, newest
-merge first. Unsupported filter values return `400 invalid_change_filter`. The
+and Project ID, optionally filtered by category code and review status, newest
+merge first. Cards show each change's category snapshot, a pending category
+proposal, and, for administrators, the forms that decide it. Unsupported filter values return `400 invalid_change_filter`. The
 page defaults to the first Project and uses a plain GET form for filters.
 
 ## AI classification
@@ -407,6 +434,52 @@ code, turns `_` into `-`, and limits the result to 16 characters.
 `GET|PUT /api/organization/output-language`. Changing the tag is
 administrator-only by URL rule. The worker reads the tag once per change and
 records it as the summary's `content_language`.
+
+## Category catalog
+
+`category` owns the catalog and the proposals; it depends on neither `change`
+nor `release`. See [ADR-0012](adr/0012-category-catalog.md).
+
+- `CategoryService` serves the pages and REST (writes are administrator only by
+  URL rule), the rules and the AI (`active`), and reviews (`find`, active codes
+  only, ignoring case).
+- `CategoryRef` is the snapshot a change stores: code, display name, and group.
+  `CategoryRef.normalize` upper-cases a code, turns `-` and spaces into `_`, and
+  rejects anything but `[A-Z][A-Z0-9_]*` of at most 64 characters.
+- A system category (only UNKNOWN) keeps its group and cannot be archived
+  (`409 category_system`). Archiving is reversible and never touches changes.
+- The AI request lists the active categories, and the schema's `category` enum
+  is their codes. `suggested_category` is always an object whose empty code
+  means no proposal, which keeps OpenAI strict mode and Anthropic Structured
+  Outputs simple.
+- `AiClassificationParser` rejects a code outside the catalog as invalid. It
+  keeps a proposal only with an Unknown answer, a valid code not already
+  listed, and no rules lock. `ChangeAiMerge` then adds a
+  `CATEGORY_SUGGESTION_PENDING` trigger, and the worker, or the AI retry,
+  stores the proposal through `CategorySuggestionService.propose` in the
+  transaction that records the result.
+- `CategorySuggestionService.decide` checks that the proposal is still pending
+  before doing anything.
+  - APPROVED activates the proposed category, creating it or restoring an
+    archived one with that code; MAPPED needs an active category; REJECTED
+    adds nothing.
+  - It then publishes `CategorySuggestionDecided`.
+  - `CategorySuggestionDecisionListener` in `change` gives the category to the
+    change if it is still Unknown and unreviewed, with the source
+    `SUGGESTION`. `needs_review` and the trigger stay until a person reviews
+    the change.
+
+Flyway `V14` enforces the catalog with these constraints:
+
+- `category_definitions_code_valid`, `category_definitions_group_known`,
+  `category_definitions_system_active`, and
+  `category_definitions_unknown_is_system` keep the catalog valid;
+- `changes_category_valid` keeps the snapshot valid, UNKNOWN always in the
+  OTHER group;
+- `changes_ai_state_consistent` requires a successful AI attempt for the
+  `SUGGESTION` source;
+- `category_suggestions_decision_recorded` keeps each suggestion's decision
+  consistent.
 
 ## Human review
 
@@ -495,8 +568,9 @@ send an ISO-8601 instant with an offset; the page's `datetime-local` input
 sends a local time that is read as UTC, and pages show times in UTC.
 
 `ReleaseNotePreview` groups an unpublished release's changes for the REST
-`preview` field: breaking changes first and only there, then Features, Fixes,
-Performance, Documentation, Maintenance, sorted by merge time. Titles drop a
+`preview` field by category group: breaking changes first and only there, then
+Features, Fixes, Performance, Documentation, Maintenance, and Other changes,
+sorted by merge time. Titles drop a
 leading Conventional Commit prefix. Pages instead preview each audience's note
 (see Audiences and release notes).
 
@@ -528,9 +602,9 @@ escaped, link targets are sanitized and marked
 - the title and the escaped release summary;
 - "What's New", with a count per section joined by the bundle's list pattern,
   and a breaking warning;
-- sections in the order breaking, features, fixes, performance, documentation,
-  maintenance, other, each item rendered by the template and its headings
-  demoted two levels outside fenced code.
+- sections by category group in the order breaking (the flag), features,
+  fixes, performance, documentation, maintenance, other, each item rendered by
+  the template and its headings demoted two levels outside fenced code.
 
 Labels come from `messages/release-note{,_vi}.properties`, chosen by the note's
 language with an English fallback, and counts use `java.text` choice formats.

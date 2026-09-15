@@ -29,7 +29,7 @@ class ReleaseDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
-        deleteAudiences();
+        deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
     }
 

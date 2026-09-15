@@ -1,6 +1,8 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.category.CategoryService;
+import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.ProjectView;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,17 +30,23 @@ public class ChangeInboxPageController {
     private final ChangeInboxService inboxService;
     private final ChangeAiClassificationService aiClassificationService;
     private final ChangeReviewService reviewService;
+    private final CategoryService categoryService;
+    private final CategorySuggestionService suggestionService;
 
     ChangeInboxPageController(
             ProjectService projectService,
             ChangeInboxService inboxService,
             ChangeAiClassificationService aiClassificationService,
-            ChangeReviewService reviewService
+            ChangeReviewService reviewService,
+            CategoryService categoryService,
+            CategorySuggestionService suggestionService
     ) {
         this.projectService = projectService;
         this.inboxService = inboxService;
         this.aiClassificationService = aiClassificationService;
         this.reviewService = reviewService;
+        this.categoryService = categoryService;
+        this.suggestionService = suggestionService;
     }
 
     @GetMapping("/changes")
@@ -132,7 +141,12 @@ public class ChangeInboxPageController {
             selectedProjectId = projects.getFirst().id();
         }
         model.addAttribute("projects", projects);
-        model.addAttribute("categories", ChangeCategory.values());
+        // The filter offers every category, archived ones included; a review only active ones.
+        model.addAttribute("categories", categoryService.list(principal.organizationId()));
+        model.addAttribute("reviewCategories", categoryService.active(principal.organizationId()).stream()
+                .filter(value -> !value.isUnknown())
+                .toList());
+        model.addAttribute("suggestions", Map.of());
         model.addAttribute("statuses", ReviewStatus.values());
         model.addAttribute("selectedProjectId", selectedProjectId);
         model.addAttribute("selectedCategory", category);
@@ -150,6 +164,7 @@ public class ChangeInboxPageController {
                     selectedProjectId,
                     ChangeFilter.parse(category, status)
             ));
+            model.addAttribute("suggestions", suggestionService.byChange(principal.organizationId(), selectedProjectId));
         } catch (ProjectNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             model.addAttribute("pageError", exception.getMessage());

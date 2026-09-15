@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.github.ChangedFile;
 
 import java.time.Instant;
@@ -20,7 +22,9 @@ public record ChangeView(
         String mergeCommitSha,
         Instant mergedAt,
         String url,
-        ChangeCategory category,
+        String category,
+        String categoryName,
+        CategoryGroup categoryGroup,
         boolean breaking,
         boolean needsReview,
         List<String> reasons,
@@ -56,6 +60,15 @@ public record ChangeView(
         return audienceNarratives.getOrDefault(audienceCode, "");
     }
 
+    /** The category the change carries, as a snapshot. */
+    public CategoryRef categoryRef() {
+        return new CategoryRef(category, categoryName, categoryGroup);
+    }
+
+    public boolean unknownCategory() {
+        return CategoryRef.UNKNOWN.code().equals(category);
+    }
+
     public boolean processing() {
         return processingStatus == ProcessingStatus.PROCESSING;
     }
@@ -72,7 +85,9 @@ public record ChangeView(
                 change.getMergeCommitSha(),
                 change.getMergedAt(),
                 change.getUrl(),
-                change.getCategory(),
+                change.getCategory().code(),
+                change.getCategory().displayName(),
+                change.getCategory().group(),
                 change.isBreaking(),
                 change.isNeedsReview(),
                 change.getClassificationReasons(),

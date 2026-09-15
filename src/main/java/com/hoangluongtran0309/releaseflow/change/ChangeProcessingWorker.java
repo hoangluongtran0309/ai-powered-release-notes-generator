@@ -4,6 +4,9 @@ import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.audience.AudienceBrief;
 import com.hoangluongtran0309.releaseflow.audience.AudienceService;
+import com.hoangluongtran0309.releaseflow.category.CategoryRef;
+import com.hoangluongtran0309.releaseflow.category.CategoryService;
+import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
 import com.hoangluongtran0309.releaseflow.github.GitHubApiClient;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
 import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAccess;
@@ -49,6 +52,8 @@ class ChangeProcessingWorker {
     private final AiClassifiers aiClassifiers;
     private final OutputLanguageService outputLanguageService;
     private final AudienceService audienceService;
+    private final CategoryService categoryService;
+    private final CategorySuggestionService suggestionService;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final boolean enabled;
@@ -62,6 +67,8 @@ class ChangeProcessingWorker {
             AiClassifiers aiClassifiers,
             OutputLanguageService outputLanguageService,
             AudienceService audienceService,
+            CategoryService categoryService,
+            CategorySuggestionService suggestionService,
             PlatformTransactionManager transactionManager,
             Clock clock,
             @Value("${releaseflow.processing.enabled}") boolean enabled
@@ -74,6 +81,8 @@ class ChangeProcessingWorker {
         this.aiClassifiers = aiClassifiers;
         this.outputLanguageService = outputLanguageService;
         this.audienceService = audienceService;
+        this.categoryService = categoryService;
+        this.suggestionService = suggestionService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.enabled = enabled;
@@ -140,7 +149,8 @@ class ChangeProcessingWorker {
             reschedule(claim, files.failure());
             return;
         }
-        ChangeClassification rules = ChangeClassifier.classify(claim.pullRequest(), files, sensitivePaths);
+        List<CategoryRef> catalog = categoryService.active(claim.organizationId());
+        ChangeClassification rules = ChangeClassifier.classify(claim.pullRequest(), files, sensitivePaths, catalog);
 
         Optional<AiChangeClassifier> ai = aiClassifiers.active();
         if (ai.isEmpty()) {
@@ -160,7 +170,7 @@ class ChangeProcessingWorker {
             return;
         }
 
-        AiOutcome outcome = askAi(ai.get(), claim, rules.category());
+        AiOutcome outcome = askAi(ai.get(), claim, rules.category(), catalog);
         complete(
                 claim,
                 files,
@@ -170,7 +180,7 @@ class ChangeProcessingWorker {
     }
 
     // Exactly one request per change: a failure becomes a fallback, never a retry.
-    private AiOutcome askAi(AiChangeClassifier ai, Claim claim, ChangeCategory rulesCategory) {
+    private AiOutcome askAi(AiChangeClassifier ai, Claim claim, CategoryRef rulesCategory, List<CategoryRef> catalog) {
         OutputLanguage language = outputLanguageService.outputLanguage(claim.organizationId());
         List<AudienceBrief> audiences = audienceService.briefs(claim.organizationId());
         try {
@@ -179,6 +189,7 @@ class ChangeProcessingWorker {
                     claim.pullRequest(),
                     language,
                     rulesCategory,
+                    catalog,
                     audiences
             ));
             return AiOutcome.succeeded(ai, answer, language);
@@ -200,6 +211,9 @@ class ChangeProcessingWorker {
             Instant now = now();
             findChange(job).completeProcessing(files, outcome, now);
             job.complete(error, now);
+            if (outcome.suggestion() != null) {
+                suggestionService.propose(claim.organizationId(), claim.projectId(), claim.changeId(), outcome.suggestion());
+            }
         });
         log.info("Processed change {} with {} changed file(s) {}{}.", claim.changeId(),
                 files.isCollected() ? files.files().size() : 0,
@@ -210,7 +224,8 @@ class ChangeProcessingWorker {
     // A job whose AI call may already have happened is finished from the recorded files.
     private void completeWithoutAi(ChangeProcessingJob job, Change change, Instant now) {
         PullRequestFiles files = change.recordedFiles();
-        ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files, sensitivePaths);
+        ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files, sensitivePaths,
+                categoryService.active(change.getOrganizationId()));
         AiOutcome outcome = aiClassifiers.active()
                 .map(ai -> AiOutcome.failed(ai, AiOutcome.DID_NOT_FINISH))
                 .orElse(null);

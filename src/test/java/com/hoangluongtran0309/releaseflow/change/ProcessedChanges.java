@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.github.ChangedFile;
 import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
 import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+import com.hoangluongtran0309.releaseflow.support.TestCategories;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,7 +27,7 @@ final class ProcessedChanges {
         Change change = Change.received(id, organizationId, projectId, pullRequest, UUID.randomUUID(), Instant.now());
         change.completeProcessing(
                 ORDINARY_FILES,
-                ChangeAiMerge.merge(ChangeClassifier.classify(pullRequest, ORDINARY_FILES, RULES), null),
+                ChangeAiMerge.merge(ChangeClassifier.classify(pullRequest, ORDINARY_FILES, RULES, TestCategories.CATALOG), null),
                 Instant.now()
         );
         return change;
