@@ -35,6 +35,7 @@ public class SourceAccess {
                 .map(source -> new SourceCredentials(
                         source.getSourceType(),
                         source.getExternalProjectKey(),
+                        source.getExternalWorkspaceKey(),
                         source.getApiBaseUrl(),
                         source.getRepositoryOwner(),
                         source.getRepositoryName(),

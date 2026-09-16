@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.project;
 import com.hoangluongtran0309.releaseflow.github.GitHubApiClient;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabApiClient;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabBaseUrl;
+import com.hoangluongtran0309.releaseflow.linear.LinearApiClient;
 import com.hoangluongtran0309.releaseflow.source.ProviderAccess;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
@@ -21,6 +22,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * A Project's integration sources. Each source gets its own webhook ID and secret,
@@ -34,6 +36,7 @@ public class IntegrationSourceService {
     private static final String EXTERNAL_UNIQUE_CONSTRAINT = "integration_sources_external_unique";
     private static final String GITHUB_TOKEN_PURPOSE = "github-access-token";
     private static final String GITLAB_TOKEN_PURPOSE = "gitlab-access-token";
+    private static final String LINEAR_TOKEN_PURPOSE = "linear-access-token";
     private static final String WEBHOOK_DELIVERY = "WEBHOOK";
 
     private final ProjectRepository projectRepository;
@@ -42,6 +45,7 @@ public class IntegrationSourceService {
     private final GitHubApiClient gitHubApiClient;
     private final GitLabApiClient gitLabApiClient;
     private final GitLabBaseUrl gitLabBaseUrl;
+    private final LinearApiClient linearApiClient;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final SecureRandom secureRandom;
@@ -54,6 +58,7 @@ public class IntegrationSourceService {
             GitHubApiClient gitHubApiClient,
             GitLabApiClient gitLabApiClient,
             GitLabBaseUrl gitLabBaseUrl,
+            LinearApiClient linearApiClient,
             PlatformTransactionManager transactionManager,
             Clock clock
     ) {
@@ -64,6 +69,7 @@ public class IntegrationSourceService {
                 gitHubApiClient,
                 gitLabApiClient,
                 gitLabBaseUrl,
+                linearApiClient,
                 transactionManager,
                 clock,
                 new SecureRandom()
@@ -77,6 +83,7 @@ public class IntegrationSourceService {
             GitHubApiClient gitHubApiClient,
             GitLabApiClient gitLabApiClient,
             GitLabBaseUrl gitLabBaseUrl,
+            LinearApiClient linearApiClient,
             PlatformTransactionManager transactionManager,
             Clock clock,
             SecureRandom secureRandom
@@ -87,21 +94,24 @@ public class IntegrationSourceService {
         this.gitHubApiClient = gitHubApiClient;
         this.gitLabApiClient = gitLabApiClient;
         this.gitLabBaseUrl = gitLabBaseUrl;
+        this.linearApiClient = linearApiClient;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.secureRandom = secureRandom;
     }
 
     /**
-     * Connects a repository or project to a Project. A given repository or project belongs
-     * to at most one Project of the Organization; a Project may have several sources.
+     * Connects a repository, project, or team to a Project. A given one belongs to at most
+     * one Project of the Organization; a Project may have several sources. Connecting
+     * Linear asks Linear to confirm the token first, so this method holds no transaction
+     * of its own; each branch writes in one short transaction of its own.
      */
-    @Transactional
     public IntegrationSourceCreated create(UUID organizationId, UUID projectId, IntegrationSourceRequest request) {
-        requireProject(organizationId, projectId);
+        transactionTemplate.executeWithoutResult(status -> requireProject(organizationId, projectId));
         return switch (request.getType()) {
             case GITHUB -> createGitHub(organizationId, projectId, request);
             case GITLAB -> createGitLab(organizationId, projectId, request);
+            case LINEAR -> createLinear(organizationId, projectId, request);
         };
     }
 
@@ -124,18 +134,20 @@ public class IntegrationSourceService {
                 gitHubAuthenticatedData(organizationId, projectId, sourceId, owner, repository)
         );
 
-        IntegrationSource source = IntegrationSource.gitHub(
-                sourceId,
-                organizationId,
-                projectId,
-                owner,
-                repository,
-                webhookId,
-                encryptedSecret.nonce(),
-                encryptedSecret.ciphertext(),
-                createdAt
+        save(
+                () -> IntegrationSource.gitHub(
+                        sourceId,
+                        organizationId,
+                        projectId,
+                        owner,
+                        repository,
+                        webhookId,
+                        encryptedSecret.nonce(),
+                        encryptedSecret.ciphertext(),
+                        createdAt
+                ),
+                SourceType.GITHUB
         );
-        save(source, SourceType.GITHUB);
 
         return new IntegrationSourceCreated(
                 sourceId,
@@ -144,6 +156,7 @@ public class IntegrationSourceService {
                 projectKey,
                 owner,
                 repository,
+                null,
                 null,
                 WebhookAuthMode.GITHUB_HMAC,
                 webhookId,
@@ -172,19 +185,21 @@ public class IntegrationSourceService {
                 gitLabAuthenticatedData(organizationId, projectId, sourceId, projectPath)
         );
 
-        IntegrationSource source = IntegrationSource.gitLab(
-                sourceId,
-                organizationId,
-                projectId,
-                projectPath,
-                apiBaseUrl,
-                request.getWebhookAuthMode(),
-                webhookId,
-                encryptedSecret.nonce(),
-                encryptedSecret.ciphertext(),
-                createdAt
+        save(
+                () -> IntegrationSource.gitLab(
+                        sourceId,
+                        organizationId,
+                        projectId,
+                        projectPath,
+                        apiBaseUrl,
+                        request.getWebhookAuthMode(),
+                        webhookId,
+                        encryptedSecret.nonce(),
+                        encryptedSecret.ciphertext(),
+                        createdAt
+                ),
+                SourceType.GITLAB
         );
-        save(source, SourceType.GITLAB);
 
         return new IntegrationSourceCreated(
                 sourceId,
@@ -194,10 +209,77 @@ public class IntegrationSourceService {
                 null,
                 null,
                 apiBaseUrl,
+                null,
                 request.getWebhookAuthMode(),
                 webhookId,
                 webhookPath(SourceType.GITLAB, webhookId),
                 webhookSecret,
+                createdAt
+        );
+    }
+
+    /**
+     * Connects a Linear team. Linear mints the webhook secret itself, so the administrator
+     * pastes it in, and the token is required because confirming the team is also how
+     * ReleaseFlow learns the workspace every delivery is checked against. Linear is asked
+     * before anything is written, and never inside a transaction.
+     */
+    private IntegrationSourceCreated createLinear(
+            UUID organizationId,
+            UUID projectId,
+            IntegrationSourceRequest request
+    ) {
+        // Linear names a team by a UUID, so the same canonical form as the other types works.
+        String teamId = canonicalize(request.getTeamId());
+        requireNotConnected(organizationId, SourceType.LINEAR, teamId);
+        String workspaceId = linearApiClient.workspaceOf(teamId, request.getApiToken())
+                .orElseThrow(() -> new SourceTokenRejectedException(SourceType.LINEAR));
+
+        UUID sourceId = UUID.randomUUID();
+        UUID webhookId = UUID.randomUUID();
+        Instant createdAt = clock.instant();
+        String webhookSecret = request.getWebhookSecret();
+        CredentialCipher.EncryptedSecret encryptedSecret = credentialCipher.encrypt(
+                webhookSecret,
+                linearAuthenticatedData(organizationId, projectId, sourceId, teamId)
+        );
+
+        save(
+                () -> {
+                    IntegrationSource source = IntegrationSource.linear(
+                            sourceId,
+                            organizationId,
+                            projectId,
+                            teamId,
+                            workspaceId,
+                            webhookId,
+                            encryptedSecret.nonce(),
+                            encryptedSecret.ciphertext(),
+                            createdAt
+                    );
+                    source.replaceToken(
+                            credentialCipher.encrypt(request.getApiToken(), tokenAuthenticatedData(source)),
+                            createdAt
+                    );
+                    return source;
+                },
+                SourceType.LINEAR
+        );
+
+        // The secret came from Linear, so it is never echoed back.
+        return new IntegrationSourceCreated(
+                sourceId,
+                projectId,
+                SourceType.LINEAR,
+                teamId,
+                null,
+                null,
+                null,
+                workspaceId,
+                WebhookAuthMode.LINEAR_HMAC,
+                webhookId,
+                webhookPath(SourceType.LINEAR, webhookId),
+                null,
                 createdAt
         );
     }
@@ -227,6 +309,7 @@ public class IntegrationSourceService {
             return new Coordinates(
                     source.getSourceType(),
                     source.getExternalProjectKey(),
+                    source.getExternalWorkspaceKey(),
                     source.getApiBaseUrl(),
                     source.getRepositoryOwner(),
                     source.getRepositoryName()
@@ -244,6 +327,11 @@ public class IntegrationSourceService {
                     coordinates.externalProjectKey(),
                     token
             );
+            // A Linear token is only accepted while it still reaches the same workspace.
+            case LINEAR -> linearApiClient.workspaceOf(coordinates.externalProjectKey(), token)
+                    .filter(workspace -> workspace.equals(coordinates.externalWorkspaceKey()))
+                    .map(workspace -> ProviderAccess.GRANTED)
+                    .orElse(ProviderAccess.REJECTED);
         };
         if (access == ProviderAccess.REJECTED) {
             throw new SourceTokenRejectedException(coordinates.sourceType());
@@ -271,9 +359,9 @@ public class IntegrationSourceService {
                 .ifPresent(source -> source.recordSync(at, errorCode, credentialRejected));
     }
 
-    private void save(IntegrationSource source, SourceType sourceType) {
+    private void save(Supplier<IntegrationSource> source, SourceType sourceType) {
         try {
-            sourceRepository.saveAndFlush(source);
+            transactionTemplate.executeWithoutResult(status -> sourceRepository.saveAndFlush(source.get()));
         } catch (DataIntegrityViolationException exception) {
             throw violates(exception, EXTERNAL_UNIQUE_CONSTRAINT)
                     ? new SourceAlreadyConnectedException(sourceType)
@@ -311,6 +399,7 @@ public class IntegrationSourceService {
                 source.getRepositoryOwner(),
                 source.getRepositoryName(),
                 source.getApiBaseUrl(),
+                source.getExternalWorkspaceKey(),
                 source.getWebhookAuthMode(),
                 source.getWebhookId(),
                 webhookPath(source.getSourceType(), source.getWebhookId()),
@@ -328,6 +417,7 @@ public class IntegrationSourceService {
         return switch (sourceType) {
             case GITHUB -> "/webhooks/github/" + webhookId;
             case GITLAB -> "/webhooks/gitlab/" + webhookId;
+            case LINEAR -> "/webhooks/linear/" + webhookId;
         };
     }
 
@@ -342,6 +432,12 @@ public class IntegrationSourceService {
                     source.getRepositoryName()
             );
             case GITLAB -> gitLabAuthenticatedData(
+                    source.getOrganizationId(),
+                    source.getProjectId(),
+                    source.getId(),
+                    source.getExternalProjectKey()
+            );
+            case LINEAR -> linearAuthenticatedData(
                     source.getOrganizationId(),
                     source.getProjectId(),
                     source.getId(),
@@ -382,11 +478,25 @@ public class IntegrationSourceService {
                 .getBytes(StandardCharsets.UTF_8);
     }
 
+    // The type line keeps a Linear ciphertext from being read as another provider's.
+    static byte[] linearAuthenticatedData(UUID organizationId, UUID projectId, UUID sourceId, String teamId) {
+        return String.join(
+                        "\n",
+                        organizationId.toString(),
+                        projectId.toString(),
+                        sourceId.toString(),
+                        SourceType.LINEAR.name(),
+                        teamId
+                )
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
     // The purpose line keeps a token ciphertext from being accepted as a webhook secret.
     static byte[] tokenAuthenticatedData(IntegrationSource source) {
         String purpose = switch (source.getSourceType()) {
             case GITHUB -> GITHUB_TOKEN_PURPOSE;
             case GITLAB -> GITLAB_TOKEN_PURPOSE;
+            case LINEAR -> LINEAR_TOKEN_PURPOSE;
         };
         return String.join(
                         "\n",
@@ -418,6 +528,7 @@ public class IntegrationSourceService {
     private record Coordinates(
             SourceType sourceType,
             String externalProjectKey,
+            String externalWorkspaceKey,
             String apiBaseUrl,
             String repositoryOwner,
             String repositoryName

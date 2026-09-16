@@ -15,6 +15,7 @@ public final class IntegrationSourceCreated {
     private final String owner;
     private final String repository;
     private final String apiBaseUrl;
+    private final String externalWorkspaceKey;
     private final WebhookAuthMode webhookAuthMode;
     private final UUID webhookId;
     private final String webhookPath;
@@ -29,6 +30,7 @@ public final class IntegrationSourceCreated {
             String owner,
             String repository,
             String apiBaseUrl,
+            String externalWorkspaceKey,
             WebhookAuthMode webhookAuthMode,
             UUID webhookId,
             String webhookPath,
@@ -42,6 +44,7 @@ public final class IntegrationSourceCreated {
         this.owner = owner;
         this.repository = repository;
         this.apiBaseUrl = apiBaseUrl;
+        this.externalWorkspaceKey = externalWorkspaceKey;
         this.webhookAuthMode = webhookAuthMode;
         this.webhookId = webhookId;
         this.webhookPath = webhookPath;
@@ -75,6 +78,10 @@ public final class IntegrationSourceCreated {
 
     public String getApiBaseUrl() {
         return apiBaseUrl;
+    }
+
+    public String getExternalWorkspaceKey() {
+        return externalWorkspaceKey;
     }
 
     public WebhookAuthMode getWebhookAuthMode() {

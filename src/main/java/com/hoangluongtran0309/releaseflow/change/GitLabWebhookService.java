@@ -90,6 +90,7 @@ class GitLabWebhookService {
                 webhook.organizationId(),
                 webhook.projectId(),
                 webhook.sourceId(),
+                webhook.sourceType(),
                 mergeRequest,
                 ChangeOrigin.WEBHOOK,
                 deliveryId

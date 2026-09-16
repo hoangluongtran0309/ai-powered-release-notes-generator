@@ -8,10 +8,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * A merged pull or merge request, normalized to what a change records. GitHub's pull
- * requests and GitLab's merge requests both arrive here.
+ * A change as the pipeline records it: a merged pull or merge request, or a completed
+ * issue. {@code externalId} is how the source names it, and is what makes the change
+ * idempotent; {@code number} is what a person sees. A source without a merge commit or a
+ * target branch leaves those null.
  */
 record MergedPullRequest(
+        String externalId,
         int number,
         String title,
         String description,
@@ -30,8 +33,10 @@ record MergedPullRequest(
     }
 
     static MergedPullRequest from(JsonNode pullRequest) {
+        int number = FIELDS.positiveInt(pullRequest.path("number"), "pull_request.number");
         return new MergedPullRequest(
-                FIELDS.positiveInt(pullRequest.path("number"), "pull_request.number"),
+                Integer.toString(number),
+                number,
                 FIELDS.requiredText(pullRequest.path("title"), "pull_request.title", Integer.MAX_VALUE),
                 FIELDS.optionalText(pullRequest.path("body")),
                 FIELDS.requiredText(

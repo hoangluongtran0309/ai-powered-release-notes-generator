@@ -23,6 +23,7 @@ public class IntegrationSourceRequestValidator
         return switch (request.getType()) {
             case GITHUB -> gitHub(request, context);
             case GITLAB -> gitLab(request, context);
+            case LINEAR -> linear(request, context);
         };
     }
 
@@ -53,6 +54,31 @@ public class IntegrationSourceRequestValidator
             valid = reject(context, "webhookAuthMode", "Choose how GitLab will prove its deliveries.");
         }
         return valid;
+    }
+
+    private static boolean linear(IntegrationSourceRequest request, ConstraintValidatorContext context) {
+        boolean valid = required(request.getTeamId(), 200, "teamId", "Linear team ID", context);
+        // Linear generates the signing secret itself, so it can only be pasted in.
+        valid &= required(request.getWebhookSecret(), 255, "webhookSecret", "Webhook signing secret", context);
+        // The token is what confirms the team and tells ReleaseFlow its workspace.
+        valid &= required(request.getApiToken(), 255, "apiToken", "API token", context);
+        return valid;
+    }
+
+    private static boolean required(
+            String value,
+            int maxLength,
+            String property,
+            String label,
+            ConstraintValidatorContext context
+    ) {
+        if (value == null || value.isBlank()) {
+            return reject(context, property, label + " is required.");
+        }
+        if (value.length() > maxLength) {
+            return reject(context, property, label + " must not exceed " + maxLength + " characters.");
+        }
+        return true;
     }
 
     private static boolean segment(

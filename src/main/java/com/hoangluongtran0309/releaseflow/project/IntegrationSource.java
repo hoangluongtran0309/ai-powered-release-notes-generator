@@ -13,8 +13,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Where a Project's changes come from: a GitHub repository or a GitLab project, with its
- * webhook secret and an optional access token. A Project may have several sources.
+ * Where a Project's changes come from: a GitHub repository, a GitLab project, or a Linear
+ * team, with its webhook secret and an access token. A Project may have several sources.
  */
 @Entity
 @Table(name = "integration_sources")
@@ -46,6 +46,10 @@ class IntegrationSource {
     // Only a source whose instance the Organization chose has one, so far GitLab.
     @Column(name = "api_base_url", length = 255, updatable = false)
     private String apiBaseUrl;
+
+    // Only a source whose projects live inside a workspace has one, so far Linear.
+    @Column(name = "external_workspace_key", length = 100, updatable = false)
+    private String externalWorkspaceKey;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "webhook_auth_mode", nullable = false, length = 30, updatable = false)
@@ -141,6 +145,33 @@ class IntegrationSource {
         return source;
     }
 
+    static IntegrationSource linear(
+            UUID id,
+            UUID organizationId,
+            UUID projectId,
+            String teamId,
+            String workspaceId,
+            UUID webhookId,
+            byte[] secretNonce,
+            byte[] secretCiphertext,
+            Instant createdAt
+    ) {
+        IntegrationSource source = new IntegrationSource(
+                id,
+                organizationId,
+                projectId,
+                SourceType.LINEAR,
+                teamId,
+                WebhookAuthMode.LINEAR_HMAC,
+                webhookId,
+                secretNonce,
+                secretCiphertext,
+                createdAt
+        );
+        source.externalWorkspaceKey = workspaceId;
+        return source;
+    }
+
     static IntegrationSource gitLab(
             UUID id,
             UUID organizationId,
@@ -199,6 +230,10 @@ class IntegrationSource {
 
     String getApiBaseUrl() {
         return apiBaseUrl;
+    }
+
+    String getExternalWorkspaceKey() {
+        return externalWorkspaceKey;
     }
 
     WebhookAuthMode getWebhookAuthMode() {

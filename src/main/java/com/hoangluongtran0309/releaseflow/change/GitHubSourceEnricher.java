@@ -6,12 +6,13 @@ import com.hoangluongtran0309.releaseflow.source.SourceCredentials;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import org.springframework.stereotype.Component;
 
+/** GitHub can list a pull request's files; it never restates the pull request itself. */
 @Component
-class GitHubChangedFileCollector implements ChangedFileCollector {
+class GitHubSourceEnricher implements SourceEnricher {
 
     private final GitHubApiClient gitHubApiClient;
 
-    GitHubChangedFileCollector(GitHubApiClient gitHubApiClient) {
+    GitHubSourceEnricher(GitHubApiClient gitHubApiClient) {
         this.gitHubApiClient = gitHubApiClient;
     }
 
@@ -21,12 +22,13 @@ class GitHubChangedFileCollector implements ChangedFileCollector {
     }
 
     @Override
-    public ChangedFiles collect(SourceCredentials credentials, String token, int pullRequestNumber) {
-        return gitHubApiClient.pullRequestFiles(
+    public Enrichment enrich(SourceCredentials credentials, String token, MergedPullRequest change) {
+        ChangedFiles files = gitHubApiClient.pullRequestFiles(
                 credentials.repositoryOwner(),
                 credentials.repositoryName(),
-                pullRequestNumber,
+                change.number(),
                 token
         );
+        return Enrichment.of(files, change);
     }
 }

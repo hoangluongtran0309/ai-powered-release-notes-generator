@@ -25,6 +25,10 @@ public record ReviewTrigger(ReviewTriggerType type, String detail) {
         return new ReviewTrigger(ReviewTriggerType.CHANGED_FILES_UNAVAILABLE, null);
     }
 
+    static ReviewTrigger sensitiveKeyword(String keyword) {
+        return new ReviewTrigger(ReviewTriggerType.SENSITIVE_KEYWORD, keyword);
+    }
+
     static ReviewTrigger classifierFallback() {
         return new ReviewTrigger(ReviewTriggerType.CLASSIFIER_FALLBACK, null);
     }
@@ -46,6 +50,7 @@ public record ReviewTrigger(ReviewTriggerType type, String detail) {
         return switch (type) {
             case SENSITIVE_PATH -> "Sensitive file " + detail;
             case CHANGED_FILES_UNAVAILABLE -> "Changed files unavailable";
+            case SENSITIVE_KEYWORD -> "Sensitive word " + detail;
             case CLASSIFIER_FALLBACK -> "AI classification failed";
             case CATEGORY_SUGGESTION_PENDING -> "AI proposed a new category " + detail;
             case CONTEXT_INSUFFICIENT -> detail == null ? "Not enough context" : "Not enough context: " + detail;

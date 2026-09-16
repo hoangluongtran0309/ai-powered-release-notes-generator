@@ -234,6 +234,7 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
 
     private UUID seedChange(Owner owner, UUID projectId, int number, String title, List<String> labels) {
         MergedPullRequest pullRequest = new MergedPullRequest(
+                Integer.toString(number),
                 number,
                 title,
                 "Description of #" + number,

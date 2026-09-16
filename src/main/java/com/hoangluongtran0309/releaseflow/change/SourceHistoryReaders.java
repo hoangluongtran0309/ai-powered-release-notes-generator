@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** The history reader of each source type. Every type has exactly one. */
+/** The history reader of each source type that has a history to read. */
 @Component
 class SourceHistoryReaders {
 
@@ -18,7 +18,8 @@ class SourceHistoryReaders {
         this.byType = readers.stream()
                 .collect(Collectors.toUnmodifiableMap(SourceHistoryReader::sourceType, Function.identity()));
         for (SourceType sourceType : SourceType.values()) {
-            if (!byType.containsKey(sourceType)) {
+            // A source type without a history to read needs no reader.
+            if (sourceType.supportsHistoryImport() && !byType.containsKey(sourceType)) {
                 throw new IllegalStateException("No history reader for source type " + sourceType + ".");
             }
         }

@@ -52,7 +52,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         insertChange(organization, project, 1, "First", VALID_SHA);
         insertChange(organization, project, 1, "Second", VALID_SHA);
         insertChange(organization, project, 1, "Third", VALID_SHA);
-        String identify = "UPDATE changes SET source_id = ?, external_id = '1' WHERE title = ?";
+        String identify = "UPDATE changes SET source_id = ?, source_type = 'GITHUB', external_id = '1' WHERE title = ?";
 
         jdbcTemplate.update(identify, web, "First");
         assertThatThrownBy(() -> jdbcTemplate.update(identify, web, "Second"))
@@ -64,8 +64,13 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         assertThatThrownBy(() -> jdbcTemplate.update(identify, elsewhere, "Third"))
                 .as("a source of another Project")
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET source_id = ? WHERE title = 'Third'", api))
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET source_id = ?, source_type = 'GITHUB' WHERE title = 'Third'", api))
                 .as("a source needs the change's ID in it")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET source_type = 'GITLAB' WHERE title = 'First'"))
+                .as("a change cannot disagree with its source about the type")
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET origin = 'IMPORT' WHERE title = 'Third'"))
                 .as("an imported change has no delivery")
@@ -76,6 +81,61 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         assertThatCode(() -> jdbcTemplate.update("UPDATE changes SET delivery_id = NULL WHERE title = 'First'"))
                 .as("GitLab does not always identify a delivery, so a webhook change may have none")
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void onlyACodeHostsChangeHasAMergeCommitAndABranch() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        UUID github = insertSource(organization, project, "web");
+        insertChange(organization, project, 1, "Pull request", VALID_SHA);
+        jdbcTemplate.update(
+                "UPDATE changes SET source_id = ?, source_type = 'GITHUB', external_id = '1' WHERE title = ?",
+                github, "Pull request");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET merge_commit_sha = NULL WHERE title = 'Pull request'"))
+                .as("a GitHub change keeps its merge commit")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET target_branch = NULL WHERE title = 'Pull request'"))
+                .as("a GitHub change keeps its branch")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET merge_commit_sha = 'not-a-sha' WHERE title = 'Pull request'"))
+                .as("and it is still a commit SHA")
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        UUID linear = insertLinearSource(organization, project);
+        insertChange(organization, project, 2, "Issue", VALID_SHA);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET source_id = ?, source_type = 'LINEAR', external_id = 'issue-1' WHERE title = ?",
+                linear, "Issue"))
+                .as("an issue may not carry a merge commit")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(
+                """
+                        UPDATE changes SET source_id = ?, source_type = 'LINEAR', external_id = 'issue-1',
+                            merge_commit_sha = NULL, target_branch = NULL, author_login = NULL
+                        WHERE title = ?
+                        """,
+                linear, "Issue"))
+                .doesNotThrowAnyException();
+    }
+
+    private UUID insertLinearSource(UUID organizationId, UUID projectId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO integration_sources
+                            (id, organization_id, project_id, source_type, external_project_key,
+                             external_workspace_key, webhook_auth_mode, webhook_id, secret_nonce, secret_ciphertext,
+                             created_at)
+                        VALUES (?, ?, ?, 'LINEAR', 'team-1', 'workspace-1', 'LINEAR_HMAC', ?, ?, ?, now())
+                        """,
+                id, organizationId, projectId, UUID.randomUUID(), new byte[12], new byte[17]
+        );
+        return id;
     }
 
     private UUID insertSource(UUID organizationId, UUID projectId, String repository) {

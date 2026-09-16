@@ -54,6 +54,7 @@ class SourceImportService {
     SourceSyncView startImport(ReleaseFlowPrincipal administrator, UUID projectId, UUID sourceId) {
         UUID organizationId = administrator.organizationId();
         IntegrationSourceView source = sourceService.get(organizationId, projectId, sourceId);
+        requireImportable(source);
         if (!source.accessTokenConfigured()) {
             throw new SourceTokenMissingException();
         }
@@ -91,6 +92,7 @@ class SourceImportService {
     SourceSyncView resume(ReleaseFlowPrincipal administrator, UUID projectId, UUID sourceId) {
         UUID organizationId = administrator.organizationId();
         IntegrationSourceView source = sourceService.get(organizationId, projectId, sourceId);
+        requireImportable(source);
         if (!source.accessTokenConfigured()) {
             throw new SourceTokenMissingException();
         }
@@ -113,11 +115,18 @@ class SourceImportService {
         return sources.stream().map(source -> view(source, latest.get(source.id()))).toList();
     }
 
+    private static void requireImportable(IntegrationSourceView source) {
+        if (!source.type().supportsHistoryImport()) {
+            throw new SourceImportNotSupportedException(source.type());
+        }
+    }
+
     static SourceSyncView view(IntegrationSourceView source, SourceSyncJob job) {
         return new SourceSyncView(
                 source.id(),
                 source.externalProjectKey(),
                 source.deliveryMechanism(),
+                source.type().supportsHistoryImport(),
                 source.accessTokenConfigured(),
                 job == null ? null : job.getStatus().name(),
                 job == null ? null : job.getWindowStart(),

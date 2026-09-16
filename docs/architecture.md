@@ -5,8 +5,8 @@
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
 `account`, `project`, `change`, `category`, `audience`, `release`,
-`translation`, the provider-neutral `source` vocabulary, the `github` and
-`gitlab` API clients that `project` and `change` share, and shared
+`translation`, the provider-neutral `source` vocabulary, the `github`, `gitlab`,
+and `linear` API clients that `project` and `change` share, and shared
 `configuration`:
 
 ```text
@@ -32,6 +32,7 @@ GET  /api/projects/{id}/imports -> SourceImportService (every member)
 POST /[api/]projects/{id}/sources/{sourceId}/imports[/resume] -> SourceImportService (administrator)
 POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
 POST /webhooks/gitlab/{webhookId} -> GitLabWebhookService (proven, sessionless)
+POST /webhooks/linear/{webhookId} -> LinearWebhookService (proven, sessionless)
 GET  /changes                 -> ChangeInboxService (Change Inbox UI)
 GET  /api/projects/{id}/changes -> ChangeInboxService
 POST /projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
@@ -145,11 +146,13 @@ integration_sources (github_integrations before V18)
   id (UUID PK)
   organization_id
   project_id (composite FK with organization_id -> projects; several per Project)
-  source_type (GITHUB | GITLAB) + external_project_key (owner/repository or
-    group/project, unique per Organization and source type)
+  source_type (GITHUB | GITLAB | LINEAR) + external_project_key (owner/repository,
+    group/project, or a Linear team, unique per Organization and source type)
   repository_owner + repository_name (GitHub only)
   api_base_url (GitLab only, an allowlisted instance)
-  webhook_auth_mode (GITHUB_HMAC | GITLAB_SIGNING_TOKEN | GITLAB_SECRET_TOKEN)
+  external_workspace_key (Linear only, the workspace the team belongs to)
+  webhook_auth_mode (GITHUB_HMAC | GITLAB_SIGNING_TOKEN | GITLAB_SECRET_TOKEN
+    | LINEAR_HMAC), which must match the source type
   webhook_id (globally unique)
   secret_nonce + secret_ciphertext
   connection_status, last_sync_at, last_error_code
@@ -160,9 +163,11 @@ changes
   id (UUID PK)
   organization_id
   project_id (composite FK with organization_id -> projects)
-  pull_request_number (unique per Project)
-  title, description, author_login, labels (text[])
-  target_branch, merge_commit_sha, merged_at, url
+  source_type (matches the source through a composite foreign key)
+  pull_request_number (the provider's own number: a pull request, a merge
+    request, or a Linear issue)
+  title, description, author_login (null when the source names no creator), labels (text[])
+  target_branch + merge_commit_sha (a code host's change only), merged_at, url
   delivery_id (the delivery that recorded the change, when the provider named one)
   received_at
   category (code), category_display_name, category_group (snapshot of the catalog category)
@@ -374,6 +379,35 @@ nothing otherwise. `changes_import_has_no_delivery` therefore only requires that
 an imported change has no delivery ID, while `GitHubWebhookService` still
 demands `X-GitHub-Delivery`.
 
+## Linear webhook intake
+
+`POST /webhooks/linear/{webhookId}` is the third path on the same filter chain.
+`LinearWebhookVerifier` resolves the source by the untrusted webhook ID, requires
+it to be a Linear source, decrypts its secret, and then requires all four of: a
+`Linear-Delivery` header; a `createdAt` within
+`releaseflow.linear.webhook-clock-skew` (60 seconds) of the clock, read as
+ISO-8601 or as epoch seconds, or as milliseconds when the number exceeds 1e10; an
+`organizationId` equal to the workspace recorded when the team was connected; and
+a hex HMAC-SHA256 of the raw bytes equal to `Linear-Signature`, compared in
+constant time. Unlike the other two verifiers this one parses the body, because
+Linear puts the timestamp and the workspace inside it rather than in headers; an
+unreadable body is one more way to fail, and every failure answers the same
+`401 webhook_signature_invalid`.
+
+`LinearWebhookService` then decides whether the delivery is a change at all.
+`CompletedIssue.isCompletion` requires `type` `Issue`, `action` `update`, an
+`updatedFrom` carrying `stateId`, `stateType`, or `state`, a new state type of
+`completed`, and an old one that is not — a real transition into done, not an
+edit to something already done. Anything else is acknowledged and ignored. The
+issue's team, `data.team.id` or `data.teamId`, must be the connected team, or the
+delivery is `422 webhook_repository_mismatch`.
+
+`CompletedIssue.fromWebhook` normalizes the issue into the same
+`MergedPullRequest`: `data.number` is the number a person sees, `data.id` is what
+the source names it by and what makes it idempotent, and the merge commit and
+target branch are null. Linear identifies no delivery ReleaseFlow could record as
+a GUID, so a Linear change has no delivery ID.
+
 ## Change processing
 
 `ChangeProcessingWorker` runs every second on the scheduler and drains due
@@ -389,14 +423,17 @@ happen between them:
    its attempt counted, and its claim time recorded, so several workers never
    take the same job.
 3. Without a transaction, `SourceAccess` supplies the coordinates and token of
-   the change's source, and the `ChangedFileCollector` of its type lists the
-   files, 100 per page: GitHub's pull request files for at most five pages, or
-   GitLab's merge request diffs for at most ten. A full last page, a refused or
-   missing token, or an invalid response is final, and so is a diff GitLab
-   reports as collapsed, too large, or truncated, which makes the whole list
-   unavailable rather than short. Timeouts, network errors, rate limits, and 5xx
-   responses are retried after 2 and 4 seconds, up to three attempts.
-4. The rules classify the change with the result. Without an AI provider, the
+   the change's source, and the `SourceEnricher` of its type asks the provider
+   for everything it can add. GitHub lists a pull request's files, 100 per page
+   for at most five pages; GitLab lists a merge request's diffs for at most ten;
+   Linear lists nothing, because an issue has no files, and instead reads the
+   issue back over GraphQL so the change carries its current wording. A full last
+   page, a refused or missing token, or an invalid response is final, and so is a
+   diff GitLab reports as collapsed, too large, or truncated, which makes the
+   whole list unavailable rather than short. Timeouts, network errors, rate
+   limits, an issue Linear will not confirm, and 5xx responses are retried after
+   2 and 4 seconds, up to three attempts.
+4. The rules classify the change — as the provider restated it — with the result. Without an AI provider, the
    change and job are completed together. With one, the files are recorded on
    the change and the job becomes `CLASSIFYING`; then, with no transaction
    open, the AI is asked once in the Organization's output language; finally
@@ -432,8 +469,10 @@ and ADR-0017 gives each provider its own reader.
   `409 source_sync_in_progress`. Resuming a `PARTIAL` or `FAILED` job puts it
   back to `PENDING` with its cursor, a zero imported count, and zero attempts.
 - **Readers.** A `SourceHistoryReader` per source type turns one page into
-  normalized items, and `SourceHistoryReaders` fails at startup if a type has
-  none. `GitHubHistoryReader` asks
+  normalized items, and `SourceHistoryReaders` fails at startup if a type that
+  has a history lacks one. `SourceType.supportsHistoryImport()` says which types
+  those are; Linear is not one, so `SourceImportService` answers
+  `409 source_import_not_supported` and the Change Inbox does not list it. `GitHubHistoryReader` asks
   `GET /repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=N`,
   newest update first, so an item updated before the window means there is
   nothing older left and it ends the scan. `GitLabHistoryReader` asks
@@ -470,9 +509,9 @@ during the run moves to the end of the list rather than past the cursor.
 
 ## Deterministic classification
 
-`ChangeClassifier` runs in the worker after the changed files are known. It
-uses the pull request title, labels, description, and file list, and never
-performs network I/O itself.
+`ChangeClassifier` runs in the worker once the provider has been asked. It uses
+the change's title, labels, description, and file list, and never performs
+network I/O itself.
 
 | Signal | Rule | Effect |
 | --- | --- | --- |
@@ -484,6 +523,13 @@ performs network I/O itself.
 | Files | Every changed file is in `docs/` or ends in `.md`, `.adoc`, or `.rst` | Documentation, before the title type |
 | Sensitive path | A changed or previous path matches `releaseflow.classification.sensitive-paths` or one of the Project's additions | `SENSITIVE_PATH` review trigger |
 | No file list | The files could not be listed | `CHANGED_FILES_UNAVAILABLE` review trigger |
+| Sensitive word | The source has no files at all, and the title or description contains `breaking change`, `migration`, `security`, `auth`, `credential`, `password`, or `encryption` | One `SENSITIVE_KEYWORD` review trigger per match |
+
+A source that cannot report files at all is not a source whose files failed to
+arrive. `ChangedFileStatus.NOT_SUPPORTED` says so, and the keyword scan stands in
+for the path rules: it reads only the title and description, because that is all
+such a source gives, which is exactly why it is never used for a source that can
+do better. A change from such a source needs review only when a word matches.
 
 Each category rule names a group and a preferred code (the former fixed value,
 such as `FIX`). The Organization's active catalog, passed in by the caller,

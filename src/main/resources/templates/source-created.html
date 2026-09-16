@@ -6,17 +6,34 @@
 </head>
 <body>
 <p layout:fragment="page-title">Projects</p>
-<div layout:fragment="content" th:with="gitLab=${source.type.name() == 'GITLAB'}">
+<div layout:fragment="content"
+     th:with="gitLab=${source.type.name() == 'GITLAB'}, linear=${source.type.name() == 'LINEAR'}">
     <header class="page-header">
         <div>
-            <p class="page-eyebrow" th:text="${gitLab} ? 'GitLab connected' : 'GitHub connected'">GitHub connected</p>
-            <h1 class="page-heading">Save these webhook credentials now</h1>
+            <p class="page-eyebrow" th:switch="${source.type.name()}">
+                <span th:case="'GITHUB'">GitHub connected</span>
+                <span th:case="'GITLAB'">GitLab connected</span>
+                <span th:case="'LINEAR'">Linear connected</span>
+            </p>
+            <h1 class="page-heading" th:text="${linear} ? 'The team is connected' : 'Save these webhook credentials now'">
+                Save these webhook credentials now</h1>
             <p class="page-subtitle">ReleaseFlow stores only an encrypted copy of the secret.</p>
         </div>
     </header>
 
     <article class="surface-card max-w-3xl p-6">
-        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:if="${linear}">
+            <p class="text-sm font-semibold text-emerald-900">
+                <span>Linear team</span>
+                <span th:text="${source.externalProjectKey}">team</span>
+            </p>
+            <p class="mt-1 text-xs text-emerald-800">
+                Linear made the signing secret, so ReleaseFlow has none to show you. Point Linear's webhook at the
+                address below.
+            </p>
+        </div>
+
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:unless="${linear}">
             <p class="text-sm font-semibold text-emerald-900">
                 <span>Signing secret for</span>
                 <span th:text="${source.externalProjectKey}">owner/repository</span>
@@ -31,12 +48,20 @@
 
         <dl class="mt-6 grid gap-5 text-sm">
             <div>
-                <dt class="text-slate-500" th:text="${gitLab} ? 'Project' : 'Repository'">Repository</dt>
+                <dt class="text-slate-500" th:switch="${source.type.name()}">
+                    <span th:case="'GITHUB'">Repository</span>
+                    <span th:case="'GITLAB'">Project</span>
+                    <span th:case="'LINEAR'">Team</span>
+                </dt>
                 <dd class="mt-1 font-semibold" th:text="${source.externalProjectKey}">owner/repository</dd>
             </div>
             <div th:if="${gitLab}">
                 <dt class="text-slate-500">GitLab instance</dt>
                 <dd class="mt-1 font-semibold" th:text="${source.apiBaseUrl}">https://gitlab.com</dd>
+            </div>
+            <div th:if="${linear}">
+                <dt class="text-slate-500">Workspace</dt>
+                <dd class="mt-1 font-semibold" th:text="${source.externalWorkspaceKey}">workspace</dd>
             </div>
             <div x-data="copyText()">
                 <dt class="text-slate-500">Webhook path</dt>
@@ -46,7 +71,7 @@
                     <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
                 </dd>
             </div>
-            <div x-data="copyText()">
+            <div x-data="copyText()" th:unless="${linear}">
                 <dt class="text-slate-500">Webhook secret</dt>
                 <dd class="join mt-1 w-full">
                     <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
@@ -73,7 +98,14 @@
             </span>
         </p>
 
-        <a class="btn btn-primary mt-6" th:href="@{/projects}">I have saved the secret</a>
+        <p class="mt-6 text-sm text-slate-600" th:if="${linear}">
+            In Linear, under <strong>Settings → API → Webhooks</strong>, set the URL to your ReleaseFlow address
+            followed by the path above and enable the <strong>Issues</strong> event. An issue is recorded when it
+            moves into a completed state.
+        </p>
+
+        <a class="btn btn-primary mt-6" th:href="@{/projects}"
+           th:text="${linear} ? 'Back to projects' : 'I have saved the secret'">I have saved the secret</a>
     </article>
 </div>
 </body>

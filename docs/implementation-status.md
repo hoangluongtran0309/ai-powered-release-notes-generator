@@ -164,9 +164,26 @@
   - an access token confirmed against `GET /api/v4/projects/{key}` before it is
     stored, with GitLab's own error codes.
 
+- Linear sources (ADR-0018), with Flyway `V20`:
+  - a Linear team connected with the signing secret Linear minted and an API key,
+    both write-only, confirmed with GraphQL `team(id)` before anything is stored,
+    which is also how the workspace every delivery is checked against is learned;
+  - `POST /webhooks/linear/{webhookId}`, proven by a delivery header, a stamp
+    within 60 seconds, the workspace, and a hex HMAC of the raw body;
+  - only an issue that really moves into a completed state recorded, by its UUID,
+    with the number a person sees kept for release notes;
+  - `ChangedFileStatus.NOT_SUPPORTED` and a `SENSITIVE_KEYWORD` trigger from the
+    seven-word scan of a change's own title and description, so a source without
+    files needs review only on a match;
+  - the issue read back over GraphQL, so a change carries its current wording;
+  - `changes.source_type`, tied to the source by a composite foreign key, which
+    keeps a merge commit and a target branch on a code host's change and off an
+    issue tracker's;
+  - history import refused for a type that has none, in REST and in the UI.
+
 ## In progress
 
-- Nothing. The GitLab source slice is complete and awaiting review.
+- Nothing. The Linear source slice is complete and awaiting review.
 
 ## Planned
 
@@ -176,13 +193,13 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Source providers other than GitHub and GitLab (Linear, Jira), and automatic AI
+- Source providers other than GitHub, GitLab, and Linear (Jira), and automatic AI
   retries.
-- Polling sources, commit messages, GitLab group-level webhooks, and queues or
-  retries for work other than changed-file collection and imports.
-- Validating a repository or project with its provider when it is connected,
-  keyword review triggers, disconnecting or replacing a source, and secret or
-  token rotation reminders.
+- Polling sources, commit messages, GitLab group-level webhooks, Linear projects
+  and cycles, and queues or retries for work other than enrichment and imports.
+- Validating a repository with GitHub when it is connected, disconnecting or
+  replacing a source, rotating a Linear signing secret without reconnecting, and
+  secret or token rotation reminders.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
 - Automation, distribution integrations, and a public changelog.

@@ -24,7 +24,7 @@ final class ProcessedChanges {
     }
 
     static Change processed(UUID id, UUID organizationId, UUID projectId, MergedPullRequest pullRequest) {
-        Change change = Change.received(id, organizationId, projectId, null, pullRequest, ChangeOrigin.WEBHOOK,
+        Change change = Change.received(id, organizationId, projectId, null, null, pullRequest, ChangeOrigin.WEBHOOK,
                 UUID.randomUUID(), Instant.now());
         change.completeProcessing(
                 ORDINARY_FILES,

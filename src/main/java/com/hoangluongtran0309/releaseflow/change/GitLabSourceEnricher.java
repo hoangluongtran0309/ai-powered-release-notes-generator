@@ -6,12 +6,13 @@ import com.hoangluongtran0309.releaseflow.source.SourceCredentials;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import org.springframework.stereotype.Component;
 
+/** GitLab can list a merge request's diffs; it never restates the merge request itself. */
 @Component
-class GitLabChangedFileCollector implements ChangedFileCollector {
+class GitLabSourceEnricher implements SourceEnricher {
 
     private final GitLabApiClient gitLabApiClient;
 
-    GitLabChangedFileCollector(GitLabApiClient gitLabApiClient) {
+    GitLabSourceEnricher(GitLabApiClient gitLabApiClient) {
         this.gitLabApiClient = gitLabApiClient;
     }
 
@@ -21,12 +22,13 @@ class GitLabChangedFileCollector implements ChangedFileCollector {
     }
 
     @Override
-    public ChangedFiles collect(SourceCredentials credentials, String token, int mergeRequestIid) {
-        return gitLabApiClient.mergeRequestFiles(
+    public Enrichment enrich(SourceCredentials credentials, String token, MergedPullRequest change) {
+        ChangedFiles files = gitLabApiClient.mergeRequestFiles(
                 credentials.apiBaseUrl(),
                 credentials.externalProjectKey(),
-                mergeRequestIid,
+                change.number(),
                 token
         );
+        return Enrichment.of(files, change);
     }
 }

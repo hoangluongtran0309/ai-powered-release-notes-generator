@@ -76,7 +76,7 @@ class ChangeAiDisabledIntegrationTest extends PostgreSqlIntegrationTest {
                 .andReturn();
         UUID projectId = UUID.fromString(JsonPath.read(project.getResponse().getContentAsString(), "$.id"));
         MergedPullRequest pullRequest = new MergedPullRequest(
-                1, "Tidy the exporter", null, "mai-dev", List.of(), "main",
+                "1", 1, "Tidy the exporter", null, "mai-dev", List.of(), "main",
                 "0123456789abcdef0123456789abcdef01234567", Instant.parse("2026-09-01T10:00:00Z"),
                 "https://github.com/acme/releaseflow/pull/1"
         );

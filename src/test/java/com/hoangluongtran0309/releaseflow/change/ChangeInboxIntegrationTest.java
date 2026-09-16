@@ -218,6 +218,7 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
             String mergedAt
     ) {
         MergedPullRequest pullRequest = new MergedPullRequest(
+                Integer.toString(number),
                 number,
                 title,
                 "Description of #" + number,

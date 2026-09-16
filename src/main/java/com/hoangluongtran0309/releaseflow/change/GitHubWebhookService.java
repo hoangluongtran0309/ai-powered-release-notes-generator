@@ -107,6 +107,7 @@ class GitHubWebhookService {
                 webhook.organizationId(),
                 webhook.projectId(),
                 webhook.sourceId(),
+                webhook.sourceType(),
                 pullRequest,
                 ChangeOrigin.WEBHOOK,
                 deliveryId

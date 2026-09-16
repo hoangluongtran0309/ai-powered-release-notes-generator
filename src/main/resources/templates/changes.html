@@ -57,14 +57,17 @@
             <button type="submit" class="btn btn-primary">Apply</button>
         </form>
 
-        <section class="surface-card mt-6 p-5" id="source-imports" th:unless="${#lists.isEmpty(imports)}" aria-label="History import">
+        <section class="surface-card mt-6 p-5" id="source-imports" aria-label="History import"
+                 th:unless="${#lists.isEmpty(imports.?[supportsImport])}">
             <h2 class="section-heading">History import</h2>
             <p class="section-copy">
-                Merged changes reach ReleaseFlow by webhook from the moment a source is connected. An import adds the
-                ones merged in the last 90 days, up to a limit per run, through the same processing.
+                Changes reach ReleaseFlow by webhook from the moment a source is connected. For a source that keeps a
+                history ReleaseFlow can read, an import adds the ones merged in the last 90 days, up to a limit per
+                run, through the same processing.
             </p>
             <ul class="mt-4 grid gap-3">
-                <li class="subtle-panel flex flex-wrap items-center gap-3 p-3" th:each="sync : ${imports}"
+                <li class="subtle-panel flex flex-wrap items-center gap-3 p-3"
+                    th:each="sync : ${imports}" th:if="${sync.supportsImport}"
                     th:id="|import-${sync.sourceId}|">
                     <span class="font-semibold" th:text="${sync.externalProjectKey}">owner/repository</span>
                     <span class="badge badge-sm badge-ghost" th:if="${sync.status == null}">Never imported</span>
@@ -130,10 +133,14 @@
                             </a>
                         </h2>
                         <p class="mt-1 text-xs text-slate-500">
-                            <span th:text="${change.authorLogin}">octocat</span>
-                            <span aria-hidden="true">·</span>
-                            merged into <code th:text="${change.targetBranch}">main</code>
-                            <span aria-hidden="true">·</span>
+                            <th:block th:if="${change.authorLogin != null}">
+                                <span th:text="${change.authorLogin}">octocat</span>
+                                <span aria-hidden="true">·</span>
+                            </th:block>
+                            <th:block th:if="${change.targetBranch != null}">
+                                merged into <code th:text="${change.targetBranch}">main</code>
+                                <span aria-hidden="true">·</span>
+                            </th:block>
                             <time th:datetime="${change.mergedAt}"
                                   th:text="|${#temporals.format(change.mergedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">10 Sep 2026, 09:14 UTC</time>
                         </p>
