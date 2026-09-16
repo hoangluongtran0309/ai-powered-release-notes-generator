@@ -30,6 +30,7 @@ import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
 import com.hoangluongtran0309.releaseflow.change.DuplicateCandidateDecidedException;
 import com.hoangluongtran0309.releaseflow.change.DuplicateCandidateNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
+import com.hoangluongtran0309.releaseflow.change.GitLabWebhookController;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.change.InvalidSensitivePathsException;
@@ -39,14 +40,17 @@ import com.hoangluongtran0309.releaseflow.change.SourceImportApiController;
 import com.hoangluongtran0309.releaseflow.change.SourceImportNotResumableException;
 import com.hoangluongtran0309.releaseflow.change.SourceSyncInProgressException;
 import com.hoangluongtran0309.releaseflow.change.SourceTokenMissingException;
+import com.hoangluongtran0309.releaseflow.change.WebhookPayloadTooLargeException;
 import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchException;
 import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
-import com.hoangluongtran0309.releaseflow.project.SourceNotFoundException;
-import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAlreadyConnectedException;
-import com.hoangluongtran0309.releaseflow.project.GitHubTokenRejectedException;
-import com.hoangluongtran0309.releaseflow.project.GitHubUnavailableException;
+import com.hoangluongtran0309.releaseflow.gitlab.GitLabHostNotAllowedException;
+import com.hoangluongtran0309.releaseflow.gitlab.InvalidGitLabBaseUrlException;
 import com.hoangluongtran0309.releaseflow.project.ProjectApiController;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
+import com.hoangluongtran0309.releaseflow.project.SourceAlreadyConnectedException;
+import com.hoangluongtran0309.releaseflow.project.SourceNotFoundException;
+import com.hoangluongtran0309.releaseflow.project.SourceTokenRejectedException;
+import com.hoangluongtran0309.releaseflow.project.SourceUnavailableException;
 import com.hoangluongtran0309.releaseflow.release.ChangeNotReleasableException;
 import com.hoangluongtran0309.releaseflow.release.ClassificationChangedException;
 import com.hoangluongtran0309.releaseflow.release.InvalidReleaseScheduleException;
@@ -83,6 +87,7 @@ import java.util.Map;
         PublicInvitationApiController.class,
         ProjectApiController.class,
         GitHubWebhookController.class,
+        GitLabWebhookController.class,
         ChangeApiController.class,
         ReleaseApiController.class,
         AudienceApiController.class,
@@ -191,15 +196,13 @@ public class ApiExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(GitHubRepositoryAlreadyConnectedException.class)
-    ResponseEntity<ProblemDetail> repositoryAlreadyConnected(
-            GitHubRepositoryAlreadyConnectedException exception
-    ) {
+    @ExceptionHandler(SourceAlreadyConnectedException.class)
+    ResponseEntity<ProblemDetail> sourceAlreadyConnected(SourceAlreadyConnectedException exception) {
         return response(problem(
                 HttpStatus.CONFLICT,
-                "GitHub repository already connected",
+                "Source already connected",
                 exception.getMessage(),
-                "github_repository_already_connected"
+                exception.code()
         ));
     }
 
@@ -213,23 +216,43 @@ public class ApiExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(GitHubTokenRejectedException.class)
-    ResponseEntity<ProblemDetail> gitHubTokenRejected(GitHubTokenRejectedException exception) {
+    @ExceptionHandler(SourceTokenRejectedException.class)
+    ResponseEntity<ProblemDetail> sourceTokenRejected(SourceTokenRejectedException exception) {
         return response(problem(
                 HttpStatus.BAD_REQUEST,
-                "GitHub token rejected",
+                "Access token rejected",
                 exception.getMessage(),
-                "github_token_rejected"
+                exception.code()
         ));
     }
 
-    @ExceptionHandler(GitHubUnavailableException.class)
-    ResponseEntity<ProblemDetail> gitHubUnavailable(GitHubUnavailableException exception) {
+    @ExceptionHandler(SourceUnavailableException.class)
+    ResponseEntity<ProblemDetail> sourceUnavailable(SourceUnavailableException exception) {
         return response(problem(
                 HttpStatus.SERVICE_UNAVAILABLE,
-                "GitHub unavailable",
+                "Source unavailable",
                 exception.getMessage(),
-                "github_unavailable"
+                exception.code()
+        ));
+    }
+
+    @ExceptionHandler(InvalidGitLabBaseUrlException.class)
+    ResponseEntity<ProblemDetail> invalidGitLabBaseUrl(InvalidGitLabBaseUrlException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid GitLab instance URL",
+                exception.getMessage(),
+                "gitlab_base_url_invalid"
+        ));
+    }
+
+    @ExceptionHandler(GitLabHostNotAllowedException.class)
+    ResponseEntity<ProblemDetail> gitLabHostNotAllowed(GitLabHostNotAllowedException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "GitLab host not allowed",
+                exception.getMessage(),
+                "gitlab_host_not_allowed"
         ));
     }
 
@@ -410,6 +433,16 @@ public class ApiExceptionHandler {
                 "Webhook repository mismatch",
                 exception.getMessage(),
                 "webhook_repository_mismatch"
+        ));
+    }
+
+    @ExceptionHandler(WebhookPayloadTooLargeException.class)
+    ResponseEntity<ProblemDetail> webhookPayloadTooLarge(WebhookPayloadTooLargeException exception) {
+        return response(problem(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "Webhook payload too large",
+                exception.getMessage(),
+                "webhook_payload_too_large"
         ));
     }
 

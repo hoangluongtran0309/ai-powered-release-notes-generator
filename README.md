@@ -16,17 +16,18 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V18`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V19`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
-- one create-only GitHub repository integration per Project;
+- create-only GitHub repository and GitLab project sources, several per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
 - AES-256-GCM encryption at rest with one-time secret reveal;
-- a signed GitHub webhook endpoint that records each merged pull request once
-  as a normalized change, and shows the last verified delivery per repository;
-- an optional, write-only GitHub access token per repository, verified with
-  GitHub and stored encrypted;
-- a durable processing queue that lists each merged pull request's changed
-  files outside the webhook request, with bounded retries;
+- signed GitHub and GitLab webhook endpoints that record each merged pull or
+  merge request once as a normalized change, and show the last verified delivery
+  per source;
+- an optional, write-only access token per source, confirmed with the provider
+  and stored encrypted;
+- a durable processing queue that lists each change's touched files outside the
+  webhook request, with bounded retries;
 - deterministic, explainable classification of every recorded change, with
   breaking, unrecognized, and sensitive-file changes always marked for human
   review, and sensitive-path patterns that administrators can add per Project;
@@ -105,21 +106,25 @@ REST clients use the same session and CSRF policy as the server-rendered UI:
 3. Sign in through `POST /login` using `email` and `password` form fields.
 4. Read the authenticated identity from `GET /api/session`.
 5. Create and list tenant-scoped Projects through `POST|GET /api/projects`.
-6. Connect a repository with `POST /api/projects/{projectId}/sources` and
-   `{"type": "GITHUB", "owner", "repository"}`. Save the returned
-   `webhookSecret` immediately; it is never returned again. A Project may have
-   several repositories; `GET /api/projects/{projectId}/sources` lists them.
-7. Optionally set a repository's access token with
+6. Connect a source with `POST /api/projects/{projectId}/sources`, either
+   `{"type": "GITHUB", "owner", "repository"}` or
+   `{"type": "GITLAB", "apiBaseUrl", "projectPath", "webhookAuthMode"}`. Save
+   the returned `webhookSecret` immediately; it is never returned again. A
+   Project may have several sources; `GET /api/projects/{projectId}/sources`
+   lists them.
+7. Optionally set a source's access token with
    `PUT /api/projects/{projectId}/sources/{sourceId}/token` (see
-   [GitHub access token](#github-access-token)).
+   [Access tokens](#access-tokens)).
 
-Authenticated users can perform the same workflow at `/projects`. GitHub owner
-and repository names are canonicalized to lowercase. A repository can be
-connected to one Project per Organization, while different Organizations may
-connect the same repository. Connecting a repository and setting its token are
-for administrators; every member can list sources. An unknown source returns
-`404 source_not_found`, and a repository already connected returns
-`409 github_repository_already_connected`.
+Authenticated users can perform the same workflow at `/projects`. Repository
+owners, repository names, and GitLab project paths are canonicalized to
+lowercase. A repository or project can be connected to one Project per
+Organization, while different Organizations may connect the same one, and the
+same name on the two providers is two separate sources. Connecting a source and
+setting its token are for administrators; every member can list sources. An
+unknown source returns `404 source_not_found`, and one already connected returns
+`409 github_repository_already_connected` or
+`409 gitlab_project_already_connected`.
 
 `GET /api/status` remains public.
 
@@ -222,50 +227,126 @@ curl -sS -X POST "http://localhost:8080$WEBHOOK_PATH" \
   --data-binary "$BODY"
 ```
 
-## GitHub access token
+## Receive GitLab webhooks
 
-With an access token, ReleaseFlow lists the files each merged pull request
-changed, so changes that touch sensitive files are always reviewed. Without
-one, every new change needs review, because nothing can be ruled out.
+In the GitLab project, open **Settings → Webhooks → Add new webhook** and enter:
 
-Create a fine-grained personal access token limited to the repository, with
-**Pull requests: Read-only** permission (a classic token needs `repo` for a
-private repository). An administrator enters it under the repository in the
+- **URL**: the public ReleaseFlow address followed by the webhook path shown for
+  the source, for example
+  `https://releaseflow.example.com/webhooks/gitlab/<webhook-id>`;
+- **Secret token**: the secret saved when the project was connected;
+- **Trigger**: *Merge request events*.
+
+`POST /webhooks/gitlab/{webhookId}` needs no session or CSRF token, and
+ReleaseFlow proves the delivery with that source's own secret before it reads
+the payload. Which check applies is chosen when the source is connected:
+
+- **Signed headers (Standard Webhooks)**, the default: `webhook-id`,
+  `webhook-timestamp`, and `webhook-signature` must all be present, the
+  signature must be `v1,` followed by the Base64 HMAC-SHA256 of
+  `id.timestamp.body` under the secret — any one of several space-separated
+  candidates may match — and the timestamp must be within five minutes of
+  ReleaseFlow's clock.
+- **Secret token header**: `X-Gitlab-Token` must equal the secret.
+
+The Organization and Project come from the source, never from the payload:
+
+| Delivery | Response |
+| --- | --- |
+| Larger than 1 MiB | `413` `webhook_payload_too_large` |
+| Unknown webhook ID, a source of another type, missing, stale, or wrong proof | `401` `webhook_signature_invalid` |
+| `project.path_with_namespace` is not the connected project | `422` `webhook_repository_mismatch` |
+| Proven delivery with invalid JSON, or a merged merge request missing fields | `400` `webhook_payload_malformed` |
+| Merged merge request (`object_kind: merge_request` with `action: merge`) | `200` `recorded`, or `duplicate` when already recorded |
+| Any other event or action | `200` `ignored` |
+
+Each merge request is stored once per source, so redeliveries are harmless.
+GitLab identifies a delivery only in its signing mode, so a change records
+`X-Gitlab-Event-UUID` when it is a GUID and nothing otherwise.
+
+Only instances named in `RELEASEFLOW_GITLAB_ALLOWED_HOSTS` (default
+`gitlab.com`) can be connected. An entry is `host` or `host:port`, which means
+HTTPS, or a full origin such as `http://gitlab.internal:8080`; writing the
+scheme is the only way to accept an instance reached without TLS. A URL with
+credentials, a query, or a fragment is refused with
+`400 gitlab_base_url_invalid`, and any other host with
+`400 gitlab_host_not_allowed`. ReleaseFlow never follows a redirect from a
+GitLab instance.
+
+To exercise the endpoint locally without GitLab, sign the exact bytes you send:
+
+```bash
+WEBHOOK_PATH=/webhooks/gitlab/replace-with-the-webhook-id
+WEBHOOK_SECRET='replace-with-the-saved-secret'
+BODY='{"object_kind":"push"}'
+DELIVERY_ID="$(uuidgen)"
+TIMESTAMP="$(date +%s)"
+SIGNATURE="v1,$(printf '%s' "$DELIVERY_ID.$TIMESTAMP.$BODY" \
+  | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$(printf '%s' "$WEBHOOK_SECRET" \
+      | basenc --base64url -d 2>/dev/null | xxd -p -c 256)" -binary | base64)"
+curl -sS -X POST "http://localhost:8080$WEBHOOK_PATH" \
+  -H 'Content-Type: application/json' \
+  -H "webhook-id: $DELIVERY_ID" \
+  -H "webhook-timestamp: $TIMESTAMP" \
+  -H "webhook-signature: $SIGNATURE" \
+  --data-binary "$BODY"
+```
+
+## Access tokens
+
+
+With an access token, ReleaseFlow lists the files each merged pull or merge
+request touched, so changes to sensitive files are always reviewed. Without one,
+every new change needs review, because nothing can be ruled out.
+
+For GitHub, create a fine-grained personal access token limited to the
+repository, with **Pull requests: Read-only** permission (a classic token needs
+`repo` for a private repository). For GitLab, create a project access token with
+the `read_api` scope. An administrator enters it under the source in the
 Project's card on the Projects page, or calls:
 
 ```text
 PUT /api/projects/{projectId}/sources/{sourceId}/token {"token"}   (administrator; 204)
 ```
 
-ReleaseFlow first asks GitHub for the repository's pull requests with the
-token, then stores it encrypted with AES-256-GCM. The token is never returned;
-the source only reports `accessTokenConfigured` and `accessTokenUpdatedAt`.
-Sending a new token replaces the old one. Errors are `400 github_token_rejected`
-when GitHub refuses the token, `503 github_unavailable` when GitHub cannot be
-reached, `404 source_not_found`, and `403` for members.
+ReleaseFlow first asks the provider to confirm the token — GitHub for the
+repository's pull requests, GitLab for the project — then stores it encrypted
+with AES-256-GCM. The token is never returned; the source only reports
+`accessTokenConfigured` and `accessTokenUpdatedAt`. Sending a new token replaces
+the old one. Errors are `400 github_token_rejected` or `400 gitlab_token_rejected`
+when the provider refuses the token, `503 github_unavailable` or
+`503 gitlab_unavailable` when it cannot be reached, `404 source_not_found`, and
+`403` for members.
+
+GitLab's changed files come from the merge request's diffs, at most ten pages of
+a hundred. A diff GitLab reports as collapsed, too large, or truncated makes the
+whole list unavailable rather than short, so a file that was never seen is never
+declared safe.
 
 ## History import
 
-Webhooks bring in pull requests merged after a repository is connected. To add
-the ones merged before, an administrator opens the **History import** panel of
-the Change Inbox and chooses **Import last 90 days** for a repository with an
-access token, or calls the REST endpoints below. A background worker lists the
-repository's closed pull requests, most recently updated first, 100 per page,
-and records every one merged in the last 90 days through the same processing as
-a webhook delivery: its changed files are listed and, when AI is configured, it
-is classified once. A pull request already recorded, by webhook or by an
-earlier import, is skipped, so imports and webhooks never duplicate each other.
-Imported changes carry an **Imported** badge.
+Webhooks bring in the pull and merge requests merged after a source is
+connected. To add the ones merged before, an administrator opens the **History
+import** panel of the Change Inbox and chooses **Import last 90 days** for a
+source with an access token, or calls the REST endpoints below. A background
+worker reads the source's history 100 items per page — GitHub's closed pull
+requests, most recently updated first, or GitLab's merged merge requests updated
+after the window's start, least recently updated first — and records every one
+merged in the last 90 days through the same processing as a webhook delivery:
+its changed files are listed and, when AI is configured, it is classified once.
+An item already recorded, by webhook or by an earlier import, is skipped, so
+imports and webhooks never duplicate each other. Imported changes carry an
+**Imported** badge.
 
-An import stops at the first pull request updated before its window, and after
-500 new changes it stops as **Stopped at the limit** with its position saved;
-**Resume** continues from there with a fresh count, and so does resuming a
-failed import. When GitHub rate-limits the import, it waits as long as GitHub
-asks (`Retry-After` or the rate-limit reset, at most an hour); other temporary
-failures wait with growing delays. After five attempts, or at once when GitHub
-refuses the token, the import fails, and a refused token marks the repository
-as **Connection failing** until a new token is saved. Only one import of a
-repository runs at a time.
+A GitHub import stops at the first pull request updated before its window, and
+either import stops after 500 new changes as **Stopped at the limit** with its
+position saved; **Resume** continues from there with a fresh count, and so does
+resuming a failed import. When the provider rate-limits the import, it waits as
+long as the provider asks (`Retry-After` or the rate-limit reset, at most an
+hour); other temporary failures wait with growing delays. After five attempts,
+or at once when the provider refuses the token, the import fails, and a refused
+token marks the source as **Connection failing** until a new token is saved.
+Only one import of a source runs at a time.
 
 ```text
 GET  /api/projects/{projectId}/imports                              (every member)
@@ -280,8 +361,18 @@ window, `lastSyncAt`, `lastErrorCode`, and `canResumeImport`. Errors are
 `409 source_import_not_resumable`, and `404 source_not_found`. See
 [ADR-0016](docs/adr/0016-integration-sources-and-history-import.md).
 
-`RELEASEFLOW_GITHUB_API_BASE_URL` (default `https://api.github.com`) and
-`RELEASEFLOW_GITHUB_TIMEOUT` (default `PT5S`) are optional.
+See also [ADR-0017](docs/adr/0017-gitlab-sources.md) for the GitLab source.
+
+These provider settings are optional:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `RELEASEFLOW_GITHUB_API_BASE_URL` | `https://api.github.com` | Where GitHub is called |
+| `RELEASEFLOW_GITHUB_TIMEOUT` | `PT5S` | Connect and read timeout for GitHub |
+| `RELEASEFLOW_GITLAB_ALLOWED_HOSTS` | `gitlab.com` | The GitLab instances a source may name |
+| `RELEASEFLOW_GITLAB_TIMEOUT` | `PT5S` | Connect and read timeout for GitLab |
+| `RELEASEFLOW_GITLAB_WEBHOOK_CLOCK_SKEW` | `PT5M` | How stale a signed GitLab delivery may be |
+| `RELEASEFLOW_WEBHOOK_MAX_BODY_BYTES` | `1048576` | The largest delivery any provider may send |
 
 ## Change Inbox
 

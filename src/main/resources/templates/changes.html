@@ -11,7 +11,7 @@
         <div>
             <p class="page-eyebrow">Merged changes</p>
             <h1 class="page-heading">Change Inbox</h1>
-            <p class="page-subtitle">Every merged pull request, classified by fixed rules. Breaking and unrecognized changes wait for human review.</p>
+            <p class="page-subtitle">Every merged pull and merge request, classified by fixed rules. Breaking and unrecognized changes wait for human review.</p>
         </div>
     </header>
 
@@ -20,7 +20,7 @@
     <section class="empty-state" th:unless="${hasProjects}">
         <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#inbox}"></use></svg></div>
         <h2 class="mt-5 text-xl font-bold">No projects have been created yet.</h2>
-        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create a project and connect its GitHub repository to start collecting merged changes.</p>
+        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create a project and connect a GitHub repository or GitLab project to start collecting merged changes.</p>
         <a class="btn btn-primary mt-5" th:href="@{/projects}">Open projects</a>
     </section>
 
@@ -60,7 +60,7 @@
         <section class="surface-card mt-6 p-5" id="source-imports" th:unless="${#lists.isEmpty(imports)}" aria-label="History import">
             <h2 class="section-heading">History import</h2>
             <p class="section-copy">
-                Merged pull requests reach ReleaseFlow by webhook from the moment a repository is connected. An import adds the
+                Merged changes reach ReleaseFlow by webhook from the moment a source is connected. An import adds the
                 ones merged in the last 90 days, up to a limit per run, through the same processing.
             </p>
             <ul class="mt-4 grid gap-3">
@@ -114,8 +114,8 @@
                 <p class="mx-auto mt-2 max-w-lg text-slate-600">Choose a different category or status.</p>
             </th:block>
             <th:block th:unless="${filtered}">
-                <h2 class="mt-5 text-xl font-bold">No merged pull requests yet.</h2>
-                <p class="mx-auto mt-2 max-w-lg text-slate-600">Finish the GitHub webhook setup on the Projects page. Merged pull requests appear here as soon as GitHub delivers them, or import the last 90 days above.</p>
+                <h2 class="mt-5 text-xl font-bold">No merged changes yet.</h2>
+                <p class="mx-auto mt-2 max-w-lg text-slate-600">Finish the webhook setup on the Projects page. Merged pull and merge requests appear here as soon as the provider delivers them, or import the last 90 days above.</p>
             </th:block>
         </section>
 
@@ -183,7 +183,7 @@
                 </div>
 
                 <p class="mt-3 text-sm text-slate-600" th:if="${change.processing()}">
-                    Checking which files this pull request changed before classifying it.
+                    Checking which files this change touched before classifying it.
                 </p>
                 <th:block th:unless="${change.processing()}">
                     <p class="mt-3 text-sm text-slate-600">

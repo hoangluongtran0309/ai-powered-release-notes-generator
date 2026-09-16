@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public class GitHubTokenRequest {
+public class SourceTokenRequest {
 
     @NotBlank(message = "Access token is required.")
     @Size(max = 255, message = "Access token must not exceed 255 characters.")
@@ -22,6 +22,6 @@ public class GitHubTokenRequest {
     // Keeps the token out of logs and error pages that print the request object.
     @Override
     public String toString() {
-        return "GitHubTokenRequest[token=***]";
+        return "SourceTokenRequest[token=***]";
     }
 }

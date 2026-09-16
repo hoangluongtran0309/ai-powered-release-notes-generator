@@ -206,7 +206,7 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
         createProject(owner.session(), "ReleaseFlow");
         mockMvc.perform(get("/changes").session(owner.session()))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("No merged pull requests yet.")));
+                .andExpect(content().string(containsString("No merged changes yet.")));
     }
 
     private void seedChange(

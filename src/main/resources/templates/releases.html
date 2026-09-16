@@ -20,7 +20,7 @@
     <section class="empty-state" th:unless="${hasProjects}">
         <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#releases}"></use></svg></div>
         <h2 class="mt-5 text-xl font-bold">No projects have been created yet.</h2>
-        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create a project and connect its GitHub repository before preparing a release.</p>
+        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create a project and connect a source before preparing a release.</p>
         <a class="btn btn-primary mt-5" th:href="@{/projects}">Open projects</a>
     </section>
 

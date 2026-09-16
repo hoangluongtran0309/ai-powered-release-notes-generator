@@ -73,9 +73,9 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
         assertThatCode(() -> jdbcTemplate.update(
                 "UPDATE changes SET origin = 'IMPORT', delivery_id = NULL WHERE title = 'Third'"))
                 .doesNotThrowAnyException();
-        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET delivery_id = NULL WHERE title = 'First'"))
-                .as("a webhook change keeps its delivery")
-                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update("UPDATE changes SET delivery_id = NULL WHERE title = 'First'"))
+                .as("GitLab does not always identify a delivery, so a webhook change may have none")
+                .doesNotThrowAnyException();
     }
 
     private UUID insertSource(UUID organizationId, UUID projectId, String repository) {
@@ -84,8 +84,8 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 """
                         INSERT INTO integration_sources
                             (id, organization_id, project_id, source_type, external_project_key, repository_owner,
-                             repository_name, webhook_id, secret_nonce, secret_ciphertext, created_at)
-                        VALUES (?, ?, ?, 'GITHUB', ?, 'acme', ?, ?, ?, ?, now())
+                             repository_name, webhook_auth_mode, webhook_id, secret_nonce, secret_ciphertext, created_at)
+                        VALUES (?, ?, ?, 'GITHUB', ?, 'acme', ?, 'GITHUB_HMAC', ?, ?, ?, now())
                         """,
                 id, organizationId, projectId, "acme/" + repository, repository, UUID.randomUUID(), new byte[12],
                 new byte[17]

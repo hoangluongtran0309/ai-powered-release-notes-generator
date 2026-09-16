@@ -1,5 +1,10 @@
 package com.hoangluongtran0309.releaseflow.github;
 
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
+import com.hoangluongtran0309.releaseflow.source.ProviderAccess;
+import com.hoangluongtran0309.releaseflow.source.ProviderListing;
 import com.hoangluongtran0309.releaseflow.support.GitHubStub;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +42,7 @@ class GitHubApiClientTest {
     void listsFilesWithGitHubHeadersAndTheToken() {
         GITHUB.respondWithFiles("src/App.java", "README.md");
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
         assertThat(files.isCollected()).isTrue();
         assertThat(files.files()).containsExactly(
@@ -56,7 +61,7 @@ class GitHubApiClientTest {
     void mapsRenamesAndPreviousPaths() {
         GITHUB.respondWithRename("src/security/Filter.java", "src/Filter.java");
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
         assertThat(files.files()).containsExactly(
                 new ChangedFile("src/Filter.java", "src/security/Filter.java", ChangedFileKind.RENAMED)
@@ -67,7 +72,7 @@ class GitHubApiClientTest {
     void followsPagesUntilAShortPage() {
         GITHUB.respondWithFileCount(450);
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
         assertThat(files.files()).hasSize(450);
         assertThat(GITHUB.fileRequests()).extracting(GitHubStub.RecordedRequest::query).containsExactly(
@@ -83,7 +88,7 @@ class GitHubApiClientTest {
     void aFullPageIsFollowedByTheNextOne() {
         GITHUB.respondWithFileCount(100);
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
         assertThat(files.files()).hasSize(100);
         assertThat(GITHUB.fileRequests()).hasSize(2);
@@ -93,10 +98,10 @@ class GitHubApiClientTest {
     void reportsAPossiblyTruncatedListAsUnavailable() {
         GITHUB.respondWithFileCount(500);
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
         assertThat(files.isCollected()).isFalse();
-        assertThat(files.failure()).isEqualTo(PullRequestFiles.TOO_MANY_FILES);
+        assertThat(files.failure()).isEqualTo(ChangedFiles.TOO_MANY_FILES);
         assertThat(files.retryable()).isFalse();
         assertThat(GITHUB.fileRequests()).hasSize(5);
     }
@@ -106,9 +111,9 @@ class GitHubApiClientTest {
     void serverErrorsAndRateLimitsAreRetryable(int status) {
         GITHUB.failFiles(status);
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
-        assertThat(files.failure()).isEqualTo(PullRequestFiles.UNAVAILABLE);
+        assertThat(files.failure()).isEqualTo(ChangedFiles.GITHUB_UNAVAILABLE);
         assertThat(files.retryable()).isTrue();
     }
 
@@ -117,9 +122,9 @@ class GitHubApiClientTest {
     void refusalsAreFinal(int status) {
         GITHUB.failFiles(status);
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
-        assertThat(files.failure()).isEqualTo(PullRequestFiles.ACCESS_REJECTED);
+        assertThat(files.failure()).isEqualTo(ChangedFiles.ACCESS_REJECTED);
         assertThat(files.retryable()).isFalse();
     }
 
@@ -127,9 +132,9 @@ class GitHubApiClientTest {
     void aRateLimitedForbiddenIsRetryable() {
         GITHUB.failFiles(403, Map.of("x-ratelimit-remaining", "0"));
 
-        PullRequestFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client.pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
-        assertThat(files.failure()).isEqualTo(PullRequestFiles.UNAVAILABLE);
+        assertThat(files.failure()).isEqualTo(ChangedFiles.GITHUB_UNAVAILABLE);
         assertThat(files.retryable()).isTrue();
     }
 
@@ -138,15 +143,15 @@ class GitHubApiClientTest {
         GITHUB.respondWithFiles("src/App.java");
         GITHUB.delay(Duration.ofMillis(800));
 
-        PullRequestFiles files = client(Duration.ofMillis(200)).pullRequestFiles("acme", "releaseflow", 42, TOKEN);
+        ChangedFiles files = client(Duration.ofMillis(200)).pullRequestFiles("acme", "releaseflow", 42, TOKEN);
 
-        assertThat(files.failure()).isEqualTo(PullRequestFiles.UNAVAILABLE);
+        assertThat(files.failure()).isEqualTo(ChangedFiles.GITHUB_UNAVAILABLE);
         assertThat(files.retryable()).isTrue();
     }
 
     @Test
     void checksPullRequestAccess() {
-        assertThat(client.checkPullRequestAccess("acme", "releaseflow", TOKEN)).isEqualTo(GitHubAccess.GRANTED);
+        assertThat(client.checkPullRequestAccess("acme", "releaseflow", TOKEN)).isEqualTo(ProviderAccess.GRANTED);
 
         GitHubStub.RecordedRequest request = GITHUB.requests().getFirst();
         assertThat(request.path()).isEqualTo("/repos/acme/releaseflow/pulls");
@@ -159,7 +164,7 @@ class GitHubApiClientTest {
     void rejectedAccessIsReported(int status) {
         GITHUB.failAccessCheck(status);
 
-        assertThat(client.checkPullRequestAccess("acme", "releaseflow", TOKEN)).isEqualTo(GitHubAccess.REJECTED);
+        assertThat(client.checkPullRequestAccess("acme", "releaseflow", TOKEN)).isEqualTo(ProviderAccess.REJECTED);
     }
 
     @ParameterizedTest
@@ -167,7 +172,7 @@ class GitHubApiClientTest {
     void unavailableAccessCheckIsReported(int status) {
         GITHUB.failAccessCheck(status);
 
-        assertThat(client.checkPullRequestAccess("acme", "releaseflow", TOKEN)).isEqualTo(GitHubAccess.UNAVAILABLE);
+        assertThat(client.checkPullRequestAccess("acme", "releaseflow", TOKEN)).isEqualTo(ProviderAccess.UNAVAILABLE);
     }
 
     @Test

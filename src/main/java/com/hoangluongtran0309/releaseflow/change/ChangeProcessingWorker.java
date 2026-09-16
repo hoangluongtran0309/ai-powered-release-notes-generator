@@ -7,10 +7,9 @@ import com.hoangluongtran0309.releaseflow.audience.AudienceService;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.category.CategoryService;
 import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
-import com.hoangluongtran0309.releaseflow.github.GitHubApiClient;
-import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
-import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAccess;
-import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryCredentials;
+import com.hoangluongtran0309.releaseflow.project.SourceAccess;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
+import com.hoangluongtran0309.releaseflow.source.SourceCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,10 +27,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Collects the changed files of received pull requests, asks the configured AI once,
- * and classifies them. Claims and results are written in short transactions; GitHub
- * and the AI are called between them. A change whose files or AI answer cannot be
- * obtained is still classified, with a trigger that forces review.
+ * Collects the changed files of received pull and merge requests, asks the configured AI
+ * once, and classifies them. Claims and results are written in short transactions; the
+ * provider and the AI are called between them. A change whose files or AI answer cannot
+ * be obtained is still classified, with a trigger that forces review.
  */
 @Component
 class ChangeProcessingWorker {
@@ -46,8 +45,8 @@ class ChangeProcessingWorker {
 
     private final ChangeProcessingJobRepository jobRepository;
     private final ChangeRepository changeRepository;
-    private final GitHubRepositoryAccess repositoryAccess;
-    private final GitHubApiClient gitHubApiClient;
+    private final SourceAccess sourceAccess;
+    private final ChangedFileCollectors collectors;
     private final ProjectSensitivePathService sensitivePaths;
     private final AiClassifiers aiClassifiers;
     private final OutputLanguageService outputLanguageService;
@@ -63,8 +62,8 @@ class ChangeProcessingWorker {
     ChangeProcessingWorker(
             ChangeProcessingJobRepository jobRepository,
             ChangeRepository changeRepository,
-            GitHubRepositoryAccess repositoryAccess,
-            GitHubApiClient gitHubApiClient,
+            SourceAccess sourceAccess,
+            ChangedFileCollectors collectors,
             ProjectSensitivePathService sensitivePaths,
             AiClassifiers aiClassifiers,
             OutputLanguageService outputLanguageService,
@@ -79,8 +78,8 @@ class ChangeProcessingWorker {
     ) {
         this.jobRepository = jobRepository;
         this.changeRepository = changeRepository;
-        this.repositoryAccess = repositoryAccess;
-        this.gitHubApiClient = gitHubApiClient;
+        this.sourceAccess = sourceAccess;
+        this.collectors = collectors;
         this.sensitivePaths = sensitivePaths;
         this.aiClassifiers = aiClassifiers;
         this.outputLanguageService = outputLanguageService;
@@ -150,7 +149,7 @@ class ChangeProcessingWorker {
     }
 
     private void process(Claim claim) {
-        PullRequestFiles files = collectFiles(claim);
+        ChangedFiles files = collectFiles(claim);
         if (!files.isCollected() && files.retryable() && claim.attempt() < MAX_ATTEMPTS) {
             reschedule(claim, files.failure());
             return;
@@ -209,7 +208,7 @@ class ChangeProcessingWorker {
         }
     }
 
-    private void complete(Claim claim, PullRequestFiles files, ChangeAiMerge.ClassifiedChange outcome, String error) {
+    private void complete(Claim claim, ChangedFiles files, ChangeAiMerge.ClassifiedChange outcome, String error) {
         transactionTemplate.executeWithoutResult(status -> {
             ChangeProcessingJob job = jobRepository.findById(claim.jobId()).orElseThrow();
             if (!job.isClaimedAt(claim.claimedAt())) {
@@ -233,7 +232,7 @@ class ChangeProcessingWorker {
 
     // A job whose AI call may already have happened is finished from the recorded files.
     private void completeWithoutAi(ChangeProcessingJob job, Change change, Instant now) {
-        PullRequestFiles files = change.recordedFiles();
+        ChangedFiles files = change.recordedFiles();
         ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files,
                 sensitivePaths.forProject(change.getOrganizationId(), change.getProjectId()),
                 categoryService.active(change.getOrganizationId()));
@@ -246,19 +245,16 @@ class ChangeProcessingWorker {
         log.warn("Completed change {} without AI because its classification did not finish.", change.getId());
     }
 
-    private PullRequestFiles collectFiles(Claim claim) {
-        Optional<GitHubRepositoryCredentials> repository = repositoryAccess.find(claim.organizationId(), claim.projectId(),
+    // The source says which provider to ask and how to address its project.
+    private ChangedFiles collectFiles(Claim claim) {
+        Optional<SourceCredentials> credentials = sourceAccess.find(claim.organizationId(), claim.projectId(),
                 claim.sourceId());
-        Optional<String> token = repository.flatMap(GitHubRepositoryCredentials::accessToken);
+        Optional<String> token = credentials.flatMap(SourceCredentials::accessToken);
         if (token.isEmpty()) {
-            return PullRequestFiles.unavailable(PullRequestFiles.NO_ACCESS_TOKEN, false);
+            return ChangedFiles.unavailable(ChangedFiles.NO_ACCESS_TOKEN, false);
         }
-        return gitHubApiClient.pullRequestFiles(
-                repository.get().owner(),
-                repository.get().repository(),
-                claim.pullRequest().number(),
-                token.get()
-        );
+        return collectors.of(credentials.get().sourceType())
+                .collect(credentials.get(), token.get(), claim.pullRequest().number());
     }
 
     // Only a job still collecting files is retried; once the AI may have been asked, it never is.

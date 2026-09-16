@@ -1,7 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
-import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFileKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;

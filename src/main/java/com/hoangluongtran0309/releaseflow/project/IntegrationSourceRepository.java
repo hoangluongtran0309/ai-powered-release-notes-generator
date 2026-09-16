@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.project;
 
+import com.hoangluongtran0309.releaseflow.source.SourceType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

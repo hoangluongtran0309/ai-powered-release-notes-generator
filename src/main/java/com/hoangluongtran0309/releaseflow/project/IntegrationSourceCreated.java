@@ -1,5 +1,8 @@
 package com.hoangluongtran0309.releaseflow.project;
 
+import com.hoangluongtran0309.releaseflow.source.SourceType;
+import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -8,8 +11,11 @@ public final class IntegrationSourceCreated {
     private final UUID id;
     private final UUID projectId;
     private final SourceType type;
+    private final String externalProjectKey;
     private final String owner;
     private final String repository;
+    private final String apiBaseUrl;
+    private final WebhookAuthMode webhookAuthMode;
     private final UUID webhookId;
     private final String webhookPath;
     private final String webhookSecret;
@@ -19,8 +25,11 @@ public final class IntegrationSourceCreated {
             UUID id,
             UUID projectId,
             SourceType type,
+            String externalProjectKey,
             String owner,
             String repository,
+            String apiBaseUrl,
+            WebhookAuthMode webhookAuthMode,
             UUID webhookId,
             String webhookPath,
             String webhookSecret,
@@ -29,8 +38,11 @@ public final class IntegrationSourceCreated {
         this.id = id;
         this.projectId = projectId;
         this.type = type;
+        this.externalProjectKey = externalProjectKey;
         this.owner = owner;
         this.repository = repository;
+        this.apiBaseUrl = apiBaseUrl;
+        this.webhookAuthMode = webhookAuthMode;
         this.webhookId = webhookId;
         this.webhookPath = webhookPath;
         this.webhookSecret = webhookSecret;
@@ -49,12 +61,24 @@ public final class IntegrationSourceCreated {
         return type;
     }
 
+    public String getExternalProjectKey() {
+        return externalProjectKey;
+    }
+
     public String getOwner() {
         return owner;
     }
 
     public String getRepository() {
         return repository;
+    }
+
+    public String getApiBaseUrl() {
+        return apiBaseUrl;
+    }
+
+    public WebhookAuthMode getWebhookAuthMode() {
+        return webhookAuthMode;
     }
 
     public UUID getWebhookId() {
@@ -75,7 +99,8 @@ public final class IntegrationSourceCreated {
 
     @Override
     public String toString() {
-        return "IntegrationSourceCreated[id=%s, projectId=%s, owner=%s, repository=%s, webhookId=%s, webhookSecret=[REDACTED]]"
-                .formatted(id, projectId, owner, repository, webhookId);
+        return ("IntegrationSourceCreated[id=%s, projectId=%s, type=%s, externalProjectKey=%s, webhookId=%s, "
+                + "webhookSecret=[REDACTED]]")
+                .formatted(id, projectId, type, externalProjectKey, webhookId);
     }
 }

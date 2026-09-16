@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Save webhook credentials</title>
+</head>
+<body>
+<p layout:fragment="page-title">Projects</p>
+<div layout:fragment="content" th:with="gitLab=${source.type.name() == 'GITLAB'}">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow" th:text="${gitLab} ? 'GitLab connected' : 'GitHub connected'">GitHub connected</p>
+            <h1 class="page-heading">Save these webhook credentials now</h1>
+            <p class="page-subtitle">ReleaseFlow stores only an encrypted copy of the secret.</p>
+        </div>
+    </header>
+
+    <article class="surface-card max-w-3xl p-6">
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+            <p class="text-sm font-semibold text-emerald-900">
+                <span>Signing secret for</span>
+                <span th:text="${source.externalProjectKey}">owner/repository</span>
+            </p>
+            <p class="mt-1 text-xs text-emerald-800"
+               th:text="${gitLab}
+                        ? 'The secret will not be shown again. Store it in GitLab before leaving this page.'
+                        : 'The secret will not be shown again. Store it in GitHub before leaving this page.'">
+                The secret will not be shown again.
+            </p>
+        </div>
+
+        <dl class="mt-6 grid gap-5 text-sm">
+            <div>
+                <dt class="text-slate-500" th:text="${gitLab} ? 'Project' : 'Repository'">Repository</dt>
+                <dd class="mt-1 font-semibold" th:text="${source.externalProjectKey}">owner/repository</dd>
+            </div>
+            <div th:if="${gitLab}">
+                <dt class="text-slate-500">GitLab instance</dt>
+                <dd class="mt-1 font-semibold" th:text="${source.apiBaseUrl}">https://gitlab.com</dd>
+            </div>
+            <div x-data="copyText()">
+                <dt class="text-slate-500">Webhook path</dt>
+                <dd class="join mt-1 w-full">
+                    <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
+                           th:value="${source.webhookPath}" aria-label="Webhook path">
+                    <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
+                </dd>
+            </div>
+            <div x-data="copyText()">
+                <dt class="text-slate-500">Webhook secret</dt>
+                <dd class="join mt-1 w-full">
+                    <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
+                           autocomplete="off" spellcheck="false"
+                           th:value="${source.webhookSecret}" aria-label="Webhook secret">
+                    <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
+                </dd>
+            </div>
+        </dl>
+
+        <p class="mt-6 text-sm text-slate-600" th:unless="${gitLab}">
+            In the repository's <strong>Settings → Webhooks</strong>, use your ReleaseFlow address followed by the path
+            above as the payload URL, content type <code>application/json</code>, this secret, and the
+            <strong>Pull requests</strong> event.
+        </p>
+        <p class="mt-6 text-sm text-slate-600" th:if="${gitLab}">
+            In the project's <strong>Settings → Webhooks</strong>, use your ReleaseFlow address followed by the path
+            above as the URL, this secret as the secret token, and the <strong>Merge request events</strong> trigger.
+            <span th:if="${source.webhookAuthMode.name() == 'GITLAB_SIGNING_TOKEN'}">
+                ReleaseFlow will check the signed <code>webhook-signature</code> header this instance sends.
+            </span>
+            <span th:if="${source.webhookAuthMode.name() == 'GITLAB_SECRET_TOKEN'}">
+                ReleaseFlow will compare the <code>X-Gitlab-Token</code> header with this secret.
+            </span>
+        </p>
+
+        <a class="btn btn-primary mt-6" th:href="@{/projects}">I have saved the secret</a>
+    </article>
+</div>
+</body>
+</html>

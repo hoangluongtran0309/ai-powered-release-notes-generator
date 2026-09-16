@@ -3,9 +3,9 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
 import com.hoangluongtran0309.releaseflow.account.RegistrationResult;
 import com.hoangluongtran0309.releaseflow.account.RegistrationService;
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
-import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
-import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
 import com.hoangluongtran0309.releaseflow.support.GitHubStub;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
 import com.hoangluongtran0309.releaseflow.support.TestCategories;
@@ -223,7 +223,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(change.isNeedsReview()).isTrue();
         assertThat(change.getReviewTriggers()).containsExactly(ReviewTrigger.changedFilesUnavailable());
         assertThat(jobRepository.findByChangeId(change.getId()))
-                .hasValueSatisfying(job -> assertThat(job.getLastError()).isEqualTo(PullRequestFiles.NO_ACCESS_TOKEN));
+                .hasValueSatisfying(job -> assertThat(job.getLastError()).isEqualTo(ChangedFiles.NO_ACCESS_TOKEN));
         assertThat(GITHUB.requests()).isEmpty();
 
         mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
@@ -242,7 +242,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         ChangeProcessingJob afterFirst = jobRepository.findByChangeId(changeId).orElseThrow();
         assertThat(afterFirst.getStatus()).isEqualTo(ChangeProcessingJob.Status.PENDING);
         assertThat(afterFirst.getAttempts()).isOne();
-        assertThat(afterFirst.getLastError()).isEqualTo(PullRequestFiles.UNAVAILABLE);
+        assertThat(afterFirst.getLastError()).isEqualTo(ChangedFiles.GITHUB_UNAVAILABLE);
         assertThat(afterFirst.getNextAttemptAt()).isAfterOrEqualTo(beforeFirstAttempt.plusSeconds(1));
         assertThat(onlyChange().getProcessingStatus()).isEqualTo(ProcessingStatus.PROCESSING);
 
@@ -399,7 +399,7 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Processing")))
-                .andExpect(content().string(containsString("Checking which files this pull request changed")));
+                .andExpect(content().string(containsString("Checking which files this change touched")));
     }
 
     private void makeDue(UUID changeId) {

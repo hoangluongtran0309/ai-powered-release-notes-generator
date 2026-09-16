@@ -1,5 +1,10 @@
 package com.hoangluongtran0309.releaseflow.github;
 
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
+import com.hoangluongtran0309.releaseflow.source.ProviderAccess;
+import com.hoangluongtran0309.releaseflow.source.ProviderListing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +35,7 @@ import java.util.Optional;
 @Component
 public class GitHubApiClient {
 
-    static final int PAGE_SIZE = 100;
+    static final int PAGE_SIZE = ProviderListing.PAGE_SIZE;
     static final int MAX_PAGES = 5;
 
     private static final Logger log = LoggerFactory.getLogger(GitHubApiClient.class);
@@ -64,7 +69,7 @@ public class GitHubApiClient {
      * Checks the permission the change worker needs: reading the repository's pull
      * requests, which proves more than being able to see the repository.
      */
-    public GitHubAccess checkPullRequestAccess(String owner, String repository, String token) {
+    public ProviderAccess checkPullRequestAccess(String owner, String repository, String token) {
         requireNoTransaction();
         try {
             restClient.get()
@@ -72,17 +77,17 @@ public class GitHubApiClient {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .retrieve()
                     .toBodilessEntity();
-            return GitHubAccess.GRANTED;
+            return ProviderAccess.GRANTED;
         } catch (RestClientResponseException exception) {
             if (isRejection(exception)) {
-                return GitHubAccess.REJECTED;
+                return ProviderAccess.REJECTED;
             }
             log.warn("GitHub returned HTTP {} while checking access to {}/{}.",
                     exception.getStatusCode().value(), owner, repository);
-            return GitHubAccess.UNAVAILABLE;
+            return ProviderAccess.UNAVAILABLE;
         } catch (RestClientException exception) {
             log.warn("Could not reach GitHub while checking access to {}/{}.", owner, repository);
-            return GitHubAccess.UNAVAILABLE;
+            return ProviderAccess.UNAVAILABLE;
         }
     }
 
@@ -91,7 +96,7 @@ public class GitHubApiClient {
      * be truncated is reported as unavailable, because a file that was never seen cannot
      * be declared safe.
      */
-    public PullRequestFiles pullRequestFiles(String owner, String repository, int number, String token) {
+    public ChangedFiles pullRequestFiles(String owner, String repository, int number, String token) {
         requireNoTransaction();
         List<ChangedFile> files = new ArrayList<>();
         try {
@@ -110,21 +115,21 @@ public class GitHubApiClient {
                         .body(String.class);
                 Optional<List<ChangedFile>> pageFiles = parsePage(body);
                 if (pageFiles.isEmpty()) {
-                    return unavailable(owner, repository, number, PullRequestFiles.INVALID_RESPONSE, false);
+                    return unavailable(owner, repository, number, ChangedFiles.INVALID_RESPONSE, false);
                 }
                 files.addAll(pageFiles.get());
                 if (pageFiles.get().size() < PAGE_SIZE) {
-                    return PullRequestFiles.collected(files);
+                    return ChangedFiles.collected(files);
                 }
             }
-            return unavailable(owner, repository, number, PullRequestFiles.TOO_MANY_FILES, false);
+            return unavailable(owner, repository, number, ChangedFiles.TOO_MANY_FILES, false);
         } catch (RestClientResponseException exception) {
             if (isRejection(exception)) {
-                return unavailable(owner, repository, number, PullRequestFiles.ACCESS_REJECTED, false);
+                return unavailable(owner, repository, number, ChangedFiles.ACCESS_REJECTED, false);
             }
-            return unavailable(owner, repository, number, PullRequestFiles.UNAVAILABLE, true);
+            return unavailable(owner, repository, number, ChangedFiles.GITHUB_UNAVAILABLE, true);
         } catch (RestClientException exception) {
-            return unavailable(owner, repository, number, PullRequestFiles.UNAVAILABLE, true);
+            return unavailable(owner, repository, number, ChangedFiles.GITHUB_UNAVAILABLE, true);
         }
     }
 
@@ -132,7 +137,7 @@ public class GitHubApiClient {
      * One page of the repository's closed pull requests, most recently updated first.
      * Merged and unmerged ones both appear; the caller keeps the merged ones.
      */
-    public PullRequestListing closedPullRequests(String owner, String repository, int page, String token) {
+    public ProviderListing closedPullRequests(String owner, String repository, int page, String token) {
         requireNoTransaction();
         final String body;
         try {
@@ -151,30 +156,30 @@ public class GitHubApiClient {
             Optional<Duration> retryAfter = retryAfter(exception);
             if (exception.getStatusCode().value() == 429 || retryAfter.isPresent() || isRateLimited(exception)) {
                 log.warn("GitHub rate-limited listing the pull requests of {}/{}.", owner, repository);
-                return PullRequestListing.failed(PullRequestListing.Status.RATE_LIMITED, retryAfter.orElse(null));
+                return ProviderListing.failed(ProviderListing.Status.RATE_LIMITED, retryAfter.orElse(null));
             }
             if (isRejection(exception)) {
                 log.warn("GitHub refused listing the pull requests of {}/{} (HTTP {}).", owner, repository,
                         exception.getStatusCode().value());
-                return PullRequestListing.failed(PullRequestListing.Status.REJECTED, null);
+                return ProviderListing.failed(ProviderListing.Status.REJECTED, null);
             }
             log.warn("GitHub returned HTTP {} listing the pull requests of {}/{}.", exception.getStatusCode().value(),
                     owner, repository);
-            return PullRequestListing.failed(PullRequestListing.Status.UNAVAILABLE, null);
+            return ProviderListing.failed(ProviderListing.Status.UNAVAILABLE, null);
         } catch (RestClientException exception) {
             log.warn("Could not reach GitHub to list the pull requests of {}/{}.", owner, repository);
-            return PullRequestListing.failed(PullRequestListing.Status.UNAVAILABLE, null);
+            return ProviderListing.failed(ProviderListing.Status.UNAVAILABLE, null);
         }
         try {
             JsonNode items = objectMapper.readTree(body == null ? "" : body);
             if (items == null || !items.isArray()) {
-                return PullRequestListing.failed(PullRequestListing.Status.INVALID_RESPONSE, null);
+                return ProviderListing.failed(ProviderListing.Status.INVALID_RESPONSE, null);
             }
             List<JsonNode> pullRequests = new ArrayList<>();
             items.values().forEach(pullRequests::add);
-            return PullRequestListing.listed(pullRequests);
+            return ProviderListing.listed(pullRequests);
         } catch (JacksonException exception) {
-            return PullRequestListing.failed(PullRequestListing.Status.INVALID_RESPONSE, null);
+            return ProviderListing.failed(ProviderListing.Status.INVALID_RESPONSE, null);
         }
     }
 
@@ -254,7 +259,7 @@ public class GitHubApiClient {
         return status.value() == 401 || status.value() == 404 || (status.value() == 403 && !rateLimited);
     }
 
-    private static PullRequestFiles unavailable(
+    private static ChangedFiles unavailable(
             String owner,
             String repository,
             int number,
@@ -262,7 +267,7 @@ public class GitHubApiClient {
             boolean retryable
     ) {
         log.warn("Could not list the changed files of {}/{}#{}: {}.", owner, repository, number, failure);
-        return PullRequestFiles.unavailable(failure, retryable);
+        return ChangedFiles.unavailable(failure, retryable);
     }
 
     private static void requireNoTransaction() {

@@ -1,7 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.project.GitHubWebhookVerifier;
-import com.hoangluongtran0309.releaseflow.project.VerifiedGitHubWebhook;
+import com.hoangluongtran0309.releaseflow.project.VerifiedWebhook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -19,24 +19,29 @@ class GitHubWebhookService {
 
     private final GitHubWebhookVerifier verifier;
     private final ChangeIntake intake;
+    private final WebhookBody webhookBody;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     GitHubWebhookService(
             GitHubWebhookVerifier verifier,
             ChangeIntake intake,
+            WebhookBody webhookBody,
             ObjectMapper objectMapper,
             Clock clock
     ) {
         this.verifier = verifier;
         this.intake = intake;
+        this.webhookBody = webhookBody;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
 
     WebhookOutcome receive(String webhookId, String signature, String event, String deliveryId, byte[] body) {
-        // Nothing from the request is trusted before this integration's own secret verifies it.
-        VerifiedGitHubWebhook webhook = verifier.verify(webhookId, signature, body)
+        // Checked before the source is looked up, so the limit says nothing about what exists.
+        webhookBody.requireWithinLimit(body);
+        // Nothing else from the request is trusted before this source's own secret verifies it.
+        VerifiedWebhook webhook = verifier.verify(webhookId, signature, body)
                 .orElseThrow(WebhookSignatureInvalidException::new);
         if (event == null || event.isBlank()) {
             throw new MalformedWebhookPayloadException("The X-GitHub-Event header is required.");
@@ -67,7 +72,7 @@ class GitHubWebhookService {
         }
     }
 
-    private static void requireConfiguredRepository(VerifiedGitHubWebhook webhook, String event, JsonNode payload) {
+    private static void requireConfiguredRepository(VerifiedWebhook webhook, String event, JsonNode payload) {
         JsonNode fullName = payload.path("repository").path("full_name");
         if (fullName.isMissingNode() || fullName.isNull()) {
             // Organization-level pings carry no repository; a pull request always must.
@@ -76,7 +81,7 @@ class GitHubWebhookService {
             }
             return;
         }
-        if (!fullName.isString() || !webhook.isRepository(fullName.stringValue())) {
+        if (!fullName.isString() || !webhook.isProject(fullName.stringValue())) {
             throw new WebhookRepositoryMismatchException();
         }
     }
@@ -97,7 +102,7 @@ class GitHubWebhookService {
         throw new MalformedWebhookPayloadException("The X-GitHub-Delivery header must be a delivery GUID.");
     }
 
-    private WebhookOutcome recordChange(VerifiedGitHubWebhook webhook, MergedPullRequest pullRequest, UUID deliveryId) {
+    private WebhookOutcome recordChange(VerifiedWebhook webhook, MergedPullRequest pullRequest, UUID deliveryId) {
         ChangeIntake.Outcome outcome = intake.record(
                 webhook.organizationId(),
                 webhook.projectId(),

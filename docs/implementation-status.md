@@ -144,10 +144,29 @@
   `V10` constraints that keep processing changes unsettled and triggered
   changes in review until a person reviews them.
 
+- GitLab sources (ADR-0017), with Flyway `V19`:
+  - a `source` package holding the provider-neutral vocabulary, and two ports —
+    `ChangedFileCollector` and `SourceHistoryReader` — with one implementation
+    per source type and a registry that fails at startup if a type has none;
+  - GitLab projects named by their path, including subgroups, on an instance
+    from the deployment's allowlist, refused unless it is a plain HTTP or HTTPS
+    origin the allowlist names;
+  - `POST /webhooks/gitlab/{webhookId}`, proven by Standard Webhooks headers
+    within a five-minute skew or by `X-Gitlab-Token`, both in constant time, and
+    a 1 MiB limit on any provider's delivery;
+  - merged merge requests normalized into the same change, with the merge commit
+    falling back to the squash and last commits and the merge time to the last
+    update;
+  - changed files from the merge request's diffs, ten pages at most, where a
+    collapsed, too large, or truncated diff makes the whole list unavailable;
+  - a 90-day history import that asks for the merge requests updated after the
+    window's start, least recently updated first;
+  - an access token confirmed against `GET /api/v4/projects/{key}` before it is
+    stored, with GitLab's own error codes.
+
 ## In progress
 
-- Nothing. The integration source and history import slice is complete and
-  awaiting review.
+- Nothing. The GitLab source slice is complete and awaiting review.
 
 ## Planned
 
@@ -157,13 +176,13 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Source providers other than GitHub (GitLab, Linear, Jira), and automatic AI
+- Source providers other than GitHub and GitLab (Linear, Jira), and automatic AI
   retries.
-- Polling sources, imports from providers other than GitHub, and queues or
+- Polling sources, commit messages, GitLab group-level webhooks, and queues or
   retries for work other than changed-file collection and imports.
-- Validating a repository with GitHub when it is connected, keyword review
-  triggers, disconnecting or replacing a source, and secret or token rotation
-  reminders.
+- Validating a repository or project with its provider when it is connected,
+  keyword review triggers, disconnecting or replacing a source, and secret or
+  token rotation reminders.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
 - Automation, distribution integrations, and a public changelog.

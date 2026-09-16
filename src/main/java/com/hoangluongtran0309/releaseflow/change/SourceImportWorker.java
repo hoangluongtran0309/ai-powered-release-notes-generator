@@ -1,10 +1,9 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-import com.hoangluongtran0309.releaseflow.github.GitHubApiClient;
-import com.hoangluongtran0309.releaseflow.github.PullRequestListing;
-import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryAccess;
-import com.hoangluongtran0309.releaseflow.project.GitHubRepositoryCredentials;
 import com.hoangluongtran0309.releaseflow.project.IntegrationSourceService;
+import com.hoangluongtran0309.releaseflow.project.SourceAccess;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
+import com.hoangluongtran0309.releaseflow.source.SourceCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,12 +11,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.databind.JsonNode;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -25,11 +22,10 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * Reads a source's history for due import jobs. GitHub lists closed pull requests most
- * recently updated first, so the import stops at the first one updated before its
- * window. Each merged pull request in the window goes through {@link ChangeIntake},
- * exactly like a webhook delivery. GitHub is called outside any transaction; the cursor
- * and counts are saved after every page.
+ * Reads a source's history for due import jobs. Each provider has its own
+ * {@link SourceHistoryReader}; every merged pull or merge request it returns goes through
+ * {@link ChangeIntake}, exactly like a webhook delivery. The provider is called outside
+ * any transaction; the cursor and counts are saved after every page.
  */
 @Component
 class SourceImportWorker {
@@ -37,18 +33,18 @@ class SourceImportWorker {
     static final int MAX_ATTEMPTS = 5;
     static final Duration MAX_RETRY_AFTER = Duration.ofHours(1);
     static final Duration STALE_AFTER = Duration.ofMinutes(10);
-    static final String NO_ACCESS_TOKEN = "no_access_token";
-    static final String ACCESS_REJECTED = "access_rejected";
+    static final String NO_ACCESS_TOKEN = ChangedFiles.NO_ACCESS_TOKEN;
+    static final String ACCESS_REJECTED = ChangedFiles.ACCESS_REJECTED;
     static final String RATE_LIMITED = "rate_limited";
-    static final String UNAVAILABLE = "github_unavailable";
-    static final String INVALID_RESPONSE = "invalid_response";
+    static final String INVALID_RESPONSE = ChangedFiles.INVALID_RESPONSE;
+    static final String SOURCE_MISSING = "source_missing";
     static final String UNEXPECTED_ERROR = "unexpected_error";
 
     private static final Logger log = LoggerFactory.getLogger(SourceImportWorker.class);
 
     private final SourceSyncJobRepository jobRepository;
-    private final GitHubRepositoryAccess repositoryAccess;
-    private final GitHubApiClient gitHubApiClient;
+    private final SourceAccess sourceAccess;
+    private final SourceHistoryReaders readers;
     private final ChangeIntake intake;
     private final IntegrationSourceService sourceService;
     private final TransactionTemplate transactionTemplate;
@@ -57,8 +53,8 @@ class SourceImportWorker {
 
     SourceImportWorker(
             SourceSyncJobRepository jobRepository,
-            GitHubRepositoryAccess repositoryAccess,
-            GitHubApiClient gitHubApiClient,
+            SourceAccess sourceAccess,
+            SourceHistoryReaders readers,
             ChangeIntake intake,
             IntegrationSourceService sourceService,
             PlatformTransactionManager transactionManager,
@@ -66,8 +62,8 @@ class SourceImportWorker {
             @Value("${releaseflow.processing.enabled}") boolean enabled
     ) {
         this.jobRepository = jobRepository;
-        this.repositoryAccess = repositoryAccess;
-        this.gitHubApiClient = gitHubApiClient;
+        this.sourceAccess = sourceAccess;
+        this.readers = readers;
         this.intake = intake;
         this.sourceService = sourceService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -122,28 +118,32 @@ class SourceImportWorker {
     }
 
     private void work(Claim claim) {
-        Optional<GitHubRepositoryCredentials> repository = repositoryAccess
+        Optional<SourceCredentials> credentials = sourceAccess
                 .find(claim.organizationId(), claim.projectId(), claim.sourceId());
-        Optional<String> token = repository.flatMap(GitHubRepositoryCredentials::accessToken);
+        if (credentials.isEmpty()) {
+            fail(claim, SOURCE_MISSING, false);
+            return;
+        }
+        Optional<String> token = credentials.get().accessToken();
         if (token.isEmpty()) {
             fail(claim, NO_ACCESS_TOKEN, false);
             return;
         }
+        SourceHistoryReader reader = readers.of(credentials.get().sourceType());
         ImportCursor cursor = claim.cursor();
         int imported = claim.importedSoFar();
         while (true) {
-            PullRequestListing listing = gitHubApiClient.closedPullRequests(
-                    repository.get().owner(), repository.get().repository(), cursor.page(), token.get());
-            switch (listing.status()) {
+            HistoryPage page = reader.read(credentials.get(), token.get(), cursor, claim.windowStart(), claim.windowEnd());
+            switch (page.status()) {
                 case LISTED -> {
                     // Handled below.
                 }
                 case RATE_LIMITED -> {
-                    failOrRetry(claim, RATE_LIMITED, listing.retryAfter());
+                    failOrRetry(claim, RATE_LIMITED, page.retryAfter());
                     return;
                 }
                 case UNAVAILABLE -> {
-                    failOrRetry(claim, UNAVAILABLE, null);
+                    failOrRetry(claim, reader.unavailableCode(), null);
                     return;
                 }
                 case REJECTED -> {
@@ -156,65 +156,67 @@ class SourceImportWorker {
                 }
             }
 
-            Page page = readPage(claim, listing.pullRequests(), cursor, imported);
-            imported += page.imported();
-            // A page shorter than a full one is the last.
-            Ending ending = page.ending() == Ending.MORE && listing.lastPage() ? Ending.COMPLETE : page.ending();
-            if (!progress(claim, page.next(), page, ending)) {
+            Scan scan = readPage(claim, reader, page.items(), cursor, imported);
+            imported += scan.imported();
+            // A page the provider says is its last one ends the import.
+            Ending ending = scan.ending() == Ending.MORE && page.lastPage() ? Ending.COMPLETE : scan.ending();
+            if (!progress(claim, scan.next(), scan, ending)) {
                 return;
             }
             if (ending != Ending.MORE) {
                 log.info("Import job {} {} at {} ({} new change(s) this run).", claim.jobId(),
-                        ending == Ending.LIMIT ? "stopped at its limit" : "finished", page.next(), imported);
+                        ending == Ending.LIMIT ? "stopped at its limit" : "finished", scan.next(), imported);
                 return;
             }
-            cursor = page.next();
+            cursor = scan.next();
         }
     }
 
-    // Handles the pull requests of one page from the cursor's offset.
-    private Page readPage(Claim claim, List<JsonNode> pullRequests, ImportCursor cursor, int importedBefore) {
+    // Handles the items of one page from the cursor's offset.
+    private Scan readPage(
+            Claim claim,
+            SourceHistoryReader reader,
+            List<HistoryItem> items,
+            ImportCursor cursor,
+            int importedBefore
+    ) {
         int scanned = 0;
         int imported = 0;
-        for (int index = cursor.offset(); index < pullRequests.size(); index++) {
-            JsonNode pullRequest = pullRequests.get(index);
+        for (int index = cursor.offset(); index < items.size(); index++) {
+            HistoryItem item = items.get(index);
             scanned++;
-            Instant updatedAt = instant(pullRequest.path("updated_at"));
-            if (updatedAt != null && updatedAt.isBefore(claim.windowStart())) {
-                return new Page(scanned, imported, cursor.at(index + 1), Ending.COMPLETE);
+            // Only a provider asked for its newest updates first runs out of history this way.
+            if (reader.endsAtOlderItems() && item.updatedAt() != null && item.updatedAt().isBefore(claim.windowStart())) {
+                return new Scan(scanned, imported, cursor.at(index + 1), Ending.COMPLETE);
             }
-            Instant mergedAt = instant(pullRequest.path("merged_at"));
+            Instant mergedAt = item.mergedAt();
             if (mergedAt == null || mergedAt.isBefore(claim.windowStart()) || mergedAt.isAfter(claim.windowEnd())) {
                 continue;
             }
-            final MergedPullRequest merged;
-            try {
-                merged = MergedPullRequest.from(pullRequest);
-            } catch (MalformedWebhookPayloadException exception) {
-                // One unreadable pull request does not stop the rest of the history.
-                log.warn("Import job {} skipped pull request #{}: {}", claim.jobId(),
-                        pullRequest.path("number").asString("?"), exception.getMessage());
+            if (item.change() == null) {
+                // One unreadable item does not stop the rest of the history.
+                log.warn("Import job {} skipped {}: its fields could not be read.", claim.jobId(), item.label());
                 continue;
             }
             ChangeIntake.Outcome outcome = intake.record(
-                    claim.organizationId(), claim.projectId(), claim.sourceId(), merged, ChangeOrigin.IMPORT, null);
+                    claim.organizationId(), claim.projectId(), claim.sourceId(), item.change(), ChangeOrigin.IMPORT, null);
             if (outcome == ChangeIntake.Outcome.RECORDED) {
                 imported++;
                 if (importedBefore + imported >= claim.itemLimit()) {
-                    ImportCursor next = index + 1 < pullRequests.size() ? cursor.at(index + 1) : cursor.nextPage();
-                    return new Page(scanned, imported, next, Ending.LIMIT);
+                    ImportCursor next = index + 1 < items.size() ? cursor.at(index + 1) : cursor.nextPage();
+                    return new Scan(scanned, imported, next, Ending.LIMIT);
                 }
             }
         }
-        return new Page(scanned, imported, cursor.nextPage(), Ending.MORE);
+        return new Scan(scanned, imported, cursor.nextPage(), Ending.MORE);
     }
 
     // Saves the page's progress and, when the import ends, its outcome; false if the claim was lost.
-    private boolean progress(Claim claim, ImportCursor next, Page page, Ending ending) {
+    private boolean progress(Claim claim, ImportCursor next, Scan scan, Ending ending) {
         Boolean held = transactionTemplate.execute(status -> jobRepository.findById(claim.jobId())
                 .filter(job -> job.isClaimedAt(claim.claimedAt()))
                 .map(job -> {
-                    job.advance(next, page.scanned(), page.imported());
+                    job.advance(next, scan.scanned(), scan.imported());
                     Instant now = now();
                     if (ending == Ending.COMPLETE) {
                         job.complete(now);
@@ -229,7 +231,7 @@ class SourceImportWorker {
         return Boolean.TRUE.equals(held);
     }
 
-    // A transient failure waits and tries again, as long as GitHub said or with backoff; the fifth fails.
+    // A transient failure waits and tries again, as long as the provider said or with backoff; the fifth fails.
     private void failOrRetry(Claim claim, String error, Duration retryAfter) {
         if (claim.attempt() >= MAX_ATTEMPTS) {
             fail(claim, error, false);
@@ -258,17 +260,6 @@ class SourceImportWorker {
                 .ifPresent(change));
     }
 
-    private static Instant instant(JsonNode node) {
-        if (!node.isString()) {
-            return null;
-        }
-        try {
-            return Instant.parse(node.stringValue());
-        } catch (DateTimeParseException exception) {
-            return null;
-        }
-    }
-
     // 2, 4, 8 … seconds, capped at five minutes.
     static Duration backoff(int attempt) {
         return Duration.ofSeconds(Math.min(300, 1L << Math.min(8, attempt)));
@@ -285,7 +276,7 @@ class SourceImportWorker {
         LIMIT
     }
 
-    private record Page(int scanned, int imported, ImportCursor next, Ending ending) {
+    private record Scan(int scanned, int imported, ImportCursor next, Ending ending) {
     }
 
     private record Claim(

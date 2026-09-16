@@ -2,9 +2,9 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
 import com.hoangluongtran0309.releaseflow.change.ChangeAiMerge.ClassifiedChange;
-import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -241,20 +241,20 @@ class Change {
      * Keeps the collected file list before the AI is asked, so a job that stops during
      * the AI call can still be classified from it without asking again.
      */
-    void recordChangedFiles(PullRequestFiles files) {
+    void recordChangedFiles(ChangedFiles files) {
         requireProcessing();
         this.changedFileStatus = files.isCollected() ? ChangedFileStatus.COLLECTED : ChangedFileStatus.UNAVAILABLE;
         this.changedFiles = files.isCollected() ? new ArrayList<>(files.files()) : null;
     }
 
     /** The changed files as recorded; a change recorded before collection counts as unavailable. */
-    PullRequestFiles recordedFiles() {
+    ChangedFiles recordedFiles() {
         return changedFileStatus == ChangedFileStatus.COLLECTED
-                ? PullRequestFiles.collected(changedFiles)
-                : PullRequestFiles.unavailable(PullRequestFiles.UNAVAILABLE, false);
+                ? ChangedFiles.collected(changedFiles)
+                : ChangedFiles.unavailable(ChangedFiles.NOT_RECORDED, false);
     }
 
-    void completeProcessing(PullRequestFiles files, ClassifiedChange outcome, Instant at) {
+    void completeProcessing(ChangedFiles files, ClassifiedChange outcome, Instant at) {
         requireProcessing();
         recordChangedFiles(files);
         apply(outcome, List.of(), at);

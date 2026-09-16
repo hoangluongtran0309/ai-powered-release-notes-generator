@@ -147,7 +147,7 @@ class InvitationPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(redirectedUrl("/login?invited"));
         MockHttpSession member = login("second@example.com", "member-password-1");
         mockMvc.perform(get("/projects").session(member))
-                .andExpect(content().string(containsString("Only organization administrators can connect repositories.")))
+                .andExpect(content().string(containsString("Only organization administrators can connect one.")))
                 .andExpect(content().string(not(matchesPattern("(?s).*action=\"/projects/[^\"]+/sources\".*"))));
         mockMvc.perform(get("/projects").session(admin))
                 .andExpect(content().string(matchesPattern("(?s).*action=\"/projects/[^\"]+/sources\".*")));

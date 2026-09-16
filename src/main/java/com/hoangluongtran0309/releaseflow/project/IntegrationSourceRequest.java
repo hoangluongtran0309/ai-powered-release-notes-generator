@@ -1,29 +1,33 @@
 package com.hoangluongtran0309.releaseflow.project;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
+import com.hoangluongtran0309.releaseflow.source.SourceType;
+import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
 
-/** A source to connect. Only GitHub repositories are supported so far. */
+/**
+ * A source to connect: a GitHub repository, or a GitLab project on an allowed instance.
+ * Which fields are required depends on the type, so they are checked together by
+ * {@link IntegrationSourceRequestValidator}.
+ */
+@ValidIntegrationSourceRequest
 public class IntegrationSourceRequest {
 
     private SourceType type = SourceType.GITHUB;
 
-    @NotBlank(message = "Repository owner is required.")
-    @Size(max = 39, message = "Repository owner must not exceed 39 characters.")
-    @Pattern(regexp = "[A-Za-z0-9_.-]+", message = "Repository owner contains unsupported characters.")
     private String owner;
 
-    @NotBlank(message = "Repository name is required.")
-    @Size(max = 100, message = "Repository name must not exceed 100 characters.")
-    @Pattern(regexp = "[A-Za-z0-9_.-]+", message = "Repository name contains unsupported characters.")
     private String repository;
+
+    private String projectPath;
+
+    private String apiBaseUrl;
+
+    private WebhookAuthMode webhookAuthMode = WebhookAuthMode.GITLAB_SIGNING_TOKEN;
 
     public SourceType getType() {
         return type;
     }
 
-    // An omitted type means GitHub, the only kind so far.
+    // An omitted type means GitHub, the type that existed before there was a choice.
     public void setType(SourceType type) {
         this.type = type == null ? SourceType.GITHUB : type;
     }
@@ -42,5 +46,30 @@ public class IntegrationSourceRequest {
 
     public void setRepository(String repository) {
         this.repository = repository == null ? null : repository.strip();
+    }
+
+    public String getProjectPath() {
+        return projectPath;
+    }
+
+    public void setProjectPath(String projectPath) {
+        this.projectPath = projectPath == null ? null : projectPath.strip();
+    }
+
+    public String getApiBaseUrl() {
+        return apiBaseUrl;
+    }
+
+    public void setApiBaseUrl(String apiBaseUrl) {
+        this.apiBaseUrl = apiBaseUrl == null ? null : apiBaseUrl.strip();
+    }
+
+    public WebhookAuthMode getWebhookAuthMode() {
+        return webhookAuthMode;
+    }
+
+    // Standard Webhooks is what a current GitLab sends unless the instance was told otherwise.
+    public void setWebhookAuthMode(WebhookAuthMode webhookAuthMode) {
+        this.webhookAuthMode = webhookAuthMode == null ? WebhookAuthMode.GITLAB_SIGNING_TOKEN : webhookAuthMode;
     }
 }

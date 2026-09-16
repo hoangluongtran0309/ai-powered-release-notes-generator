@@ -17,13 +17,13 @@ import java.time.Clock;
 @Configuration
 public class SecurityConfiguration {
 
-    // GitHub deliveries carry no session or CSRF token; the per-integration HMAC
-    // signature is verified by the webhook controller instead.
+    // Provider deliveries carry no session or CSRF token; each provider's own verifier
+    // establishes trust from the source's secret before anything is read.
     @Bean
     @Order(1)
     SecurityFilterChain webhookSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/webhooks/github/**")
+                .securityMatcher("/webhooks/**")
                 .authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
                 .csrf(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
