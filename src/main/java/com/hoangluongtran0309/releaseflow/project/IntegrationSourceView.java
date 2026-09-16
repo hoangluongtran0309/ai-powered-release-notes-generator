@@ -16,6 +16,7 @@ public record IntegrationSourceView(
         String owner,
         String repository,
         String apiBaseUrl,
+        String externalWorkspaceKey,
         WebhookAuthMode webhookAuthMode,
         UUID webhookId,
         String webhookPath,

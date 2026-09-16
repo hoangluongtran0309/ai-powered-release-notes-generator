@@ -29,8 +29,10 @@ final class MergedMergeRequest {
     static MergedPullRequest fromWebhook(JsonNode payload) {
         JsonNode attributes = payload.path("object_attributes");
         JsonNode labels = payload.path("labels").isArray() ? payload.path("labels") : attributes.path("labels");
+        int iid = FIELDS.positiveInt(attributes.path("iid"), "object_attributes.iid");
         return new MergedPullRequest(
-                FIELDS.positiveInt(attributes.path("iid"), "object_attributes.iid"),
+                Integer.toString(iid),
+                iid,
                 FIELDS.requiredText(attributes.path("title"), "object_attributes.title", Integer.MAX_VALUE),
                 FIELDS.optionalText(attributes.path("description")),
                 // The merge event names whoever merged it; GitLab does not name the author here.
@@ -53,8 +55,10 @@ final class MergedMergeRequest {
 
     /** One merge request from {@code GET /projects/{id}/merge_requests}. */
     static MergedPullRequest fromListItem(JsonNode mergeRequest) {
+        int iid = FIELDS.positiveInt(mergeRequest.path("iid"), "iid");
         return new MergedPullRequest(
-                FIELDS.positiveInt(mergeRequest.path("iid"), "iid"),
+                Integer.toString(iid),
+                iid,
                 FIELDS.requiredText(mergeRequest.path("title"), "title", Integer.MAX_VALUE),
                 FIELDS.optionalText(mergeRequest.path("description")),
                 FIELDS.requiredText(

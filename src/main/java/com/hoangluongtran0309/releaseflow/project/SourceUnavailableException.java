@@ -11,10 +11,12 @@ public class SourceUnavailableException extends RuntimeException {
         super(switch (sourceType) {
             case GITHUB -> "GitHub could not be reached to check the token. Try again later.";
             case GITLAB -> "GitLab could not be reached to check the token. Try again later.";
+            case LINEAR -> "Linear could not be reached to check the API key. Try again later.";
         });
         this.code = switch (sourceType) {
             case GITHUB -> "github_unavailable";
             case GITLAB -> "gitlab_unavailable";
+            case LINEAR -> "linear_unavailable";
         };
     }
 

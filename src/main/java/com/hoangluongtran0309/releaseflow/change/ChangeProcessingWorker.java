@@ -46,7 +46,7 @@ class ChangeProcessingWorker {
     private final ChangeProcessingJobRepository jobRepository;
     private final ChangeRepository changeRepository;
     private final SourceAccess sourceAccess;
-    private final ChangedFileCollectors collectors;
+    private final SourceEnrichers enrichers;
     private final ProjectSensitivePathService sensitivePaths;
     private final AiClassifiers aiClassifiers;
     private final OutputLanguageService outputLanguageService;
@@ -63,7 +63,7 @@ class ChangeProcessingWorker {
             ChangeProcessingJobRepository jobRepository,
             ChangeRepository changeRepository,
             SourceAccess sourceAccess,
-            ChangedFileCollectors collectors,
+            SourceEnrichers enrichers,
             ProjectSensitivePathService sensitivePaths,
             AiClassifiers aiClassifiers,
             OutputLanguageService outputLanguageService,
@@ -79,7 +79,7 @@ class ChangeProcessingWorker {
         this.jobRepository = jobRepository;
         this.changeRepository = changeRepository;
         this.sourceAccess = sourceAccess;
-        this.collectors = collectors;
+        this.enrichers = enrichers;
         this.sensitivePaths = sensitivePaths;
         this.aiClassifiers = aiClassifiers;
         this.outputLanguageService = outputLanguageService;
@@ -149,25 +149,30 @@ class ChangeProcessingWorker {
     }
 
     private void process(Claim claim) {
-        ChangedFiles files = collectFiles(claim);
-        if (!files.isCollected() && files.retryable() && claim.attempt() < MAX_ATTEMPTS) {
+        Enrichment enrichment = enrich(claim);
+        ChangedFiles files = enrichment.files();
+        if (enrichment.retryable() && claim.attempt() < MAX_ATTEMPTS) {
             reschedule(claim, files.failure());
             return;
         }
+        // Anything the provider restated is what the rules and the AI now judge.
+        MergedPullRequest change = enrichment.change();
         List<CategoryRef> catalog = categoryService.active(claim.organizationId());
-        ChangeClassification rules = ChangeClassifier.classify(claim.pullRequest(), files,
+        ChangeClassification rules = ChangeClassifier.classify(change, files,
                 sensitivePaths.forProject(claim.organizationId(), claim.projectId()), catalog);
 
         Optional<AiChangeClassifier> ai = aiClassifiers.active();
         if (ai.isEmpty()) {
-            complete(claim, files, ChangeAiMerge.merge(rules, null, null), files.failure());
+            complete(claim, enrichment, ChangeAiMerge.merge(rules, null, null), files.failure());
             return;
         }
 
         Boolean classifying = transactionTemplate.execute(status -> jobRepository.findById(claim.jobId())
                 .filter(job -> job.isClaimedAt(claim.claimedAt()))
                 .map(job -> {
-                    findChange(job).recordChangedFiles(files);
+                    Change stored = findChange(job);
+                    stored.refreshDetails(change);
+                    stored.recordChangedFiles(files);
                     job.startClassifying();
                     return true;
                 })
@@ -176,23 +181,29 @@ class ChangeProcessingWorker {
             return;
         }
 
-        AiOutcome outcome = askAi(ai.get(), claim, rules.category(), catalog);
+        AiOutcome outcome = askAi(ai.get(), claim, change, rules.category(), catalog);
         complete(
                 claim,
-                files,
-                ChangeAiMerge.merge(rules, outcome, claim.pullRequest(), settings.contextThreshold()),
+                enrichment,
+                ChangeAiMerge.merge(rules, outcome, change, settings.contextThreshold()),
                 outcome.succeeded() ? files.failure() : AI_FAILED
         );
     }
 
     // Exactly one request per change: a failure becomes a fallback, never a retry.
-    private AiOutcome askAi(AiChangeClassifier ai, Claim claim, CategoryRef rulesCategory, List<CategoryRef> catalog) {
+    private AiOutcome askAi(
+            AiChangeClassifier ai,
+            Claim claim,
+            MergedPullRequest change,
+            CategoryRef rulesCategory,
+            List<CategoryRef> catalog
+    ) {
         OutputLanguage language = outputLanguageService.outputLanguage(claim.organizationId());
         List<AudienceBrief> audiences = audienceService.briefs(claim.organizationId());
         try {
             AiClassification answer = ai.classify(AiClassificationRequest.of(
                     claim.changeId(),
-                    claim.pullRequest(),
+                    change,
                     language,
                     rulesCategory,
                     catalog,
@@ -208,7 +219,8 @@ class ChangeProcessingWorker {
         }
     }
 
-    private void complete(Claim claim, ChangedFiles files, ChangeAiMerge.ClassifiedChange outcome, String error) {
+    private void complete(Claim claim, Enrichment enrichment, ChangeAiMerge.ClassifiedChange outcome, String error) {
+        ChangedFiles files = enrichment.files();
         transactionTemplate.executeWithoutResult(status -> {
             ChangeProcessingJob job = jobRepository.findById(claim.jobId()).orElseThrow();
             if (!job.isClaimedAt(claim.claimedAt())) {
@@ -217,6 +229,7 @@ class ChangeProcessingWorker {
             }
             Instant now = now();
             Change change = findChange(job);
+            change.refreshDetails(enrichment.change());
             change.completeProcessing(files, outcome, now);
             duplicateDetector.detect(change);
             job.complete(error, now);
@@ -246,15 +259,15 @@ class ChangeProcessingWorker {
     }
 
     // The source says which provider to ask and how to address its project.
-    private ChangedFiles collectFiles(Claim claim) {
+    private Enrichment enrich(Claim claim) {
         Optional<SourceCredentials> credentials = sourceAccess.find(claim.organizationId(), claim.projectId(),
                 claim.sourceId());
         Optional<String> token = credentials.flatMap(SourceCredentials::accessToken);
         if (token.isEmpty()) {
-            return ChangedFiles.unavailable(ChangedFiles.NO_ACCESS_TOKEN, false);
+            return Enrichment.of(ChangedFiles.unavailable(ChangedFiles.NO_ACCESS_TOKEN, false), claim.pullRequest());
         }
-        return collectors.of(credentials.get().sourceType())
-                .collect(credentials.get(), token.get(), claim.pullRequest().number());
+        return enrichers.of(credentials.get().sourceType())
+                .enrich(credentials.get(), token.get(), claim.pullRequest());
     }
 
     // Only a job still collecting files is retried; once the AI may have been asked, it never is.

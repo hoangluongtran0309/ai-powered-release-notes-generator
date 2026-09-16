@@ -294,8 +294,45 @@ version has been released.
   signature modes, the clock skew, the instance allowlist, withheld diffs, the
   import, and tenant isolation.
 
+- Linear as a third source type (ADR-0018): a Project can connect a Linear team,
+  and an issue that moves into a completed state becomes a change through the
+  same intake, classification, AI, review, and release notes.
+- A public, sessionless `POST /webhooks/linear/{webhookId}` endpoint that
+  requires a `Linear-Delivery` header, a `createdAt` within
+  `RELEASEFLOW_LINEAR_WEBHOOK_CLOCK_SKEW` (60 seconds, ISO-8601 or epoch seconds
+  or milliseconds), an `organizationId` equal to the connected workspace, and a
+  constant-time hex HMAC-SHA256 of the raw body in `Linear-Signature`.
+- `ChangedFileStatus.NOT_SUPPORTED` for a source that has no changed files at
+  all, distinct from a list that failed to arrive, and a `SENSITIVE_KEYWORD`
+  review trigger from scanning a change's own title and description for
+  `breaking change`, `migration`, `security`, `auth`, `credential`, `password`,
+  and `encryption`. A change from such a source needs review only on a match.
+- Linear enrichment that reads the issue back over GraphQL, so a change carries
+  the issue's current title, description, creator, and URL, and an issue of
+  another team or workspace adds nothing.
+- Linear source setup that takes the signing secret Linear minted and an API key,
+  both write-only, confirms the team with GraphQL `team(id)` before storing
+  anything, and records the workspace every later delivery is checked against.
+- Flyway migration `V20` for Linear sources, and Testcontainers coverage of the
+  signature, the freshness window, the state-transition filter, a workspace or
+  team mismatch, the keyword fallback, the GraphQL restatement, and the refused
+  history import.
+
 ### Changed
 
+- A change records its source's type. `changes.source_type` is tied to the source
+  by the composite foreign key `(source_id, source_type)`, and
+  `changes_commit_matches_type` replaces three `NOT NULL` declarations: a GitHub
+  or GitLab change must still have a merge commit and a target branch, and a
+  Linear change must have neither. `author_login` is now optional too, because an
+  issue tracker may not name a creator.
+- The changed-file seam became an enrichment seam: `ChangedFileCollector` is now
+  `SourceEnricher`, whose result carries both the files a provider could list and
+  the change with anything the provider restated. The worker classifies and
+  prompts the AI from the restated change.
+- A history reader is required only for a source type that has a history;
+  `SourceSyncView` reports `supportsImport`, and starting or resuming an import
+  for a type without one answers `409 source_import_not_supported`.
 - Sources are no longer GitHub-only. `ChangedFile`, `ChangedFiles` (formerly
   `PullRequestFiles`), `ProviderListing`, `ProviderAccess`, and `SourceType`
   moved into a `source` package; `GitHubRepositoryAccess` became `SourceAccess`

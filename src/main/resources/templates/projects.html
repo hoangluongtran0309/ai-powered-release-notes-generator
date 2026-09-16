@@ -124,10 +124,15 @@
                             <h3 class="font-semibold" th:text="${source.externalProjectKey}">owner/repository</h3>
                             <p class="text-xs text-slate-500" th:if="${source.type.name() == 'GITLAB'}"
                                th:text="${source.apiBaseUrl}">https://gitlab.com</p>
+                            <p class="text-xs text-slate-500" th:if="${source.type.name() == 'LINEAR'}"
+                               th:text="|Workspace ${source.externalWorkspaceKey}|">Workspace acme</p>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="badge badge-sm badge-ghost"
-                                  th:text="${source.type.name() == 'GITHUB'} ? 'GitHub' : 'GitLab'">GitHub</span>
+                            <span class="badge badge-sm badge-ghost" th:switch="${source.type.name()}">
+                                <span th:case="'GITHUB'">GitHub</span>
+                                <span th:case="'GITLAB'">GitLab</span>
+                                <span th:case="'LINEAR'">Linear</span>
+                            </span>
                             <span class="badge badge-sm badge-error badge-soft" th:if="${source.connectionStatus.name() == 'ERROR'}"
                                   th:title="${source.lastErrorCode}">Connection failing</span>
                         </div>
@@ -176,6 +181,10 @@
                                 A project access token with the <code>read_api</code> scope. ReleaseFlow checks it with this
                                 GitLab instance, stores it encrypted, and never shows it again.
                             </p>
+                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'LINEAR'}">
+                                A Linear API key that can read this team. ReleaseFlow checks that it still reaches the
+                                same workspace, stores it encrypted, and never shows it again.
+                            </p>
                         </div>
                         <div class="alert alert-error" role="alert" th:if="${tokenFailing and tokenError != null}">
                             <span th:text="${tokenError}">The provider did not accept this token.</span>
@@ -191,11 +200,13 @@
                 </div>
                 <p class="text-xs text-slate-500">
                     In each source's webhook settings, use your ReleaseFlow address followed by that source's path as the
-                    payload URL, with the secret shown when it was connected: on GitHub, content type
-                    <code>application/json</code> and the <strong>Pull requests</strong> event; on GitLab, the
-                    <strong>Merge request events</strong> trigger. Merged pull and merge requests are recorded once each;
-                    import earlier ones from the
-                    <a class="link" th:href="@{/changes(project=${project.id})}">Change Inbox</a>.
+                    payload URL: on GitHub, content type <code>application/json</code>, the saved secret, and the
+                    <strong>Pull requests</strong> event; on GitLab, the saved secret and the
+                    <strong>Merge request events</strong> trigger; on Linear, the <strong>Issues</strong> event, with
+                    Linear's own signing secret pasted into ReleaseFlow when the team was connected. Each merged pull
+                    request, merge request, and completed issue is recorded once; import earlier ones from the
+                    <a class="link" th:href="@{/changes(project=${project.id})}">Change Inbox</a>, where a source keeps
+                    a history to import.
                 </p>
             </section>
 
@@ -220,6 +231,7 @@
                             th:classappend="${failing and #fields.hasErrors('type')} ? 'select-error'">
                         <option value="GITHUB" th:selected="${!failing or sourceRequest.type.name() == 'GITHUB'}">GitHub repository</option>
                         <option value="GITLAB" th:selected="${failing and sourceRequest.type.name() == 'GITLAB'}">GitLab project</option>
+                        <option value="LINEAR" th:selected="${failing and sourceRequest.type.name() == 'LINEAR'}">Linear team</option>
                     </select>
                 </label>
                 <template x-if="type === 'GITHUB'">
@@ -273,7 +285,38 @@
                         </label>
                     </div>
                 </template>
-                <button type="submit" class="btn w-full" th:classappend="${sourceCount == 0} ? 'btn-primary' : 'btn-outline'">Generate webhook credentials</button>
+                <template x-if="type === 'LINEAR'">
+                    <div class="grid gap-4">
+                        <p class="text-sm text-slate-600">
+                            Create the webhook in Linear first, under <strong>Settings → API → Webhooks</strong>, with the
+                            <strong>Issues</strong> event. Linear generates its own signing secret, so paste that secret
+                            and an API key here.
+                        </p>
+                        <label class="form-control"><span class="label-text font-medium">Team ID</span>
+                            <input type="text" name="teamId" maxlength="200" placeholder="a1b2c3d4-0000-4000-8000-000000000000"
+                                   class="input input-bordered w-full font-mono text-xs" :required="type === 'LINEAR'"
+                                   th:value="${failing} ? ${sourceRequest.teamId} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('teamId')} ? 'input-error'">
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('teamId')}" th:errors="*{teamId}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">Webhook signing secret</span>
+                            <input type="password" name="webhookSecret" maxlength="255" autocomplete="off" spellcheck="false"
+                                   class="input input-bordered w-full font-mono" :required="type === 'LINEAR'"
+                                   th:classappend="${failing and #fields.hasErrors('webhookSecret')} ? 'input-error'">
+                            <span class="label-text-alt text-slate-500">The value Linear showed when the webhook was created.</span>
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('webhookSecret')}" th:errors="*{webhookSecret}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">API key</span>
+                            <input type="password" name="apiToken" maxlength="255" autocomplete="off" spellcheck="false"
+                                   class="input input-bordered w-full font-mono" :required="type === 'LINEAR'"
+                                   th:classappend="${failing and #fields.hasErrors('apiToken')} ? 'input-error'">
+                            <span class="label-text-alt text-slate-500">Checked with Linear before anything is stored.</span>
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('apiToken')}" th:errors="*{apiToken}"></span>
+                        </label>
+                    </div>
+                </template>
+                <button type="submit" class="btn w-full" th:classappend="${sourceCount == 0} ? 'btn-primary' : 'btn-outline'"
+                        x-text="type === 'LINEAR' ? 'Connect the team' : 'Generate webhook credentials'">Generate webhook credentials</button>
             </form>
 
             <div class="mt-auto pt-5">

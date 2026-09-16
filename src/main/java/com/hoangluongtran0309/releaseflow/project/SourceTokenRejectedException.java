@@ -11,10 +11,12 @@ public class SourceTokenRejectedException extends RuntimeException {
         super(switch (sourceType) {
             case GITHUB -> "GitHub did not accept this token for reading the repository's pull requests.";
             case GITLAB -> "GitLab did not accept this token for reading the project.";
+            case LINEAR -> "Linear did not accept this API key for reading the team.";
         });
         this.code = switch (sourceType) {
             case GITHUB -> "github_token_rejected";
             case GITLAB -> "gitlab_token_rejected";
+            case LINEAR -> "linear_token_rejected";
         };
     }
 

@@ -83,6 +83,9 @@ final class ChangeClassifier {
             sensitivePaths.matches(files.files()).stream()
                     .map(ReviewTrigger::sensitivePath)
                     .forEach(triggers::add);
+        } else if (files.isNotSupported()) {
+            // Nothing failed: this source has no files, so its own words are the evidence.
+            triggers.addAll(SensitiveKeywords.matches(pullRequest.title(), pullRequest.description()));
         } else {
             triggers.add(ReviewTrigger.changedFilesUnavailable());
         }

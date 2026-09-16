@@ -11,6 +11,7 @@ public record SourceSyncView(
         UUID sourceId,
         String externalProjectKey,
         String deliveryMechanism,
+        boolean supportsImport,
         boolean accessTokenConfigured,
         String status,
         Instant windowStart,

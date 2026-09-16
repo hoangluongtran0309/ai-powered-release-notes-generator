@@ -339,6 +339,7 @@ class ChangeClassifierTest {
 
     private static MergedPullRequest pullRequest(String title, List<String> labels, String description) {
         return new MergedPullRequest(
+                "7",
                 7,
                 title,
                 description,

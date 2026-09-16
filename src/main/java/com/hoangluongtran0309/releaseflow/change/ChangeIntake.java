@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import com.hoangluongtran0309.releaseflow.source.SourceType;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -43,6 +44,7 @@ class ChangeIntake {
             UUID organizationId,
             UUID projectId,
             UUID sourceId,
+            SourceType sourceType,
             MergedPullRequest pullRequest,
             ChangeOrigin origin,
             UUID deliveryId
@@ -60,6 +62,7 @@ class ChangeIntake {
                         organizationId,
                         projectId,
                         sourceId,
+                        sourceType,
                         pullRequest,
                         origin,
                         deliveryId,

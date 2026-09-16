@@ -31,6 +31,7 @@ import com.hoangluongtran0309.releaseflow.change.DuplicateCandidateDecidedExcept
 import com.hoangluongtran0309.releaseflow.change.DuplicateCandidateNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.GitHubWebhookController;
 import com.hoangluongtran0309.releaseflow.change.GitLabWebhookController;
+import com.hoangluongtran0309.releaseflow.change.LinearWebhookController;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeFilterException;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.change.InvalidSensitivePathsException;
@@ -38,6 +39,7 @@ import com.hoangluongtran0309.releaseflow.change.MalformedWebhookPayloadExceptio
 import com.hoangluongtran0309.releaseflow.change.SensitivePathApiController;
 import com.hoangluongtran0309.releaseflow.change.SourceImportApiController;
 import com.hoangluongtran0309.releaseflow.change.SourceImportNotResumableException;
+import com.hoangluongtran0309.releaseflow.change.SourceImportNotSupportedException;
 import com.hoangluongtran0309.releaseflow.change.SourceSyncInProgressException;
 import com.hoangluongtran0309.releaseflow.change.SourceTokenMissingException;
 import com.hoangluongtran0309.releaseflow.change.WebhookPayloadTooLargeException;
@@ -88,6 +90,7 @@ import java.util.Map;
         ProjectApiController.class,
         GitHubWebhookController.class,
         GitLabWebhookController.class,
+        LinearWebhookController.class,
         ChangeApiController.class,
         ReleaseApiController.class,
         AudienceApiController.class,
@@ -594,6 +597,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(SourceSyncInProgressException.class)
     ResponseEntity<ProblemDetail> sourceSyncInProgress(SourceSyncInProgressException exception) {
         return response(problem(HttpStatus.CONFLICT, "Import in progress", exception.getMessage(), "source_sync_in_progress"));
+    }
+
+    @ExceptionHandler(SourceImportNotSupportedException.class)
+    ResponseEntity<ProblemDetail> sourceImportNotSupported(SourceImportNotSupportedException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Import not supported",
+                exception.getMessage(),
+                "source_import_not_supported"
+        ));
     }
 
     @ExceptionHandler(SourceImportNotResumableException.class)

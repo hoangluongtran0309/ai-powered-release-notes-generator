@@ -156,7 +156,7 @@ class SourceImportWorker {
                 }
             }
 
-            Scan scan = readPage(claim, reader, page.items(), cursor, imported);
+            Scan scan = readPage(claim, credentials.get(), reader, page.items(), cursor, imported);
             imported += scan.imported();
             // A page the provider says is its last one ends the import.
             Ending ending = scan.ending() == Ending.MORE && page.lastPage() ? Ending.COMPLETE : scan.ending();
@@ -175,6 +175,7 @@ class SourceImportWorker {
     // Handles the items of one page from the cursor's offset.
     private Scan readPage(
             Claim claim,
+            SourceCredentials credentials,
             SourceHistoryReader reader,
             List<HistoryItem> items,
             ImportCursor cursor,
@@ -199,7 +200,8 @@ class SourceImportWorker {
                 continue;
             }
             ChangeIntake.Outcome outcome = intake.record(
-                    claim.organizationId(), claim.projectId(), claim.sourceId(), item.change(), ChangeOrigin.IMPORT, null);
+                    claim.organizationId(), claim.projectId(), claim.sourceId(), credentials.sourceType(),
+                    item.change(), ChangeOrigin.IMPORT, null);
             if (outcome == ChangeIntake.Outcome.RECORDED) {
                 imported++;
                 if (importedBefore + imported >= claim.itemLimit()) {

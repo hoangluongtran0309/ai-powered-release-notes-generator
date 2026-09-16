@@ -68,7 +68,7 @@ class ContextSufficiencyTest {
     }
 
     private static ContextAssessment assess(String title, String description, int score, List<String> reasons) {
-        MergedPullRequest pullRequest = new MergedPullRequest(7, title, description, "octocat", List.of(), "main",
+        MergedPullRequest pullRequest = new MergedPullRequest("7", 7, title, description, "octocat", List.of(), "main",
                 "a".repeat(40), Instant.parse("2026-09-10T09:14:22Z"), "https://github.com/acme/app/pull/7");
         return ContextSufficiency.assess(pullRequest, score, reasons, THRESHOLD);
     }

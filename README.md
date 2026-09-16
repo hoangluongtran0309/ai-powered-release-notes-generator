@@ -16,18 +16,20 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V19`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V20`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
-- create-only GitHub repository and GitLab project sources, several per Project;
+- create-only GitHub repository, GitLab project, and Linear team sources, several
+  per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
 - AES-256-GCM encryption at rest with one-time secret reveal;
-- signed GitHub and GitLab webhook endpoints that record each merged pull or
-  merge request once as a normalized change, and show the last verified delivery
-  per source;
+- signed GitHub, GitLab, and Linear webhook endpoints that record each merged
+  pull request, merged merge request, and completed issue once as a normalized
+  change, and show the last verified delivery per source;
 - an optional, write-only access token per source, confirmed with the provider
   and stored encrypted;
-- a durable processing queue that lists each change's touched files outside the
-  webhook request, with bounded retries;
+- a durable processing queue that asks each change's provider for what it can
+  add — the files it touched, or the issue restated — outside the webhook
+  request, with bounded retries;
 - deterministic, explainable classification of every recorded change, with
   breaking, unrecognized, and sensitive-file changes always marked for human
   review, and sensitive-path patterns that administrators can add per Project;
@@ -106,11 +108,13 @@ REST clients use the same session and CSRF policy as the server-rendered UI:
 3. Sign in through `POST /login` using `email` and `password` form fields.
 4. Read the authenticated identity from `GET /api/session`.
 5. Create and list tenant-scoped Projects through `POST|GET /api/projects`.
-6. Connect a source with `POST /api/projects/{projectId}/sources`, either
-   `{"type": "GITHUB", "owner", "repository"}` or
-   `{"type": "GITLAB", "apiBaseUrl", "projectPath", "webhookAuthMode"}`. Save
-   the returned `webhookSecret` immediately; it is never returned again. A
-   Project may have several sources; `GET /api/projects/{projectId}/sources`
+6. Connect a source with `POST /api/projects/{projectId}/sources`:
+   `{"type": "GITHUB", "owner", "repository"}`,
+   `{"type": "GITLAB", "apiBaseUrl", "projectPath", "webhookAuthMode"}`, or
+   `{"type": "LINEAR", "teamId", "webhookSecret", "apiToken"}`. For GitHub and
+   GitLab, save the returned `webhookSecret` immediately; it is never returned
+   again. Linear makes its own secret, so you supply it and nothing is returned.
+   A Project may have several sources; `GET /api/projects/{projectId}/sources`
    lists them.
 7. Optionally set a source's access token with
    `PUT /api/projects/{projectId}/sources/{sourceId}/token` (see
@@ -123,8 +127,8 @@ Organization, while different Organizations may connect the same one, and the
 same name on the two providers is two separate sources. Connecting a source and
 setting its token are for administrators; every member can list sources. An
 unknown source returns `404 source_not_found`, and one already connected returns
-`409 github_repository_already_connected` or
-`409 gitlab_project_already_connected`.
+`409 github_repository_already_connected`,
+`409 gitlab_project_already_connected`, or `409 linear_team_already_connected`.
 
 `GET /api/status` remains public.
 
@@ -292,7 +296,44 @@ curl -sS -X POST "http://localhost:8080$WEBHOOK_PATH" \
   --data-binary "$BODY"
 ```
 
+## Receive Linear webhooks
+
+Linear mints the signing secret itself, so create the webhook there first: under
+**Settings → API → Webhooks**, set the URL to your ReleaseFlow address followed
+by the path ReleaseFlow shows for the source, and enable the **Issues** event.
+Copy the secret Linear displays and paste it, with an API key, when connecting
+the team in ReleaseFlow.
+
+`POST /webhooks/linear/{webhookId}` needs no session or CSRF token. A delivery
+proves itself with four things, all of which must hold:
+
+- a `Linear-Delivery` header;
+- a `createdAt` within `RELEASEFLOW_LINEAR_WEBHOOK_CLOCK_SKEW` (60 seconds) of
+  ReleaseFlow's clock, in ISO-8601 or as epoch seconds or milliseconds;
+- an `organizationId` equal to the workspace the team belongs to, which
+  ReleaseFlow learned when the team was connected;
+- a hex HMAC-SHA256 of the raw body in `Linear-Signature`.
+
+| Delivery | Response |
+| --- | --- |
+| Larger than 1 MiB | `413` `webhook_payload_too_large` |
+| Unknown webhook ID, a source of another type, a missing header, a stale stamp, another workspace, or a wrong signature | `401` `webhook_signature_invalid` |
+| An issue of a team other than the connected one | `422` `webhook_repository_mismatch` |
+| Proven delivery with invalid JSON, or an issue missing fields | `400` `webhook_payload_malformed` |
+| An issue that has just moved into a completed state | `200` `recorded`, or `duplicate` when already recorded |
+| Any other event, action, or state change | `200` `ignored` |
+
+An issue counts only when it really moved into being done: `type` `Issue`,
+`action` `update`, an `updatedFrom` that carries a state, a new state of
+`completed`, and an old state that is not. Editing an issue that was already
+completed changes nothing.
+
+Linear names no delivery ReleaseFlow can record as a GUID, so a Linear change
+carries no delivery ID. Each issue is still stored once per source, by its UUID,
+so redeliveries are harmless.
+
 ## Access tokens
+
 
 
 With an access token, ReleaseFlow lists the files each merged pull or merge
@@ -302,33 +343,46 @@ every new change needs review, because nothing can be ruled out.
 For GitHub, create a fine-grained personal access token limited to the
 repository, with **Pull requests: Read-only** permission (a classic token needs
 `repo` for a private repository). For GitLab, create a project access token with
-the `read_api` scope. An administrator enters it under the source in the
-Project's card on the Projects page, or calls:
+the `read_api` scope. For Linear, create an API key that can read the team —
+that one is required when the team is connected, because confirming it is also
+how ReleaseFlow learns the workspace. An administrator enters it under the
+source in the Project's card on the Projects page, or calls:
 
 ```text
 PUT /api/projects/{projectId}/sources/{sourceId}/token {"token"}   (administrator; 204)
 ```
 
 ReleaseFlow first asks the provider to confirm the token — GitHub for the
-repository's pull requests, GitLab for the project — then stores it encrypted
-with AES-256-GCM. The token is never returned; the source only reports
+repository's pull requests, GitLab for the project, Linear for the team, which it
+accepts only while the key still reaches the same workspace — then stores it
+encrypted with AES-256-GCM. The token is never returned; the source only reports
 `accessTokenConfigured` and `accessTokenUpdatedAt`. Sending a new token replaces
 the old one. Errors are `400 github_token_rejected` or `400 gitlab_token_rejected`
-when the provider refuses the token, `503 github_unavailable` or
-`503 gitlab_unavailable` when it cannot be reached, `404 source_not_found`, and
-`403` for members.
+or `400 linear_token_rejected` when the provider refuses the token,
+`503 github_unavailable` or `503 gitlab_unavailable` when it cannot be reached,
+`404 source_not_found`, and `403` for members.
 
 GitLab's changed files come from the merge request's diffs, at most ten pages of
 a hundred. A diff GitLab reports as collapsed, too large, or truncated makes the
 whole list unavailable rather than short, so a file that was never seen is never
 declared safe.
 
+Linear has no changed files at all, which is not the same as failing to list
+them: instead of forcing review for ever, ReleaseFlow reads the issue's own title
+and description for `breaking change`, `migration`, `security`, `auth`,
+`credential`, `password`, and `encryption`, and each match becomes a
+**Sensitive word** trigger that forces review. Linear's token is also what lets
+ReleaseFlow read the issue back, so a change carries the issue's current wording
+rather than whatever it said the instant it was completed.
+
 ## History import
 
 Webhooks bring in the pull and merge requests merged after a source is
 connected. To add the ones merged before, an administrator opens the **History
 import** panel of the Change Inbox and chooses **Import last 90 days** for a
-source with an access token, or calls the REST endpoints below. A background
+source with an access token, or calls the REST endpoints below. Only a source
+whose provider keeps a history ReleaseFlow can read appears there; Linear does
+not, and asking anyway answers `409 source_import_not_supported`. A background
 worker reads the source's history 100 items per page — GitHub's closed pull
 requests, most recently updated first, or GitLab's merged merge requests updated
 after the window's start, least recently updated first — and records every one
@@ -361,7 +415,9 @@ window, `lastSyncAt`, `lastErrorCode`, and `canResumeImport`. Errors are
 `409 source_import_not_resumable`, and `404 source_not_found`. See
 [ADR-0016](docs/adr/0016-integration-sources-and-history-import.md).
 
-See also [ADR-0017](docs/adr/0017-gitlab-sources.md) for the GitLab source.
+See also [ADR-0017](docs/adr/0017-gitlab-sources.md) for the GitLab source and
+[ADR-0018](docs/adr/0018-linear-sources.md) for the Linear source, which has no
+history to import.
 
 These provider settings are optional:
 
@@ -372,6 +428,9 @@ These provider settings are optional:
 | `RELEASEFLOW_GITLAB_ALLOWED_HOSTS` | `gitlab.com` | The GitLab instances a source may name |
 | `RELEASEFLOW_GITLAB_TIMEOUT` | `PT5S` | Connect and read timeout for GitLab |
 | `RELEASEFLOW_GITLAB_WEBHOOK_CLOCK_SKEW` | `PT5M` | How stale a signed GitLab delivery may be |
+| `RELEASEFLOW_LINEAR_API_BASE_URL` | `https://api.linear.app` | Where Linear's GraphQL API is called |
+| `RELEASEFLOW_LINEAR_TIMEOUT` | `PT5S` | Connect and read timeout for Linear |
+| `RELEASEFLOW_LINEAR_WEBHOOK_CLOCK_SKEW` | `PT60S` | How stale a signed Linear delivery may be |
 | `RELEASEFLOW_WEBHOOK_MAX_BODY_BYTES` | `1048576` | The largest delivery any provider may send |
 
 ## Change Inbox

@@ -9,17 +9,19 @@ classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
-source, and GitLab source slices: one Spring Boot application,
-PostgreSQL/Flyway V1-V19,
+source, GitLab source, and Linear source slices: one Spring Boot application,
+PostgreSQL/Flyway V1-V20,
 administrator
 registration, member
 invitations with administrator and member roles, session
-authentication, tenant-scoped Projects with one or more GitHub repository or
-GitLab project sources, per-source encrypted webhook secrets, a resumable 90-day
-history import, webhook endpoints that record normalized merged pull and merge
-requests idempotently once the source's own secret proves the delivery, optional
+authentication, tenant-scoped Projects with one or more GitHub repository,
+GitLab project, or Linear team sources, per-source encrypted webhook secrets, a
+resumable 90-day history import for the providers that keep one, webhook
+endpoints that record normalized merged pull requests, merged merge requests, and
+completed issues idempotently once the source's own secret proves the delivery,
 write-only access tokens, a durable
-`SKIP LOCKED` worker that lists changed files outside transactions,
+`SKIP LOCKED` worker that asks each provider for what it can add, outside
+transactions,
 rule-based classification against a per-Organization category catalog with
 mandatory review for breaking, Unknown, and sensitive-file changes, a
 per-Project Change Inbox, optional automatic AI
@@ -66,8 +68,15 @@ Read `README.md`, `docs/architecture.md`, and
   no credentials, query, or fragment; the allowlist is checked again before every
   call and a redirect is never followed. A diff GitLab collapsed, truncated, or
   called too large makes the whole file list unavailable, never short.
+- A provider that mints its own webhook secret gets it pasted in and never
+  echoed; ReleaseFlow generates one only where it can. A Linear delivery is
+  proven by its delivery header, a stamp within a minute, its workspace, and a
+  signature over the raw body.
 - Review triggers only add a need for review; only a recorded human review
-  clears it. Missing, refused, or incomplete changed-file lists force review.
+  clears it. Missing, refused, or incomplete changed-file lists force review. A
+  source that cannot report files at all is not a failed fetch: it falls back to
+  the keyword scan of the change's own title and description, and only a match
+  forces review.
 - A `PROCESSING` change cannot be reviewed, sent to AI, or released.
 - A release's changes are chosen while it is a draft; during review a change
   can only be rejected, which removes it. A release is approved only when every
@@ -82,8 +91,12 @@ Read `README.md`, `docs/architecture.md`, and
 - Integration source ciphertexts are bound to the source's ID and to its
   repository for GitHub or its type and project path for GitLab; never rewrite
   those columns, or existing secrets stop decrypting.
-- Each source type has exactly one `ChangedFileCollector` and one
-  `SourceHistoryReader`; a type without both fails at startup.
+- Each source type has exactly one `SourceEnricher`, and one
+  `SourceHistoryReader` when it has a history; a type missing either fails at
+  startup. A provider may restate a change's wording, never its identity, labels,
+  or times.
+- A change records its source's type, which the database ties to the source
+  itself. Only a code host's change has a merge commit and a target branch.
 - The sensitive-path list must compile and must not be empty. A Project's
   additions extend it and never remove any of it; they apply only to changes
   classified afterwards.

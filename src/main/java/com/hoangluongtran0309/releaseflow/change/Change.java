@@ -5,6 +5,7 @@ import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.source.ChangedFile;
 import com.hoangluongtran0309.releaseflow.change.ChangeAiMerge.ClassifiedChange;
 import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
+import com.hoangluongtran0309.releaseflow.source.SourceType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -43,17 +44,19 @@ class Change {
     @Column(columnDefinition = "text")
     private String description;
 
-    @Column(name = "author_login", nullable = false, length = 100)
+    // An issue tracker may not name a creator.
+    @Column(name = "author_login", length = 100)
     private String authorLogin;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(nullable = false, columnDefinition = "text[]")
     private String[] labels;
 
-    @Column(name = "target_branch", nullable = false, length = 255)
+    // Only a code host's change has a branch it was merged into and a merge commit.
+    @Column(name = "target_branch", length = 255)
     private String targetBranch;
 
-    @Column(name = "merge_commit_sha", nullable = false, length = 64)
+    @Column(name = "merge_commit_sha", length = 64)
     private String mergeCommitSha;
 
     @Column(name = "merged_at", nullable = false)
@@ -62,7 +65,11 @@ class Change {
     @Column(nullable = false, length = 2048)
     private String url;
 
-    // Where the change came from, and the source's own ID for it (the pull request number).
+    // Where the change came from, and the source's own ID for it.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", length = 20, updatable = false)
+    private SourceType sourceType;
+
     @Column(name = "source_id", updatable = false)
     private UUID sourceId;
 
@@ -189,6 +196,7 @@ class Change {
             UUID organizationId,
             UUID projectId,
             UUID sourceId,
+            SourceType sourceType,
             MergedPullRequest pullRequest,
             ChangeOrigin origin,
             UUID deliveryId,
@@ -199,6 +207,7 @@ class Change {
         change.organizationId = organizationId;
         change.projectId = projectId;
         change.sourceId = sourceId;
+        change.sourceType = sourceId == null ? null : sourceType;
         change.externalId = sourceId == null ? null : externalId(pullRequest);
         change.origin = origin;
         change.pullRequestNumber = pullRequest.number();
@@ -225,6 +234,7 @@ class Change {
 
     MergedPullRequest pullRequest() {
         return new MergedPullRequest(
+                externalId,
                 pullRequestNumber,
                 title,
                 description,
@@ -238,20 +248,37 @@ class Change {
     }
 
     /**
+     * Replaces the wording a provider can restate, which an issue tracker can, because the
+     * issue may have been edited between being completed and being read back. Identity,
+     * labels, and times are never touched.
+     */
+    void refreshDetails(MergedPullRequest change) {
+        requireProcessing();
+        this.title = change.title();
+        this.description = change.description();
+        this.authorLogin = change.authorLogin();
+        this.url = change.url();
+    }
+
+    /**
      * Keeps the collected file list before the AI is asked, so a job that stops during
      * the AI call can still be classified from it without asking again.
      */
     void recordChangedFiles(ChangedFiles files) {
         requireProcessing();
-        this.changedFileStatus = files.isCollected() ? ChangedFileStatus.COLLECTED : ChangedFileStatus.UNAVAILABLE;
+        this.changedFileStatus = files.isCollected()
+                ? ChangedFileStatus.COLLECTED
+                : files.isNotSupported() ? ChangedFileStatus.NOT_SUPPORTED : ChangedFileStatus.UNAVAILABLE;
         this.changedFiles = files.isCollected() ? new ArrayList<>(files.files()) : null;
     }
 
     /** The changed files as recorded; a change recorded before collection counts as unavailable. */
     ChangedFiles recordedFiles() {
-        return changedFileStatus == ChangedFileStatus.COLLECTED
-                ? ChangedFiles.collected(changedFiles)
-                : ChangedFiles.unavailable(ChangedFiles.NOT_RECORDED, false);
+        return switch (changedFileStatus) {
+            case COLLECTED -> ChangedFiles.collected(changedFiles);
+            case NOT_SUPPORTED -> ChangedFiles.notSupported();
+            case null, default -> ChangedFiles.unavailable(ChangedFiles.NOT_RECORDED, false);
+        };
     }
 
     void completeProcessing(ChangedFiles files, ClassifiedChange outcome, Instant at) {
@@ -454,9 +481,9 @@ class Change {
         return url;
     }
 
-    /** A pull request's ID within its source. */
-    static String externalId(MergedPullRequest pullRequest) {
-        return Integer.toString(pullRequest.number());
+    /** How the source names this change; what makes it idempotent. */
+    static String externalId(MergedPullRequest change) {
+        return change.externalId();
     }
 
     UUID getSourceId() {

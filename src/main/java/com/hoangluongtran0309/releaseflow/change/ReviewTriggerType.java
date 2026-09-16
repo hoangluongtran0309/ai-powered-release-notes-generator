@@ -8,6 +8,8 @@ public enum ReviewTriggerType {
     SENSITIVE_PATH,
     /** The changed files could not be listed, so nothing could be ruled out. */
     CHANGED_FILES_UNAVAILABLE,
+    /** A source without changed files used a risky word; the detail is that word. */
+    SENSITIVE_KEYWORD,
     /** The AI provider failed or its answer was unusable, so no AI judgement exists. */
     CLASSIFIER_FALLBACK,
     /** No catalog category fit, and the AI proposed a new one; the detail is its code. */

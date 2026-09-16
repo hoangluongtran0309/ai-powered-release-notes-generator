@@ -4,9 +4,9 @@ import com.hoangluongtran0309.releaseflow.source.SourceType;
 import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
 
 /**
- * A source to connect: a GitHub repository, or a GitLab project on an allowed instance.
- * Which fields are required depends on the type, so they are checked together by
- * {@link IntegrationSourceRequestValidator}.
+ * A source to connect: a GitHub repository, a GitLab project on an allowed instance, or a
+ * Linear team. Which fields are required depends on the type, so they are checked
+ * together by {@link IntegrationSourceRequestValidator}.
  */
 @ValidIntegrationSourceRequest
 public class IntegrationSourceRequest {
@@ -22,6 +22,13 @@ public class IntegrationSourceRequest {
     private String apiBaseUrl;
 
     private WebhookAuthMode webhookAuthMode = WebhookAuthMode.GITLAB_SIGNING_TOKEN;
+
+    private String teamId;
+
+    // Linear mints its own webhook secret, so an administrator pastes it in.
+    private String webhookSecret;
+
+    private String apiToken;
 
     public SourceType getType() {
         return type;
@@ -64,6 +71,30 @@ public class IntegrationSourceRequest {
         this.apiBaseUrl = apiBaseUrl == null ? null : apiBaseUrl.strip();
     }
 
+    public String getTeamId() {
+        return teamId;
+    }
+
+    public void setTeamId(String teamId) {
+        this.teamId = teamId == null ? null : teamId.strip();
+    }
+
+    public String getWebhookSecret() {
+        return webhookSecret;
+    }
+
+    public void setWebhookSecret(String webhookSecret) {
+        this.webhookSecret = webhookSecret == null ? null : webhookSecret.strip();
+    }
+
+    public String getApiToken() {
+        return apiToken;
+    }
+
+    public void setApiToken(String apiToken) {
+        this.apiToken = apiToken == null ? null : apiToken.strip();
+    }
+
     public WebhookAuthMode getWebhookAuthMode() {
         return webhookAuthMode;
     }
@@ -71,5 +102,13 @@ public class IntegrationSourceRequest {
     // Standard Webhooks is what a current GitLab sends unless the instance was told otherwise.
     public void setWebhookAuthMode(WebhookAuthMode webhookAuthMode) {
         this.webhookAuthMode = webhookAuthMode == null ? WebhookAuthMode.GITLAB_SIGNING_TOKEN : webhookAuthMode;
+    }
+
+    // Keeps the pasted secret and token out of logs and error pages.
+    @Override
+    public String toString() {
+        return "IntegrationSourceRequest[type=%s, owner=%s, repository=%s, projectPath=%s, apiBaseUrl=%s, "
+                .formatted(type, owner, repository, projectPath, apiBaseUrl)
+                + "teamId=%s, webhookSecret=***, apiToken=***]".formatted(teamId);
     }
 }

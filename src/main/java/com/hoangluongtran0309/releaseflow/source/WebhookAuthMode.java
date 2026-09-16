@@ -7,5 +7,7 @@ public enum WebhookAuthMode {
     /** GitLab: Standard Webhooks headers, a signed delivery ID, timestamp, and body. */
     GITLAB_SIGNING_TOKEN,
     /** GitLab: the secret repeated verbatim in {@code X-Gitlab-Token}. */
-    GITLAB_SECRET_TOKEN
+    GITLAB_SECRET_TOKEN,
+    /** Linear: hex HMAC-SHA256 of the raw body in {@code Linear-Signature}. */
+    LINEAR_HMAC
 }

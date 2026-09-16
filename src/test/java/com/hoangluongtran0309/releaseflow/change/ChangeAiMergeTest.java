@@ -60,7 +60,7 @@ class ChangeAiMergeTest {
 
     @Test
     void contextIsAssessedOnlyForASuccessfulAnswer() {
-        MergedPullRequest pullRequest = new MergedPullRequest(7, "fix", null, "octocat", List.of(), "main",
+        MergedPullRequest pullRequest = new MergedPullRequest("7", 7, "fix", null, "octocat", List.of(), "main",
                 "a".repeat(40), Instant.parse("2026-09-10T09:14:22Z"), "https://github.com/acme/app/pull/7");
         ChangeClassification rules = rules(TestCategories.FIX, false, List.of());
 

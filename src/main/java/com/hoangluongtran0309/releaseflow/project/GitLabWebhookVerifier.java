@@ -77,8 +77,8 @@ public class GitLabWebhookVerifier {
                             headers.signature(),
                             secret
                     );
-            // A GitLab source is never set up with GitHub's scheme.
-            case GITHUB_HMAC -> false;
+            // A GitLab source is never set up with another provider's scheme.
+            case GITHUB_HMAC, LINEAR_HMAC -> false;
         };
     }
 
