@@ -5,8 +5,9 @@
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
 `account`, `project`, `change`, `category`, `audience`, `release`,
-`translation`, the `github` API client shared by `project` and `change`, and
-shared `configuration`:
+`translation`, the provider-neutral `source` vocabulary, the `github` and
+`gitlab` API clients that `project` and `change` share, and shared
+`configuration`:
 
 ```text
 GET  /                         -> Thymeleaf home, or overview when signed in
@@ -18,7 +19,7 @@ POST /logout                  -> Spring Security logout
 GET  /api/session             -> authenticated principal identity
 GET  /api/csrf                -> CSRF token for session-based REST clients
 GET  /api/status              -> JSON status
-GET  /projects                -> Project and GitHub configuration UI
+GET  /projects                -> Project and source configuration UI
 POST /projects                -> ProjectService
 POST /projects/{id}/sources   -> IntegrationSourceService (administrator)
 GET  /api/projects            -> tenant-scoped Project list
@@ -30,6 +31,7 @@ PUT  /api/projects/{id}/sources/{sourceId}/token -> IntegrationSourceService (ad
 GET  /api/projects/{id}/imports -> SourceImportService (every member)
 POST /[api/]projects/{id}/sources/{sourceId}/imports[/resume] -> SourceImportService (administrator)
 POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
+POST /webhooks/gitlab/{webhookId} -> GitLabWebhookService (proven, sessionless)
 GET  /changes                 -> ChangeInboxService (Change Inbox UI)
 GET  /api/projects/{id}/changes -> ChangeInboxService
 POST /projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
@@ -143,8 +145,11 @@ integration_sources (github_integrations before V18)
   id (UUID PK)
   organization_id
   project_id (composite FK with organization_id -> projects; several per Project)
-  source_type (GITHUB) + external_project_key (owner/repository, unique per Organization)
-  repository_owner + repository_name
+  source_type (GITHUB | GITLAB) + external_project_key (owner/repository or
+    group/project, unique per Organization and source type)
+  repository_owner + repository_name (GitHub only)
+  api_base_url (GitLab only, an allowlisted instance)
+  webhook_auth_mode (GITHUB_HMAC | GITLAB_SIGNING_TOKEN | GITLAB_SECRET_TOKEN)
   webhook_id (globally unique)
   secret_nonce + secret_ciphertext
   connection_status, last_sync_at, last_error_code
@@ -158,7 +163,7 @@ changes
   pull_request_number (unique per Project)
   title, description, author_login, labels (text[])
   target_branch, merge_commit_sha, merged_at, url
-  delivery_id (X-GitHub-Delivery that recorded the change)
+  delivery_id (the delivery that recorded the change, when the provider named one)
   received_at
   category (code), category_display_name, category_group (snapshot of the catalog category)
   breaking, needs_review, classification_reasons (text[])
@@ -239,48 +244,73 @@ as not found. Composite foreign keys and uniqueness constraints provide the
 database boundary. This decision is recorded in
 [ADR-0001](adr/0001-shared-schema-tenant-isolation.md).
 
-## GitHub connection credentials
+## Source connection credentials
 
-A Project may have several create-only integration sources; for now each is a
-GitHub repository. The submitted owner and repository are trimmed, lowercased,
-and validated before persistence. The same canonical repository may be
-connected by different Organizations but only once inside one Organization
+A Project may have several create-only integration sources: GitHub repositories
+and GitLab projects. Owners, repository names, and GitLab project paths are
+trimmed, lowercased, and validated before persistence; which fields a request
+needs depends on its type, and `IntegrationSourceRequestValidator` reports the
+missing ones against those fields so REST and Thymeleaf both show them. The same
+canonical key may be connected by different Organizations, but only once inside
+one Organization and per source type
 (`integration_sources_external_unique`). V18 renamed `github_integrations` to
 `integration_sources` in place, so every row kept its ID, webhook ID,
-repository, and ciphertexts; see
-[ADR-0016](adr/0016-integration-sources-and-history-import.md).
+repository, and ciphertexts; V19 made the repository columns GitHub's alone and
+added `api_base_url` and `webhook_auth_mode`. See
+[ADR-0016](adr/0016-integration-sources-and-history-import.md) and
+[ADR-0017](adr/0017-gitlab-sources.md).
+
+A GitLab source also names its instance, the only provider address a request may
+choose. `GitLabBaseUrl` accepts it only as a plain HTTP or HTTPS address — no
+credentials, query, or fragment — whose origin is in
+`releaseflow.gitlab.allowed-hosts` (`gitlab.com` by default), answering
+`400 gitlab_base_url_invalid` or `400 gitlab_host_not_allowed` otherwise. An
+allowlist entry is `host` or `host:port`, which means HTTPS, or a full origin
+such as `http://gitlab.internal:8080`. The allowlist is checked again before
+every call, and `GitLabApiClient` never follows a redirect, so a redirect cannot
+move a call to another host.
 
 ReleaseFlow creates a random UUID webhook identity and a 32-byte random signing
-secret. The secret is returned only from the successful creation response and
-is never exposed by Project reads. The UI renders the creation result directly
-with `Cache-Control: no-store` rather than putting plaintext in a redirect or
-session flash value.
+secret for every source, whichever provider it belongs to. The secret is
+returned only from the successful creation response and is never exposed by
+Project reads. The UI renders the creation result directly with
+`Cache-Control: no-store` rather than putting plaintext in a redirect or session
+flash value.
 
 At rest, AES-256-GCM stores a random 12-byte nonce and authenticated ciphertext.
-Additional authenticated data binds the Organization, Project, integration,
-and canonical repository to prevent ciphertext relocation. Startup requires a
+Additional authenticated data binds the Organization, Project, and source, plus
+the canonical repository for GitHub or the source type and project path for
+GitLab, to prevent ciphertext relocation. GitHub's authenticated data is
+unchanged since PR #3, so no ciphertext was ever rewritten. Startup requires a
 Base64-encoded 32-byte key from `RELEASEFLOW_CREDENTIAL_MASTER_KEY`. Key and
 credential material are never logged. See
 [ADR-0002](adr/0002-per-integration-webhook-credentials.md).
 
-An administrator may add or replace one GitHub access token per source.
+An administrator may add or replace one access token per source.
 `IntegrationSourceService.replaceToken` reads the source in one short
-transaction, asks GitHub with `GitHubApiClient.checkPullRequestAccess`
-(`GET /repos/{owner}/{repo}/pulls?state=closed&per_page=1`) outside any
-transaction, and stores the token in a second short transaction. The token uses
-the same cipher and authenticated data as the secret plus a
-`github-access-token` purpose line, so the two ciphertexts cannot be swapped.
-Project reads report only whether a token exists and when it was set.
-`GitHubRepositoryAccess` is the single way the `change` capability obtains the
-decrypted token, always by Organization, Project, and source ID. Saving a token
-marks the source `ACTIVE` again. See
+transaction, asks its provider outside any transaction — GitHub with
+`GitHubApiClient.checkPullRequestAccess`
+(`GET /repos/{owner}/{repo}/pulls?state=closed&per_page=1`), GitLab with
+`GitLabApiClient.checkProjectAccess` (`GET /api/v4/projects/{key}` with
+`PRIVATE-TOKEN`) — and stores the token in a second short transaction. The token
+uses the same cipher and authenticated data as the secret plus a
+`github-access-token` or `gitlab-access-token` purpose line, so the two
+ciphertexts cannot be swapped. Project reads report only whether a token exists
+and when it was set. `SourceAccess` is the single way the `change` capability
+obtains a source's coordinates and decrypted token, always by Organization,
+Project, and source ID. Saving a token marks the source `ACTIVE` again. See
 [ADR-0008](adr/0008-durable-change-processing.md).
 
 ## GitHub webhook intake
 
-`POST /webhooks/github/{webhookId}` is served by its own Spring Security filter
-chain: it permits anonymous requests, disables CSRF, creates no session, and
-saves no request. Trust comes only from the signature, verified in this order:
+Both webhook paths are served by one Spring Security filter chain matching
+`/webhooks/**`: it permits anonymous requests, disables CSRF, creates no
+session, and saves no request. Each provider's own verifier establishes trust
+instead. A delivery larger than `releaseflow.webhooks.max-body-bytes` (1 MiB) is
+refused with `413 webhook_payload_too_large` before any source is looked up, so
+the limit reveals nothing about which sources exist.
+
+For GitHub, trust comes only from the signature, verified in this order:
 
 1. `GitHubWebhookVerifier` in the `project` capability looks the integration up
    by the untrusted webhook ID. This is the one lookup without an Organization
@@ -291,7 +321,7 @@ saves no request. Trust comes only from the signature, verified in this order:
    a missing or malformed header, a wrong signature, and an undecryptable
    secret all produce the same `401 webhook_signature_invalid` response.
 3. Only then does `GitHubWebhookService` in the `change` capability parse the
-   JSON. The Organization and Project come from the verified integration; any
+   JSON. The Organization and Project come from the verified source; any
    tenant field in the payload is ignored. A `repository.full_name` that does
    not match the configured repository case-insensitively, or a pull request
    without one, is rejected with `422 webhook_repository_mismatch`.
@@ -313,10 +343,41 @@ three. Intake stays short: one transaction inserts the change, `PROCESSING`,
 Unknown, and in review, together with a `PENDING` row in
 `change_processing_jobs`. The webhook request makes no GitHub call.
 
+## GitLab webhook intake
+
+`POST /webhooks/gitlab/{webhookId}` works the same way, with the check the
+source was set up for. `GitLabWebhookVerifier` resolves the source by the
+untrusted webhook ID, requires it to be a GitLab source, and decrypts its secret
+with that source's authenticated data. Then, in `GITLAB_SIGNING_TOKEN` mode, it
+requires `webhook-id`, `webhook-timestamp`, and `webhook-signature`, a timestamp
+within `releaseflow.gitlab.webhook-clock-skew` (five minutes) of the clock, and
+a signature of `id.timestamp.body` under the Base64-decoded secret, written as
+`v1,` and Base64; the header may hold several space-separated candidates, every
+one of which is compared. In `GITLAB_SECRET_TOKEN` mode it compares
+`X-Gitlab-Token` with the secret in constant time. `WebhookSignatures` holds the
+arithmetic both providers share. Every failure answers the same
+`401 webhook_signature_invalid`.
+
+`GitLabWebhookService` then parses the JSON. An event that is not
+`object_kind: merge_request` is acknowledged and ignored without reading further.
+A `project.path_with_namespace` that is not the connected project is rejected
+with `422 webhook_repository_mismatch`, and only `object_attributes.action:
+merge` is recorded. `MergedMergeRequest` normalizes the delivery into the same
+`MergedPullRequest` a GitHub pull request becomes: `iid` is the number, the
+merge commit falls back to the squash commit and then to the last commit, and
+the merge time falls back to the last update, which older GitLab instances write
+as `2026-09-10 09:14:22 UTC`.
+
+GitLab identifies a delivery only in its signing mode, and not always with a
+GUID, so a change records `X-Gitlab-Event-UUID` when it parses as a UUID and
+nothing otherwise. `changes_import_has_no_delivery` therefore only requires that
+an imported change has no delivery ID, while `GitHubWebhookService` still
+demands `X-GitHub-Delivery`.
+
 ## Change processing
 
 `ChangeProcessingWorker` runs every second on the scheduler and drains due
-jobs. Each step is its own short transaction, and the GitHub and AI calls
+jobs. Each step is its own short transaction, and the provider and AI calls
 happen between them:
 
 1. Jobs left `ENRICHING` for more than ten minutes return to `PENDING`; jobs
@@ -327,10 +388,13 @@ happen between them:
    trigger, never asking the AI again. A `PENDING` job is marked `ENRICHING`,
    its attempt counted, and its claim time recorded, so several workers never
    take the same job.
-3. Without a transaction, `GitHubRepositoryAccess` supplies the repository and
-   token of the change's source, and `GitHubApiClient.pullRequestFiles` lists the files, 100 per page
-   for at most five pages. A full fifth page, a refused or missing token, or an
-   invalid response is final. Timeouts, network errors, rate limits, and 5xx
+3. Without a transaction, `SourceAccess` supplies the coordinates and token of
+   the change's source, and the `ChangedFileCollector` of its type lists the
+   files, 100 per page: GitHub's pull request files for at most five pages, or
+   GitLab's merge request diffs for at most ten. A full last page, a refused or
+   missing token, or an invalid response is final, and so is a diff GitLab
+   reports as collapsed, too large, or truncated, which makes the whole list
+   unavailable rather than short. Timeouts, network errors, rate limits, and 5xx
    responses are retried after 2 and 4 seconds, up to three attempts.
 4. The rules classify the change with the result. Without an AI provider, the
    change and job are completed together. With one, the files are recorded on
@@ -357,7 +421,8 @@ need or have received review.
 
 ## History import
 
-ADR-0016 imports a source's merged pull requests of the last 90 days.
+ADR-0016 imports a source's merged pull and merge requests of the last 90 days,
+and ADR-0017 gives each provider its own reader.
 
 - **Jobs.** `SourceImportService` queues a `HISTORICAL_IMPORT` row in
   `source_sync_jobs` for a source with a token, with its window, cursor
@@ -366,32 +431,42 @@ ADR-0016 imports a source's merged pull requests of the last 90 days.
   `RETRY_SCHEDULED` job per source; a second request returns
   `409 source_sync_in_progress`. Resuming a `PARTIAL` or `FAILED` job puts it
   back to `PENDING` with its cursor, a zero imported count, and zero attempts.
+- **Readers.** A `SourceHistoryReader` per source type turns one page into
+  normalized items, and `SourceHistoryReaders` fails at startup if a type has
+  none. `GitHubHistoryReader` asks
+  `GET /repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=N`,
+  newest update first, so an item updated before the window means there is
+  nothing older left and it ends the scan. `GitLabHistoryReader` asks
+  `GET /api/v4/projects/{key}/merge_requests?state=merged&order_by=updated_at&sort=asc&per_page=100&page=N&updated_after=…`,
+  so the list only grows at its end and an older item never appears.
 - **Worker.** `SourceImportWorker` runs every second (off in tests, like the
   change worker). It releases `RUNNING` jobs claimed more than ten minutes ago,
   claims one due job with `FOR UPDATE SKIP LOCKED`, and then, outside any
-  transaction, reads pages through `GitHubApiClient.closedPullRequests`
-  (`GET /repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=N`).
-  From the cursor's offset, each pull request is counted as scanned; the first
-  one updated before the window completes the job; one merged inside the window
-  goes through `ChangeIntake.record(..., IMPORT)`, which creates the change and
-  its processing job or reports a duplicate. At the item limit the job becomes
-  `PARTIAL` with the cursor on the next pull request, and a short last page
-  completes it. The cursor and counts are saved in a short transaction after
-  every page.
+  transaction, reads pages through that reader. From the cursor's offset, each
+  item is counted as scanned; one merged inside the window goes through
+  `ChangeIntake.record(..., IMPORT)`, which creates the change and its
+  processing job or reports a duplicate. At the item limit the job becomes
+  `PARTIAL` with the cursor on the next item, and a page the provider says is
+  its last completes it. The cursor and counts are saved in a short transaction
+  after every page.
 - **Failures.** A 429, or a 403 with `Retry-After` or an exhausted rate limit,
   waits `min(Retry-After or the reset time, one hour)`; a 5xx or network
   failure waits `min(300, 2^attempt)` seconds; the fifth attempt fails. 401,
   404, and other 403 responses fail at once and mark the source `ERROR` through
   `IntegrationSourceService.recordSync`, which also records `last_sync_at` and
-  the error code. An unreadable pull request is skipped with a warning.
-- **Changes.** Imported changes have `origin = IMPORT` and no `delivery_id`;
-  `changes_delivery_matches_origin` keeps the two consistent. The Change Inbox
+  the error code, `github_unavailable` or `gitlab_unavailable` naming the
+  provider that could not be reached. An unreadable item is skipped with a
+  warning.
+- **Changes.** Imported changes have `origin = IMPORT` and no `delivery_id`,
+  which `changes_import_has_no_delivery` enforces. The Change Inbox
   shows each source's latest import with Import and Resume actions for
   administrators, and an **Imported** badge on the cards.
 
 Because GitHub orders the list by update time, a pull request updated while an
 import is running can move between pages and be skipped or seen twice. Seeing
-it twice is harmless, and webhooks cover anything merged after connection.
+it twice is harmless, and webhooks cover anything merged after connection. A
+GitLab import asks for the same window every time, so a merge request updated
+during the run moves to the end of the list rather than past the cursor.
 
 ## Deterministic classification
 

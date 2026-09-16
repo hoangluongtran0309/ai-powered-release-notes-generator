@@ -71,7 +71,7 @@ public class ProjectApiController {
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
             @PathVariable UUID sourceId,
-            @Valid @RequestBody GitHubTokenRequest request
+            @Valid @RequestBody SourceTokenRequest request
     ) {
         sourceService.replaceToken(principal.organizationId(), projectId, sourceId, request);
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();

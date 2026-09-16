@@ -1,4 +1,4 @@
-package com.hoangluongtran0309.releaseflow.github;
+package com.hoangluongtran0309.releaseflow.source;
 
 public enum ChangedFileKind {
     ADDED,

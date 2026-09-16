@@ -1,8 +1,8 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
-import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
-import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
 import com.hoangluongtran0309.releaseflow.support.TestCategories;
 
 import java.time.Instant;
@@ -15,7 +15,7 @@ import java.util.UUID;
  */
 final class ProcessedChanges {
 
-    private static final PullRequestFiles ORDINARY_FILES = PullRequestFiles.collected(
+    private static final ChangedFiles ORDINARY_FILES = ChangedFiles.collected(
             List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))
     );
     private static final SensitivePaths RULES = new SensitivePathRules(List.of("**/db/migration/**")).forProject(List.of());

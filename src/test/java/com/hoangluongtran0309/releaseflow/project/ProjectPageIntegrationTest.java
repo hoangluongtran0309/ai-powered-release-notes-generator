@@ -123,9 +123,9 @@ class ProjectPageIntegrationTest extends PostgreSqlIntegrationTest {
                         .param("owner", " Acme ")
                         .param("repository", " ReleaseFlow "))
                 .andExpect(status().isOk())
-                .andExpect(view().name("github-integration-created"))
+                .andExpect(view().name("source-created"))
                 .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
-                .andExpect(model().attributeExists("integration"))
+                .andExpect(model().attributeExists("source"))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("The secret will not be shown again")))
                 .andExpect(content().string(org.hamcrest.Matchers.matchesPattern("(?s).*[A-Za-z0-9_-]{43}.*")));
 

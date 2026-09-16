@@ -4,6 +4,8 @@ import com.hoangluongtran0309.releaseflow.account.InvalidOutputLanguageException
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageRequest;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.gitlab.GitLabHostNotAllowedException;
+import com.hoangluongtran0309.releaseflow.gitlab.InvalidGitLabBaseUrlException;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
@@ -78,16 +80,20 @@ public class ProjectPageController {
         try {
             IntegrationSourceCreated created = sourceService.create(principal.organizationId(), projectId, request);
             response.setHeader("Cache-Control", CacheControl.noStore().getHeaderValue());
-            model.addAttribute("integration", created);
-            return "github-integration-created";
+            model.addAttribute("source", created);
+            return "source-created";
         } catch (ProjectNotFoundException exception) {
             // The project is not in this tenant's list, so there is no card to attach the error to.
             response.setStatus(HttpStatus.NOT_FOUND.value());
             bindingResult.reject("project.notFound", exception.getMessage());
             model.addAttribute("pageError", exception.getMessage());
-        } catch (GitHubRepositoryAlreadyConnectedException exception) {
+        } catch (SourceAlreadyConnectedException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
             bindingResult.reject("source.conflict", exception.getMessage());
+            model.addAttribute("sourceError", exception.getMessage());
+        } catch (InvalidGitLabBaseUrlException | GitLabHostNotAllowedException exception) {
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            bindingResult.rejectValue("apiBaseUrl", "source.apiBaseUrl.invalid", exception.getMessage());
             model.addAttribute("sourceError", exception.getMessage());
         }
 
@@ -101,7 +107,7 @@ public class ProjectPageController {
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @PathVariable UUID projectId,
             @PathVariable UUID sourceId,
-            @Valid @ModelAttribute("githubTokenRequest") GitHubTokenRequest request,
+            @Valid @ModelAttribute("sourceTokenRequest") SourceTokenRequest request,
             BindingResult bindingResult,
             Model model,
             HttpServletResponse response
@@ -113,10 +119,10 @@ public class ProjectPageController {
             } catch (ProjectNotFoundException | SourceNotFoundException exception) {
                 response.setStatus(HttpStatus.NOT_FOUND.value());
                 model.addAttribute("pageError", exception.getMessage());
-            } catch (GitHubTokenRejectedException exception) {
+            } catch (SourceTokenRejectedException exception) {
                 response.setStatus(HttpStatus.BAD_REQUEST.value());
                 model.addAttribute("tokenError", exception.getMessage());
-            } catch (GitHubUnavailableException exception) {
+            } catch (SourceUnavailableException exception) {
                 response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
                 model.addAttribute("tokenError", exception.getMessage());
             }
@@ -156,8 +162,8 @@ public class ProjectPageController {
         if (!model.containsAttribute("sourceRequest")) {
             model.addAttribute("sourceRequest", new IntegrationSourceRequest());
         }
-        if (!model.containsAttribute("githubTokenRequest")) {
-            model.addAttribute("githubTokenRequest", new GitHubTokenRequest());
+        if (!model.containsAttribute("sourceTokenRequest")) {
+            model.addAttribute("sourceTokenRequest", new SourceTokenRequest());
         }
         model.addAttribute("outputLanguage", outputLanguageService.settings(principal.organizationId()));
         if (!model.containsAttribute("outputLanguageRequest")) {

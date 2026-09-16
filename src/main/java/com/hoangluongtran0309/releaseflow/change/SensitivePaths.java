@@ -1,6 +1,6 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
 
 import java.nio.file.FileSystems;
 import java.nio.file.InvalidPathException;

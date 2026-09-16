@@ -2,7 +2,7 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
 
 import java.time.Instant;
 import java.util.Collections;

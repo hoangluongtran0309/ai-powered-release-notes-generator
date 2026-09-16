@@ -262,8 +262,55 @@ version has been released.
   narratives and summary authorship on changes, and `release_audience_notes`,
   with triggers that allow note writes only while a release is approved.
 
+- GitLab as a second source type (ADR-0017): a Project can connect GitLab
+  projects, named by their path including subgroups, on an instance the
+  deployment allows.
+- A provider-neutral `source` package, and two ports with one implementation per
+  source type, `ChangedFileCollector` and `SourceHistoryReader`, resolved by a
+  registry that fails at startup if a type has neither.
+- `RELEASEFLOW_GITLAB_ALLOWED_HOSTS` (default `gitlab.com`), which decides the
+  GitLab origins a source may name; a URL with credentials, a query, or a
+  fragment, or a host outside the allowlist, is refused, the allowlist is checked
+  again before every call, and redirects are never followed.
+- A public, sessionless `POST /webhooks/gitlab/{webhookId}` endpoint that proves
+  a delivery with the source's own secret, either through the Standard Webhooks
+  `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers within
+  `RELEASEFLOW_GITLAB_WEBHOOK_CLOCK_SKEW` (five minutes) or through
+  `X-Gitlab-Token`, both compared in constant time.
+- Merged merge requests recorded as normalized changes, with the merge commit
+  falling back to the squash and last commits and the merge time to the last
+  update.
+- GitLab changed files from the merge request's diffs, at most ten pages of a
+  hundred, where a collapsed, too large, or truncated diff makes the whole list
+  unavailable rather than short.
+- A 90-day GitLab history import that asks for the merge requests updated after
+  the window's start, least recently updated first, through the same intake,
+  cursor, limit, and retries as the GitHub import.
+- GitLab access tokens confirmed with `GET /api/v4/projects/{key}` before they
+  are stored, with `gitlab_token_rejected` and `gitlab_unavailable` errors.
+- A 1 MiB limit on any provider's webhook delivery, checked before a source is
+  looked up, answering `413 webhook_payload_too_large`.
+- Flyway migration `V19` for GitLab sources, and Testcontainers coverage of both
+  signature modes, the clock skew, the instance allowlist, withheld diffs, the
+  import, and tenant isolation.
+
 ### Changed
 
+- Sources are no longer GitHub-only. `ChangedFile`, `ChangedFiles` (formerly
+  `PullRequestFiles`), `ProviderListing`, `ProviderAccess`, and `SourceType`
+  moved into a `source` package; `GitHubRepositoryAccess` became `SourceAccess`
+  and returns `SourceCredentials`. The `integration_sources` repository columns
+  are GitHub's alone, and `external_project_key` is unique per Organization and
+  source type, so the same name on both providers is two sources. No ciphertext
+  was rewritten.
+- A webhook change may have no delivery ID, because GitLab identifies one only
+  in its signing mode and not always with a GUID. `changes_delivery_matches_origin`
+  became `changes_import_has_no_delivery`, and an imported change still never has
+  one. GitHub deliveries still require `X-GitHub-Delivery`.
+- Conflict and token errors name their provider:
+  `github_repository_already_connected` keeps its code beside
+  `gitlab_project_already_connected`, and `github_token_rejected` and
+  `github_unavailable` beside `gitlab_token_rejected` and `gitlab_unavailable`.
 - Categories come from the Organization's catalog instead of a fixed list. The
   rules pick the preferred category of their group, or the first active one in
   it. The AI chooses among active codes, and a code outside the catalog is an

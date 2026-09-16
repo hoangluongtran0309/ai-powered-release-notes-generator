@@ -2,9 +2,9 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
-import com.hoangluongtran0309.releaseflow.github.ChangedFile;
-import com.hoangluongtran0309.releaseflow.github.ChangedFileKind;
-import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+import com.hoangluongtran0309.releaseflow.source.ChangedFile;
+import com.hoangluongtran0309.releaseflow.source.ChangedFileKind;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
 import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -25,7 +25,7 @@ class ChangeClassifierTest {
     void sensitiveFileForcesReviewAndRecordsThePath() {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("feat: add audit table"),
-                PullRequestFiles.collected(List.of(
+                ChangedFiles.collected(List.of(
                         new ChangedFile("src/main/java/Audit.java", null, ChangedFileKind.ADDED),
                         new ChangedFile("src/main/resources/db/migration/V9__audit.sql", null, ChangedFileKind.ADDED)
                 )),
@@ -45,7 +45,7 @@ class ChangeClassifierTest {
     void unavailableFilesForceReviewButKeepTheRuleCategory() {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("fix: handle empty tables"),
-                PullRequestFiles.unavailable(PullRequestFiles.NO_ACCESS_TOKEN, false),
+                ChangedFiles.unavailable(ChangedFiles.NO_ACCESS_TOKEN, false),
                 RULES,
                 TestCategories.CATALOG
         );
@@ -60,7 +60,7 @@ class ChangeClassifierTest {
     void documentationOnlyFilesOutrankTheTitleType() {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("feat: describe exports", List.of("enhancement"), null),
-                PullRequestFiles.collected(List.of(
+                ChangedFiles.collected(List.of(
                         new ChangedFile("docs/exports.md", null, ChangedFileKind.ADDED),
                         new ChangedFile("README.MD", null, ChangedFileKind.MODIFIED),
                         new ChangedFile("guide/setup.adoc", "guide/install.rst", ChangedFileKind.RENAMED)
@@ -78,7 +78,7 @@ class ChangeClassifierTest {
     void sensitiveDocumentationStillNeedsReview() {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("docs: rotate keys"),
-                PullRequestFiles.collected(List.of(new ChangedFile("docs/security/keys.md", null, ChangedFileKind.MODIFIED))),
+                ChangedFiles.collected(List.of(new ChangedFile("docs/security/keys.md", null, ChangedFileKind.MODIFIED))),
                 RULES,
                 TestCategories.CATALOG
         );
@@ -92,7 +92,7 @@ class ChangeClassifierTest {
     void anEmptyFileListIsNotDocumentationOnly() {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("chore: empty merge"),
-                PullRequestFiles.collected(List.of()),
+                ChangedFiles.collected(List.of()),
                 RULES,
                 TestCategories.CATALOG
         );
@@ -327,7 +327,7 @@ class ChangeClassifierTest {
     private static ChangeClassification classify(MergedPullRequest pullRequest, List<CategoryRef> catalog) {
         return ChangeClassifier.classify(
                 pullRequest,
-                PullRequestFiles.collected(List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))),
+                ChangedFiles.collected(List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))),
                 RULES,
                 catalog
         );

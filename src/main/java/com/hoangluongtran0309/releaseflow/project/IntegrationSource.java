@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.project;
 
+import com.hoangluongtran0309.releaseflow.source.SourceType;
+import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -11,8 +13,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Where a Project's changes come from: for now a GitHub repository, with its webhook
- * signing secret and an optional access token. A Project may have several sources.
+ * Where a Project's changes come from: a GitHub repository or a GitLab project, with its
+ * webhook secret and an optional access token. A Project may have several sources.
  */
 @Entity
 @Table(name = "integration_sources")
@@ -34,11 +36,20 @@ class IntegrationSource {
     @Column(name = "external_project_key", nullable = false, length = 200, updatable = false)
     private String externalProjectKey;
 
-    @Column(name = "repository_owner", nullable = false, length = 39)
+    // Only a GitHub source has these; its ciphertexts are bound to them.
+    @Column(name = "repository_owner", length = 39)
     private String repositoryOwner;
 
-    @Column(name = "repository_name", nullable = false, length = 100)
+    @Column(name = "repository_name", length = 100)
     private String repositoryName;
+
+    // Only a source whose instance the Organization chose has one, so far GitLab.
+    @Column(name = "api_base_url", length = 255, updatable = false)
+    private String apiBaseUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "webhook_auth_mode", nullable = false, length = 30, updatable = false)
+    private WebhookAuthMode webhookAuthMode;
 
     @Column(name = "webhook_id", nullable = false, unique = true)
     private UUID webhookId;
@@ -77,7 +88,32 @@ class IntegrationSource {
     protected IntegrationSource() {
     }
 
-    IntegrationSource(
+    private IntegrationSource(
+            UUID id,
+            UUID organizationId,
+            UUID projectId,
+            SourceType sourceType,
+            String externalProjectKey,
+            WebhookAuthMode webhookAuthMode,
+            UUID webhookId,
+            byte[] secretNonce,
+            byte[] secretCiphertext,
+            Instant createdAt
+    ) {
+        this.id = id;
+        this.organizationId = organizationId;
+        this.projectId = projectId;
+        this.sourceType = sourceType;
+        this.externalProjectKey = externalProjectKey;
+        this.webhookAuthMode = webhookAuthMode;
+        this.webhookId = webhookId;
+        this.secretNonce = secretNonce.clone();
+        this.secretCiphertext = secretCiphertext.clone();
+        this.createdAt = createdAt;
+        this.connectionStatus = ConnectionStatus.ACTIVE;
+    }
+
+    static IntegrationSource gitHub(
             UUID id,
             UUID organizationId,
             UUID projectId,
@@ -88,18 +124,49 @@ class IntegrationSource {
             byte[] secretCiphertext,
             Instant createdAt
     ) {
-        this.id = id;
-        this.organizationId = organizationId;
-        this.projectId = projectId;
-        this.sourceType = SourceType.GITHUB;
-        this.externalProjectKey = repositoryOwner + "/" + repositoryName;
-        this.repositoryOwner = repositoryOwner;
-        this.repositoryName = repositoryName;
-        this.webhookId = webhookId;
-        this.secretNonce = secretNonce.clone();
-        this.secretCiphertext = secretCiphertext.clone();
-        this.createdAt = createdAt;
-        this.connectionStatus = ConnectionStatus.ACTIVE;
+        IntegrationSource source = new IntegrationSource(
+                id,
+                organizationId,
+                projectId,
+                SourceType.GITHUB,
+                repositoryOwner + "/" + repositoryName,
+                WebhookAuthMode.GITHUB_HMAC,
+                webhookId,
+                secretNonce,
+                secretCiphertext,
+                createdAt
+        );
+        source.repositoryOwner = repositoryOwner;
+        source.repositoryName = repositoryName;
+        return source;
+    }
+
+    static IntegrationSource gitLab(
+            UUID id,
+            UUID organizationId,
+            UUID projectId,
+            String projectPath,
+            String apiBaseUrl,
+            WebhookAuthMode webhookAuthMode,
+            UUID webhookId,
+            byte[] secretNonce,
+            byte[] secretCiphertext,
+            Instant createdAt
+    ) {
+        IntegrationSource source = new IntegrationSource(
+                id,
+                organizationId,
+                projectId,
+                SourceType.GITLAB,
+                projectPath,
+                webhookAuthMode,
+                webhookId,
+                secretNonce,
+                secretCiphertext,
+                createdAt
+        );
+        source.apiBaseUrl = apiBaseUrl;
+        return source;
     }
 
     UUID getId() {
@@ -128,6 +195,14 @@ class IntegrationSource {
 
     String getRepositoryName() {
         return repositoryName;
+    }
+
+    String getApiBaseUrl() {
+        return apiBaseUrl;
+    }
+
+    WebhookAuthMode getWebhookAuthMode() {
+        return webhookAuthMode;
     }
 
     UUID getWebhookId() {
@@ -162,7 +237,7 @@ class IntegrationSource {
         return lastErrorCode;
     }
 
-    // A token GitHub accepted puts a source that failed to connect back in order.
+    // A token the provider accepted puts a source that failed to connect back in order.
     void replaceToken(CredentialCipher.EncryptedSecret token, Instant updatedAt) {
         this.tokenNonce = token.nonce();
         this.tokenCiphertext = token.ciphertext();

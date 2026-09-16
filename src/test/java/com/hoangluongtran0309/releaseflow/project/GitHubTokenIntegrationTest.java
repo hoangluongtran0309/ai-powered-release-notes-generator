@@ -51,7 +51,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
     private IntegrationSourceRepository integrationRepository;
 
     @Autowired
-    private GitHubRepositoryAccess repositoryAccess;
+    private SourceAccess repositoryAccess;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -215,7 +215,7 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
         Owner owner = connectedOwner("owner@example.com");
         mockMvc.perform(get("/projects").session(owner.session()))
                 .andExpect(content().string(containsString("Add access token")))
-                .andExpect(content().string(containsString("Every new change from this repository needs review")));
+                .andExpect(content().string(containsString("Every new change from this source needs review")));
 
         mockMvc.perform(post("/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())
                         .session(owner.session())

@@ -89,7 +89,7 @@ class ProjectApiIntegrationTest extends PostgreSqlIntegrationTest {
         IntegrationSource stored = integrationRepository
                 .findByIdAndOrganizationIdAndProjectId(integrationId, owner.registration().organizationId(), projectId)
                 .orElseThrow();
-        byte[] aad = IntegrationSourceService.additionalAuthenticatedData(
+        byte[] aad = IntegrationSourceService.gitHubAuthenticatedData(
                 owner.registration().organizationId(),
                 projectId,
                 integrationId,

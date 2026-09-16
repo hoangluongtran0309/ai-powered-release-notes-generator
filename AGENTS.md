@@ -8,15 +8,17 @@ deterministic classification with the Change Inbox, automatic AI
 classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
-signal, Project sensitive path, multilingual release note, and integration
-source slices: one Spring Boot application, PostgreSQL/Flyway V1-V18,
+signal, Project sensitive path, multilingual release note, integration
+source, and GitLab source slices: one Spring Boot application,
+PostgreSQL/Flyway V1-V19,
 administrator
 registration, member
 invitations with administrator and member roles, session
-authentication, tenant-scoped Projects with one or more GitHub repository
-sources, per-source encrypted webhook secrets, a resumable 90-day history
-import, a signature-verified webhook endpoint that records normalized merged
-pull requests idempotently, optional write-only GitHub access tokens, a durable
+authentication, tenant-scoped Projects with one or more GitHub repository or
+GitLab project sources, per-source encrypted webhook secrets, a resumable 90-day
+history import, webhook endpoints that record normalized merged pull and merge
+requests idempotently once the source's own secret proves the delivery, optional
+write-only access tokens, a durable
 `SKIP LOCKED` worker that lists changed files outside transactions,
 rule-based classification against a per-Organization category catalog with
 mandatory review for breaking, Unknown, and sensitive-file changes, a
@@ -58,8 +60,12 @@ Read `README.md`, `docs/architecture.md`, and
 - Network I/O does not run inside database transactions.
 - Credentials never appear in source, logs, examples, or later API responses.
 - Invitation tokens are shown once and stored only as SHA-256 hashes.
-- GitHub access tokens are write-only: only administrators set them, GitHub
+- Access tokens are write-only: only administrators set them, the provider
   confirms them first, and no response, page, or log ever contains one.
+- A GitLab instance is an HTTP or HTTPS origin the deployment allowlists, with
+  no credentials, query, or fragment; the allowlist is checked again before every
+  call and a redirect is never followed. A diff GitLab collapsed, truncated, or
+  called too large makes the whole file list unavailable, never short.
 - Review triggers only add a need for review; only a recorded human review
   clears it. Missing, refused, or incomplete changed-file lists force review.
 - A `PROCESSING` change cannot be reviewed, sent to AI, or released.
@@ -71,9 +77,13 @@ Read `README.md`, `docs/architecture.md`, and
   transactions, and `FOR UPDATE SKIP LOCKED`; retries stay bounded.
 - A change is identified by its source and the source's ID for it. Webhooks and
   imports record changes only through `ChangeIntake`, so neither duplicates the
-  other, and one import per source runs at a time.
-- Integration source ciphertexts are bound to the source's ID and repository;
-  never rewrite those columns, or existing secrets stop decrypting.
+  other, and one import per source runs at a time. A delivery ID is recorded only
+  when the provider named one; an imported change never has one.
+- Integration source ciphertexts are bound to the source's ID and to its
+  repository for GitHub or its type and project path for GitLab; never rewrite
+  those columns, or existing secrets stop decrypting.
+- Each source type has exactly one `ChangedFileCollector` and one
+  `SourceHistoryReader`; a type without both fails at startup.
 - The sensitive-path list must compile and must not be empty. A Project's
   additions extend it and never remove any of it; they apply only to changes
   classified afterwards.

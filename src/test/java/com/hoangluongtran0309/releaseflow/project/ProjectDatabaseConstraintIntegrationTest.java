@@ -99,8 +99,8 @@ class ProjectDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest
                 """
                         INSERT INTO integration_sources
                             (id, organization_id, project_id, source_type, external_project_key, repository_owner,
-                             repository_name, webhook_id, secret_nonce, secret_ciphertext, created_at)
-                        VALUES (?, ?, ?, 'GITHUB', ?, ?, ?, ?, ?, ?, ?)
+                             repository_name, webhook_auth_mode, webhook_id, secret_nonce, secret_ciphertext, created_at)
+                        VALUES (?, ?, ?, 'GITHUB', ?, ?, ?, 'GITHUB_HMAC', ?, ?, ?, ?)
                         """,
                 UUID.randomUUID(),
                 organizationId,

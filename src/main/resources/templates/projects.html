@@ -14,7 +14,7 @@
         <div>
             <p class="page-eyebrow">Project configuration</p>
             <h1 class="page-heading">Projects and integrations</h1>
-            <p class="page-subtitle">Create a project, then configure the GitHub repository that will send its signed webhook deliveries.</p>
+            <p class="page-subtitle">Create a project, then connect the GitHub repositories and GitLab projects that will send its signed webhook deliveries.</p>
         </div>
     </header>
 
@@ -33,7 +33,7 @@
             <span class="flex h-9 w-9 items-center justify-center rounded-full font-bold"
                   th:classappend="${hasIntegration} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
                   th:text="${hasIntegration} ? '✓' : '2'">2</span>
-            <div><p class="font-semibold">Connect GitHub</p><p class="text-xs text-slate-500">Generate webhook credentials</p></div>
+            <div><p class="font-semibold">Connect a source</p><p class="text-xs text-slate-500">Generate webhook credentials</p></div>
         </li>
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasDelivery} ? 'border-emerald-200' : (${hasIntegration} ? 'border-indigo-300' : '')">
             <span class="flex h-9 w-9 items-center justify-center rounded-full font-bold"
@@ -41,7 +41,7 @@
                   th:text="${hasDelivery} ? '✓' : '3'">3</span>
             <div><p class="font-semibold">Receive webhooks</p>
                 <p class="text-xs text-slate-500"
-                   th:text="${hasDelivery} ? 'Signed deliveries arriving' : (${hasIntegration} ? 'Waiting for the first signed delivery' : 'Add the webhook in GitHub')">Add the webhook in GitHub</p></div>
+                   th:text="${hasDelivery} ? 'Signed deliveries arriving' : (${hasIntegration} ? 'Waiting for the first signed delivery' : 'Add the webhook at the provider')">Add the webhook at the provider</p></div>
         </li>
     </ol>
 
@@ -92,7 +92,7 @@
     <section class="empty-state mt-6" th:unless="${hasProjects}">
         <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#empty}"></use></svg></div>
         <h2 class="mt-5 text-xl font-bold">No projects have been created yet.</h2>
-        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create your first project above, then connect the GitHub repository it releases from.</p>
+        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create your first project above, then connect the repository or project it releases from.</p>
     </section>
 
     <div class="mt-6 grid gap-6 lg:grid-cols-2" th:if="${hasProjects}">
@@ -110,19 +110,27 @@
                 <span class="badge gap-1.5 font-semibold"
                       th:classappend="${sourceCount > 0} ? 'badge-success badge-soft' : 'badge-ghost'">
                     <span class="status-dot"></span>
-                    <span th:text="${sourceCount == 0} ? 'Not connected' : (${sourceCount == 1} ? '1 repository' : |${sourceCount} repositories|)">Not connected</span>
+                    <span th:text="${sourceCount == 0} ? 'Not connected' : (${sourceCount == 1} ? '1 source' : |${sourceCount} sources|)">Not connected</span>
                 </span>
             </div>
 
             <div class="divider my-4"></div>
 
-            <section class="grid gap-5" th:unless="${sourceCount == 0}" aria-label="Repositories">
+            <section class="grid gap-5" th:unless="${sourceCount == 0}" aria-label="Sources">
                 <div class="subtle-panel grid gap-4" th:each="source : ${project.sources}" th:id="|source-${source.id}|"
                      th:with="tokenFailing=${tokenSourceId == source.id}">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h3 class="font-semibold" th:text="${source.externalProjectKey}">owner/repository</h3>
-                        <span class="badge badge-sm badge-error badge-soft" th:if="${source.connectionStatus.name() == 'ERROR'}"
-                              th:title="${source.lastErrorCode}">Connection failing</span>
+                        <div class="min-w-0">
+                            <h3 class="font-semibold" th:text="${source.externalProjectKey}">owner/repository</h3>
+                            <p class="text-xs text-slate-500" th:if="${source.type.name() == 'GITLAB'}"
+                               th:text="${source.apiBaseUrl}">https://gitlab.com</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="badge badge-sm badge-ghost"
+                                  th:text="${source.type.name() == 'GITHUB'} ? 'GitHub' : 'GitLab'">GitHub</span>
+                            <span class="badge badge-sm badge-error badge-soft" th:if="${source.connectionStatus.name() == 'ERROR'}"
+                                  th:title="${source.lastErrorCode}">Connection failing</span>
+                        </div>
                     </div>
                     <dl class="grid gap-4 text-sm">
                         <div x-data="copyText()">
@@ -149,7 +157,7 @@
                                       th:text="|${#temporals.format(source.accessTokenUpdatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">12 Sep 2026, 10:02 UTC</time></span>
                             </dd>
                             <dd class="mt-1 text-amber-700" th:unless="${source.accessTokenConfigured}">
-                                Not configured. Every new change from this repository needs review until a token lets ReleaseFlow
+                                Not configured. Every new change from this source needs review until a token lets ReleaseFlow
                                 check its files, and its history cannot be imported.
                             </dd>
                         </div>
@@ -157,16 +165,20 @@
 
                     <form class="grid gap-3" th:if="${viewer.admin}"
                           th:action="@{/projects/{projectId}/sources/{sourceId}/token(projectId=${project.id},sourceId=${source.id})}"
-                          th:object="${githubTokenRequest}" method="post">
+                          th:object="${sourceTokenRequest}" method="post">
                         <div>
                             <h4 class="font-bold" th:text="${source.accessTokenConfigured} ? 'Replace access token' : 'Add access token'">Add access token</h4>
-                            <p class="mt-1 text-sm text-slate-600">
+                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'GITHUB'}">
                                 A fine-grained token with read access to this repository's pull requests. ReleaseFlow checks it
                                 with GitHub, stores it encrypted, and never shows it again.
                             </p>
+                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'GITLAB'}">
+                                A project access token with the <code>read_api</code> scope. ReleaseFlow checks it with this
+                                GitLab instance, stores it encrypted, and never shows it again.
+                            </p>
                         </div>
                         <div class="alert alert-error" role="alert" th:if="${tokenFailing and tokenError != null}">
-                            <span th:text="${tokenError}">GitHub did not accept this token.</span>
+                            <span th:text="${tokenError}">The provider did not accept this token.</span>
                         </div>
                         <label class="form-control"><span class="label-text font-medium">Access token</span>
                             <input type="password" name="token" maxlength="255" required autocomplete="off" spellcheck="false"
@@ -178,41 +190,89 @@
                     </form>
                 </div>
                 <p class="text-xs text-slate-500">
-                    In each repository's GitHub webhook settings, use your ReleaseFlow address followed by its path as the
-                    payload URL, content type <code>application/json</code>, the saved secret, and the
-                    <strong>Pull requests</strong> event. Merged pull requests are recorded once each; import earlier ones
-                    from the <a class="link" th:href="@{/changes(project=${project.id})}">Change Inbox</a>.
+                    In each source's webhook settings, use your ReleaseFlow address followed by that source's path as the
+                    payload URL, with the secret shown when it was connected: on GitHub, content type
+                    <code>application/json</code> and the <strong>Pull requests</strong> event; on GitLab, the
+                    <strong>Merge request events</strong> trigger. Merged pull and merge requests are recorded once each;
+                    import earlier ones from the
+                    <a class="link" th:href="@{/changes(project=${project.id})}">Change Inbox</a>.
                 </p>
             </section>
 
             <p class="text-sm text-slate-600" th:if="${sourceCount == 0 and !viewer.admin}">
-                No repository is connected yet. Only organization administrators can connect repositories.
+                No source is connected yet. Only organization administrators can connect one.
             </p>
 
             <form class="grid gap-4" th:classappend="${sourceCount > 0} ? 'mt-6'" th:if="${viewer.admin}"
                   th:action="@{/projects/{projectId}/sources(projectId=${project.id})}"
-                  th:object="${sourceRequest}" method="post">
+                  th:object="${sourceRequest}" method="post"
+                  th:attr="data-type=${failing} ? ${sourceRequest.type.name()} : 'GITHUB'"
+                  x-data="{ type: $el.dataset.type }">
                 <div>
-                    <h3 class="font-bold" th:text="${sourceCount == 0} ? 'Connect a GitHub repository' : 'Add another GitHub repository'">Connect a GitHub repository</h3>
-                    <p class="mt-1 text-sm text-slate-600">Each repository gets its own webhook secret, encrypted with AES-256-GCM and shown only once.</p>
+                    <h3 class="font-bold" th:text="${sourceCount == 0} ? 'Connect a source' : 'Add another source'">Connect a source</h3>
+                    <p class="mt-1 text-sm text-slate-600">Each source gets its own webhook secret, encrypted with AES-256-GCM and shown only once.</p>
                 </div>
                 <div class="alert alert-error" role="alert" th:if="${failing and sourceError != null}">
-                    <span th:text="${sourceError}">This GitHub repository is already connected to another project.</span>
+                    <span th:text="${sourceError}">This repository is already connected to another project.</span>
                 </div>
-                <label class="form-control"><span class="label-text font-medium">Repository owner</span>
-                    <input type="text" name="owner" maxlength="39" required placeholder="octo-org"
-                           class="input input-bordered w-full"
-                           th:value="${failing} ? ${sourceRequest.owner} : ''"
-                           th:classappend="${failing and #fields.hasErrors('owner')} ? 'input-error'">
-                    <span class="field-error" th:if="${failing and #fields.hasErrors('owner')}" th:errors="*{owner}"></span>
+                <label class="form-control"><span class="label-text font-medium">Source type</span>
+                    <select name="type" class="select select-bordered w-full" x-model="type"
+                            th:classappend="${failing and #fields.hasErrors('type')} ? 'select-error'">
+                        <option value="GITHUB" th:selected="${!failing or sourceRequest.type.name() == 'GITHUB'}">GitHub repository</option>
+                        <option value="GITLAB" th:selected="${failing and sourceRequest.type.name() == 'GITLAB'}">GitLab project</option>
+                    </select>
                 </label>
-                <label class="form-control"><span class="label-text font-medium">Repository name</span>
-                    <input type="text" name="repository" maxlength="100" required placeholder="hello-world"
-                           class="input input-bordered w-full"
-                           th:value="${failing} ? ${sourceRequest.repository} : ''"
-                           th:classappend="${failing and #fields.hasErrors('repository')} ? 'input-error'">
-                    <span class="field-error" th:if="${failing and #fields.hasErrors('repository')}" th:errors="*{repository}"></span>
-                </label>
+                <template x-if="type === 'GITHUB'">
+                    <div class="grid gap-4">
+                        <label class="form-control"><span class="label-text font-medium">Repository owner</span>
+                            <input type="text" name="owner" maxlength="39" placeholder="octo-org"
+                                   class="input input-bordered w-full" :required="type === 'GITHUB'"
+                                   th:value="${failing} ? ${sourceRequest.owner} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('owner')} ? 'input-error'">
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('owner')}" th:errors="*{owner}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">Repository name</span>
+                            <input type="text" name="repository" maxlength="100" placeholder="hello-world"
+                                   class="input input-bordered w-full" :required="type === 'GITHUB'"
+                                   th:value="${failing} ? ${sourceRequest.repository} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('repository')} ? 'input-error'">
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('repository')}" th:errors="*{repository}"></span>
+                        </label>
+                    </div>
+                </template>
+                <template x-if="type === 'GITLAB'">
+                    <div class="grid gap-4">
+                        <label class="form-control"><span class="label-text font-medium">GitLab instance</span>
+                            <input type="url" name="apiBaseUrl" maxlength="255" placeholder="https://gitlab.com"
+                                   class="input input-bordered w-full" :required="type === 'GITLAB'"
+                                   th:value="${failing} ? ${sourceRequest.apiBaseUrl} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('apiBaseUrl')} ? 'input-error'">
+                            <span class="label-text-alt text-slate-500">Only instances this deployment allows can be connected.</span>
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('apiBaseUrl')}" th:errors="*{apiBaseUrl}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">Project path</span>
+                            <input type="text" name="projectPath" maxlength="200" placeholder="acme/group/app"
+                                   class="input input-bordered w-full" :required="type === 'GITLAB'"
+                                   th:value="${failing} ? ${sourceRequest.projectPath} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('projectPath')} ? 'input-error'">
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('projectPath')}" th:errors="*{projectPath}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">How GitLab signs deliveries</span>
+                            <select name="webhookAuthMode" class="select select-bordered w-full"
+                                    th:classappend="${failing and #fields.hasErrors('webhookAuthMode')} ? 'select-error'">
+                                <option value="GITLAB_SIGNING_TOKEN"
+                                        th:selected="${!failing or sourceRequest.webhookAuthMode.name() == 'GITLAB_SIGNING_TOKEN'}">
+                                    Signed headers (Standard Webhooks)
+                                </option>
+                                <option value="GITLAB_SECRET_TOKEN"
+                                        th:selected="${failing and sourceRequest.webhookAuthMode.name() == 'GITLAB_SECRET_TOKEN'}">
+                                    Secret token header
+                                </option>
+                            </select>
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('webhookAuthMode')}" th:errors="*{webhookAuthMode}"></span>
+                        </label>
+                    </div>
+                </template>
                 <button type="submit" class="btn w-full" th:classappend="${sourceCount == 0} ? 'btn-primary' : 'btn-outline'">Generate webhook credentials</button>
             </form>
 

@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
 import com.hoangluongtran0309.releaseflow.account.RegistrationResult;
 import com.hoangluongtran0309.releaseflow.account.RegistrationService;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
 import com.hoangluongtran0309.releaseflow.support.GitHubStub;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
 import com.jayway.jsonpath.JsonPath;
@@ -235,7 +236,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(jdbcTemplate.queryForMap("SELECT status, attempts, last_error FROM source_sync_jobs"))
                 .containsEntry("status", "FAILED")
                 .containsEntry("attempts", SourceImportWorker.MAX_ATTEMPTS)
-                .containsEntry("last_error", SourceImportWorker.UNAVAILABLE);
+                .containsEntry("last_error", ChangedFiles.GITHUB_UNAVAILABLE);
         mockMvc.perform(get("/api/projects/{projectId}/imports", admin.projectId()).session(admin.session()))
                 .andExpect(jsonPath("$[0].status").value("FAILED"))
                 .andExpect(jsonPath("$[0].lastErrorCode").value("github_unavailable"))
@@ -386,7 +387,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(post("/projects/{projectId}/sources/{sourceId}/imports", admin.projectId(), admin.sourceId())
                         .session(admin.session()).with(csrf()))
                 .andExpect(status().isConflict())
-                .andExpect(content().string(containsString("An import of this repository is already under way.")));
+                .andExpect(content().string(containsString("An import of this source is already under way.")));
         mockMvc.perform(get("/changes").param("project", admin.projectId().toString()).session(admin.session()))
                 .andExpect(content().string(containsString("Queued")))
                 .andExpect(content().string(not(containsString("Import last 90 days"))));

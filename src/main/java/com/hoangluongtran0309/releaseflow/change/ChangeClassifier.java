@@ -2,7 +2,7 @@ package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
-import com.hoangluongtran0309.releaseflow.github.PullRequestFiles;
+import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -71,7 +71,7 @@ final class ChangeClassifier {
      */
     static ChangeClassification classify(
             MergedPullRequest pullRequest,
-            PullRequestFiles files,
+            ChangedFiles files,
             SensitivePaths sensitivePaths,
             List<CategoryRef> catalog
     ) {
