@@ -8,6 +8,7 @@ import com.hoangluongtran0309.releaseflow.change.ChangedFileStatus;
 import com.hoangluongtran0309.releaseflow.change.ClassificationSource;
 import com.hoangluongtran0309.releaseflow.change.NeutralSummary;
 import com.hoangluongtran0309.releaseflow.change.ProcessingStatus;
+import com.hoangluongtran0309.releaseflow.jira.LinkedIssue;
 import com.hoangluongtran0309.releaseflow.support.TestCategories;
 import org.junit.jupiter.api.Test;
 
@@ -156,6 +157,19 @@ class ReleaseNoteDigestTest {
     }
 
     @Test
+    void escapesWhatTheTrackerWroteAboutALinkedIssue() {
+        ChangeView change = change(1, "feat: export", TestCategories.FEATURE, false, 1, null, Map.of(),
+                List.of(new LinkedIssue("APP-7", "Export *all* [tables](x)", "secret description", "Story_type",
+                        "<Done>", "https://acme.atlassian.net/browse/APP-7")));
+        String template = "{{whatChanged}}{{#linkedIssues}} [{{key}}]({{url}}) {{title}} {{type}} {{status}}"
+                + "{{/linkedIssues}}";
+
+        assertThat(ReleaseNoteDigest.render("1.0.0", null, List.of(change), template, "operator", "en"))
+                .contains("export [APP-7](https://acme.atlassian.net/browse/APP-7) "
+                        + "Export \\*all\\* \\[tables\\](x) Story\\_type \\<Done\\>\n");
+    }
+
+    @Test
     void demotesHeadingsInsideItemsButNotInCode() {
         assertThat(ReleaseNoteDigest.demoteHeadings("## What changed\ntext\n### Detail\n##### five\n#tag\n```\n# code\n```\n# top"))
                 .isEqualTo("#### What changed\ntext\n##### Detail\n###### five\n#tag\n```\n# code\n```\n### top");
@@ -180,6 +194,19 @@ class ReleaseNoteDigestTest {
             int minute,
             NeutralSummary summary,
             Map<String, String> narratives
+    ) {
+        return change(number, title, category, breaking, minute, summary, narratives, List.of());
+    }
+
+    private static ChangeView change(
+            int number,
+            String title,
+            CategoryRef category,
+            boolean breaking,
+            int minute,
+            NeutralSummary summary,
+            Map<String, String> narratives,
+            List<LinkedIssue> linkedIssues
     ) {
         return new ChangeView(
                 UUID.randomUUID(),
@@ -208,6 +235,8 @@ class ReleaseNoteDigestTest {
                 null,
                 ProcessingStatus.COMPLETED,
                 ChangedFileStatus.COLLECTED,
+                null,
+                linkedIssues,
                 List.of(),
                 List.of(),
                 summary,

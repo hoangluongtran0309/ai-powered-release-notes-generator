@@ -6,7 +6,7 @@ ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
 `account`, `project`, `change`, `category`, `audience`, `release`,
 `translation`, the provider-neutral `source` vocabulary, the `github`, `gitlab`,
-and `linear` API clients that `project` and `change` share, and shared
+`linear`, and `jira` API clients that `project` and `change` share, and shared
 `configuration`:
 
 ```text
@@ -33,6 +33,7 @@ POST /[api/]projects/{id}/sources/{sourceId}/imports[/resume] -> SourceImportSer
 POST /webhooks/github/{webhookId} -> GitHubWebhookService (signed, sessionless)
 POST /webhooks/gitlab/{webhookId} -> GitLabWebhookService (proven, sessionless)
 POST /webhooks/linear/{webhookId} -> LinearWebhookService (proven, sessionless)
+(scheduled)                   -> JiraPollScheduler + SourceSyncWorker (Jira has no webhook)
 GET  /changes                 -> ChangeInboxService (Change Inbox UI)
 GET  /api/projects/{id}/changes -> ChangeInboxService
 POST /projects/{id}/changes/{changeId}/ai-classification -> ChangeAiClassificationService
@@ -146,15 +147,18 @@ integration_sources (github_integrations before V18)
   id (UUID PK)
   organization_id
   project_id (composite FK with organization_id -> projects; several per Project)
-  source_type (GITHUB | GITLAB | LINEAR) + external_project_key (owner/repository,
-    group/project, or a Linear team, unique per Organization and source type)
+  source_type (GITHUB | GITLAB | LINEAR | JIRA) + external_project_key
+    (owner/repository, group/project, a Linear team, or a Jira project key,
+    unique per Organization and source type)
   repository_owner + repository_name (GitHub only)
-  api_base_url (GitLab only, an allowlisted instance)
+  api_base_url (GitLab: an allowlisted instance; Jira: an atlassian.net site)
   external_workspace_key (Linear only, the workspace the team belongs to)
+  credential_identity (Jira only, the account email of its Basic credentials)
   webhook_auth_mode (GITHUB_HMAC | GITLAB_SIGNING_TOKEN | GITLAB_SECRET_TOKEN
-    | LINEAR_HMAC), which must match the source type
-  webhook_id (globally unique)
-  secret_nonce + secret_ciphertext
+    | LINEAR_HMAC | NONE), which must match the source type (NONE is Jira's)
+  webhook_id (globally unique; null exactly when the mode is NONE)
+  secret_nonce + secret_ciphertext (present exactly when webhook_id is)
+  poll_cursor_at + next_poll_at (Jira only: read up to here, read again then)
   connection_status, last_sync_at, last_error_code
   created_at
   last_delivery_at (nullable, last accepted webhook delivery)
@@ -165,7 +169,7 @@ changes
   project_id (composite FK with organization_id -> projects)
   source_type (matches the source through a composite foreign key)
   pull_request_number (the provider's own number: a pull request, a merge
-    request, or a Linear issue)
+    request, a Linear issue, or the number in a Jira key)
   title, description, author_login (null when the source names no creator), labels (text[])
   target_branch + merge_commit_sha (a code host's change only), merged_at, url
   delivery_id (the delivery that recorded the change, when the provider named one)
@@ -178,6 +182,8 @@ changes
   neutral_summary (jsonb), content_language, audience_narratives (jsonb, keyed by audience code)
   summary_edited_by (composite FK with organization_id -> app_users), summary_editor_name, summary_edited_at
   context_score (0-100), context_status (SUFFICIENT | INSUFFICIENT), context_reasons (jsonb); null when not assessed
+  linked_context_status (NOT_SUPPORTED | NOT_CONFIGURED | NOT_FOUND | PARTIAL | UNAVAILABLE | COLLECTED; null before V21)
+  linked_issues (jsonb array; only when the lookup got as far as PARTIAL, UNAVAILABLE, or COLLECTED)
 
 duplicate_candidates
   id (UUID PK)
@@ -408,6 +414,39 @@ the source names it by and what makes it idempotent, and the merge commit and
 target branch are null. Linear identifies no delivery ReleaseFlow could record as
 a GUID, so a Linear change has no delivery ID.
 
+## Jira polling
+
+Jira is the one source nobody delivers to (ADR-0019). Connecting it asks
+`GET /rest/api/3/project/{key}` with Basic `email:token` credentials, then stores
+the site, key, account, and encrypted token with no webhook identity, a
+`poll_cursor_at` of now, and a `next_poll_at` one
+`releaseflow.jira.poll-interval` (five minutes) later.
+
+- **Scheduling.** Every tick, `SourceSyncWorker` first calls
+  `JiraPollScheduler.scheduleDuePolls(now)`. For each Jira source whose
+  `next_poll_at` has passed and which has no `PENDING`, `RUNNING`, or
+  `RETRY_SCHEDULED` job, it inserts a `JIRA_POLL` row in `source_sync_jobs`
+  with no requester, an unlimited item limit, and the window
+  `[poll_cursor_at − releaseflow.jira.poll-overlap, now]`. The one-active-job
+  index still decides a race between two workers.
+- **Reading.** `JiraPollReader` asks `GET /rest/api/3/search/jql` for
+  `project = "KEY" AND statusCategory = Done AND updated >= "…"
+  ORDER BY updated ASC`, 100 at a time, following `nextPageToken`. The token is
+  the provider half of the job's `SyncCursor`. Each issue is judged on its
+  `resolutiondate` (else `updated`) and goes through the same
+  `ChangeIntake.record(..., IMPORT)` as an import, so an issue seen by two
+  overlapping polls is recorded once.
+- **Bookkeeping.** A completed poll calls `IntegrationSourceService.recordPoll`,
+  which moves `poll_cursor_at` to the window's end, sets `next_poll_at` one
+  interval later, and marks the source `ACTIVE`. A poll that must wait keeps its
+  cursor and marks the source `ERROR`; one that fails for good does the same and
+  sets `next_poll_at` 15 minutes later, so the schedule resumes on its own.
+- **Addresses.** `JiraSiteUrl` accepts only an HTTPS `atlassian.net` host with no
+  port, credentials, query, or fragment, and `JiraApiClient` checks it again
+  before every call and never follows a redirect. `releaseflow.jira.api-base-url`,
+  empty by default, is a deployment-only override that sends every call to one
+  fixed address for tests and local runs.
+
 ## Change processing
 
 `ChangeProcessingWorker` runs every second on the scheduler and drains due
@@ -427,7 +466,10 @@ happen between them:
    for everything it can add. GitHub lists a pull request's files, 100 per page
    for at most five pages; GitLab lists a merge request's diffs for at most ten;
    Linear lists nothing, because an issue has no files, and instead reads the
-   issue back over GraphQL so the change carries its current wording. A full last
+   issue back over GraphQL so the change carries its current wording; Jira
+   lists nothing and restates nothing, because the poll read the issue moments
+   earlier. `LinkedContextEnricher` then asks the Project's Jira source what the
+   change mentions (see [Linked context](#linked-context)). A full last
    page, a refused or missing token, or an invalid response is final, and so is a
    diff GitLab reports as collapsed, too large, or truncated, which makes the
    whole list unavailable rather than short. Timeouts, network errors, rate
@@ -441,6 +483,9 @@ happen between them:
    change and job are completed. Every write checks that the job still carries
    this worker's claim, so a claim that went stale and was taken over is
    discarded.
+
+A linked-context lookup that is `PARTIAL` or `UNAVAILABLE` is retried on the
+same three attempts as the source's own enrichment.
 
 An unexpected failure while collecting files reschedules the job rather than
 skipping it, so the change stays visibly Processing. Once the job is
@@ -456,6 +501,35 @@ also rejects such a review with `409 change_processing`.
 `changes_triggers_require_review` allows review triggers only on changes that
 need or have received review.
 
+## Linked context
+
+A GitHub or GitLab change may mention issues of the Project's Jira project.
+`LinkedContextEnricher` runs after the source's own enricher, outside any
+transaction:
+
+1. A change from Linear or Jira is `NOT_SUPPORTED`. A Project without a Jira
+   source that has a token, or a change whose own source has no token, is
+   `NOT_CONFIGURED`. The Jira source is found by type with
+   `SourceAccess.findByType`, the oldest first.
+2. `SourceEnricher.commitMessages` lists at most 250 commit messages over three
+   pages (`GET /repos/{o}/{r}/pulls/{n}/commits` or
+   `GET /api/v4/projects/{key}/merge_requests/{iid}/commits`). They are evidence
+   only: never stored, never sent to the AI.
+3. `JiraKeys.extract` finds the Jira project's keys in the title, description,
+   target branch, and commits with
+   `(?<![A-Z0-9_])(KEY-[1-9][0-9]*)(?![A-Z0-9_-])`, case-insensitive,
+   uppercased, deduplicated in first-seen order, at most ten.
+4. Each key is read with `GET /rest/api/3/issue/{key}?fields=summary,description,issuetype,status`.
+   The description is Atlassian Document Format flattened to plain text and
+   capped at `releaseflow.jira.description-max-characters`.
+
+No key and readable commits is `NOT_FOUND`; unreadable commits are `PARTIAL`; a
+key Jira would not show is `UNAVAILABLE`; otherwise `COLLECTED`. The worker
+records the status and issues beside the changed files, `ChangeClassifier` adds
+`LINKED_CONTEXT_UNAVAILABLE` for `PARTIAL` and `UNAVAILABLE`, the AI prompt gets
+a top-level `linked_issues` array, the Change Inbox lists the issues, and audience
+templates may print them through `{{#linkedIssues}}`.
+
 ## History import
 
 ADR-0016 imports a source's merged pull and merge requests of the last 90 days,
@@ -463,7 +537,7 @@ and ADR-0017 gives each provider its own reader.
 
 - **Jobs.** `SourceImportService` queues a `HISTORICAL_IMPORT` row in
   `source_sync_jobs` for a source with a token, with its window, cursor
-  `1:0`, and `releaseflow.import.item-limit` (500). The partial unique index
+  `:0` (the first page), and `releaseflow.import.item-limit` (500). The partial unique index
   `source_sync_jobs_one_active` allows one `PENDING`, `RUNNING`, or
   `RETRY_SCHEDULED` job per source; a second request returns
   `409 source_sync_in_progress`. Resuming a `PARTIAL` or `FAILED` job puts it
@@ -471,14 +545,14 @@ and ADR-0017 gives each provider its own reader.
 - **Readers.** A `SourceHistoryReader` per source type turns one page into
   normalized items, and `SourceHistoryReaders` fails at startup if a type that
   has a history lacks one. `SourceType.supportsHistoryImport()` says which types
-  those are; Linear is not one, so `SourceImportService` answers
+  those are; Linear and Jira are not, so `SourceImportService` answers
   `409 source_import_not_supported` and the Change Inbox does not list it. `GitHubHistoryReader` asks
   `GET /repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=N`,
   newest update first, so an item updated before the window means there is
   nothing older left and it ends the scan. `GitLabHistoryReader` asks
   `GET /api/v4/projects/{key}/merge_requests?state=merged&order_by=updated_at&sort=asc&per_page=100&page=N&updated_after=…`,
   so the list only grows at its end and an older item never appears.
-- **Worker.** `SourceImportWorker` runs every second (off in tests, like the
+- **Worker.** `SourceSyncWorker` runs every second (off in tests, like the
   change worker). It releases `RUNNING` jobs claimed more than ten minutes ago,
   claims one due job with `FOR UPDATE SKIP LOCKED`, and then, outside any
   transaction, reads pages through that reader. From the cursor's offset, each
@@ -524,6 +598,7 @@ network I/O itself.
 | Sensitive path | A changed or previous path matches `releaseflow.classification.sensitive-paths` or one of the Project's additions | `SENSITIVE_PATH` review trigger |
 | No file list | The files could not be listed | `CHANGED_FILES_UNAVAILABLE` review trigger |
 | Sensitive word | The source has no files at all, and the title or description contains `breaking change`, `migration`, `security`, `auth`, `credential`, `password`, or `encryption` | One `SENSITIVE_KEYWORD` review trigger per match |
+| Linked issues | Commits could not be read, or Jira would not show a mentioned issue | `LINKED_CONTEXT_UNAVAILABLE` review trigger |
 
 A source that cannot report files at all is not a source whose files failed to
 arrive. `ChangedFileStatus.NOT_SUPPORTED` says so, and the keyword scan stands in

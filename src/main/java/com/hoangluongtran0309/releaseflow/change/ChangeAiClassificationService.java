@@ -73,9 +73,12 @@ class ChangeAiClassificationService {
             }
             MergedPullRequest pullRequest = current.pullRequest();
             List<CategoryRef> catalog = categoryService.active(organizationId);
+            // A retry judges what is already recorded; the tracker is not asked again.
+            LinkedContext linked = current.recordedLinkedContext();
             return new Snapshot(
                     pullRequest,
-                    ChangeClassifier.classify(pullRequest, current.recordedFiles(),
+                    linked,
+                    ChangeClassifier.classify(pullRequest, current.recordedFiles(), linked,
                             sensitivePaths.forProject(organizationId, projectId), catalog),
                     catalog
             );
@@ -88,7 +91,8 @@ class ChangeAiClassificationService {
         try {
             outcome = AiOutcome.succeeded(
                     ai,
-                    ai.classify(AiClassificationRequest.of(changeId, snapshot.pullRequest(), language,
+                    ai.classify(AiClassificationRequest.of(changeId, snapshot.pullRequest(),
+                            snapshot.linkedContext().issues(), language,
                             snapshot.rules().category(), snapshot.catalog(), audiences, settings.contextThreshold())),
                     language
             );
@@ -121,6 +125,11 @@ class ChangeAiClassificationService {
                 .orElseThrow(ChangeNotFoundException::new);
     }
 
-    private record Snapshot(MergedPullRequest pullRequest, ChangeClassification rules, List<CategoryRef> catalog) {
+    private record Snapshot(
+            MergedPullRequest pullRequest,
+            LinkedContext linkedContext,
+            ChangeClassification rules,
+            List<CategoryRef> catalog
+    ) {
     }
 }

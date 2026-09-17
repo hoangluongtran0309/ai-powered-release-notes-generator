@@ -6,6 +6,9 @@ import com.hoangluongtran0309.releaseflow.source.SourceCredentials;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.Optional;
+
 /** GitHub can list a pull request's files; it never restates the pull request itself. */
 @Component
 class GitHubSourceEnricher implements SourceEnricher {
@@ -30,5 +33,19 @@ class GitHubSourceEnricher implements SourceEnricher {
                 token
         );
         return Enrichment.of(files, change);
+    }
+
+    @Override
+    public Optional<List<String>> commitMessages(
+            SourceCredentials credentials,
+            String token,
+            MergedPullRequest change
+    ) {
+        return gitHubApiClient.pullRequestCommits(
+                credentials.repositoryOwner(),
+                credentials.repositoryName(),
+                change.number(),
+                token
+        );
     }
 }

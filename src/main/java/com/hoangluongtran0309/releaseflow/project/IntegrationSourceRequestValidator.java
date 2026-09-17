@@ -16,6 +16,8 @@ public class IntegrationSourceRequestValidator
     private static final Pattern GITHUB_SEGMENT = Pattern.compile("[A-Za-z0-9_.-]+");
     // A GitLab project path is a namespace and a project, with any number of subgroups.
     private static final Pattern GITLAB_PROJECT_PATH = Pattern.compile("[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+");
+    // Jira's own rule for a project key, which is also what its issue keys are built from.
+    private static final Pattern JIRA_PROJECT_KEY = Pattern.compile("[A-Z][A-Z0-9_]*");
 
     @Override
     public boolean isValid(IntegrationSourceRequest request, ConstraintValidatorContext context) {
@@ -24,6 +26,7 @@ public class IntegrationSourceRequestValidator
             case GITHUB -> gitHub(request, context);
             case GITLAB -> gitLab(request, context);
             case LINEAR -> linear(request, context);
+            case JIRA -> jira(request, context);
         };
     }
 
@@ -61,6 +64,21 @@ public class IntegrationSourceRequestValidator
         // Linear generates the signing secret itself, so it can only be pasted in.
         valid &= required(request.getWebhookSecret(), 255, "webhookSecret", "Webhook signing secret", context);
         // The token is what confirms the team and tells ReleaseFlow its workspace.
+        valid &= required(request.getApiToken(), 255, "apiToken", "API token", context);
+        return valid;
+    }
+
+    private static boolean jira(IntegrationSourceRequest request, ConstraintValidatorContext context) {
+        boolean valid = true;
+        String projectKey = request.getProjectKey();
+        if (projectKey == null || projectKey.isBlank()) {
+            valid = reject(context, "projectKey", "Jira project key is required.");
+        } else if (!JIRA_PROJECT_KEY.matcher(projectKey).matches()) {
+            valid = reject(context, "projectKey", "Jira project key must look like APP.");
+        }
+        valid &= required(request.getSiteUrl(), 255, "siteUrl", "Jira site URL", context);
+        // Jira signs in as an account, so the token alone does not say who is asking.
+        valid &= required(request.getAccountEmail(), 255, "accountEmail", "Jira account email", context);
         valid &= required(request.getApiToken(), 255, "apiToken", "API token", context);
         return valid;
     }

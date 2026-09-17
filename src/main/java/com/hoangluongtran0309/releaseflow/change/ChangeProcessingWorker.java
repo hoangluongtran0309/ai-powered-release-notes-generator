@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,6 +48,7 @@ class ChangeProcessingWorker {
     private final ChangeRepository changeRepository;
     private final SourceAccess sourceAccess;
     private final SourceEnrichers enrichers;
+    private final LinkedContextEnricher linkedContext;
     private final ProjectSensitivePathService sensitivePaths;
     private final AiClassifiers aiClassifiers;
     private final OutputLanguageService outputLanguageService;
@@ -64,6 +66,7 @@ class ChangeProcessingWorker {
             ChangeRepository changeRepository,
             SourceAccess sourceAccess,
             SourceEnrichers enrichers,
+            LinkedContextEnricher linkedContext,
             ProjectSensitivePathService sensitivePaths,
             AiClassifiers aiClassifiers,
             OutputLanguageService outputLanguageService,
@@ -80,6 +83,7 @@ class ChangeProcessingWorker {
         this.changeRepository = changeRepository;
         this.sourceAccess = sourceAccess;
         this.enrichers = enrichers;
+        this.linkedContext = linkedContext;
         this.sensitivePaths = sensitivePaths;
         this.aiClassifiers = aiClassifiers;
         this.outputLanguageService = outputLanguageService;
@@ -149,21 +153,23 @@ class ChangeProcessingWorker {
     }
 
     private void process(Claim claim) {
-        Enrichment enrichment = enrich(claim);
+        Enriched enriched = enrich(claim);
+        Enrichment enrichment = enriched.enrichment();
         ChangedFiles files = enrichment.files();
-        if (enrichment.retryable() && claim.attempt() < MAX_ATTEMPTS) {
-            reschedule(claim, files.failure());
+        LinkedContext linked = enriched.linkedContext();
+        if ((enrichment.retryable() || linked.retryable()) && claim.attempt() < MAX_ATTEMPTS) {
+            reschedule(claim, enrichment.retryable() ? files.failure() : linked.status().name().toLowerCase(Locale.ROOT));
             return;
         }
         // Anything the provider restated is what the rules and the AI now judge.
         MergedPullRequest change = enrichment.change();
         List<CategoryRef> catalog = categoryService.active(claim.organizationId());
-        ChangeClassification rules = ChangeClassifier.classify(change, files,
+        ChangeClassification rules = ChangeClassifier.classify(change, files, linked,
                 sensitivePaths.forProject(claim.organizationId(), claim.projectId()), catalog);
 
         Optional<AiChangeClassifier> ai = aiClassifiers.active();
         if (ai.isEmpty()) {
-            complete(claim, enrichment, ChangeAiMerge.merge(rules, null, null), files.failure());
+            complete(claim, enriched, ChangeAiMerge.merge(rules, null, null), files.failure());
             return;
         }
 
@@ -173,6 +179,7 @@ class ChangeProcessingWorker {
                     Change stored = findChange(job);
                     stored.refreshDetails(change);
                     stored.recordChangedFiles(files);
+                    stored.recordLinkedContext(linked);
                     job.startClassifying();
                     return true;
                 })
@@ -181,10 +188,10 @@ class ChangeProcessingWorker {
             return;
         }
 
-        AiOutcome outcome = askAi(ai.get(), claim, change, rules.category(), catalog);
+        AiOutcome outcome = askAi(ai.get(), claim, change, linked, rules.category(), catalog);
         complete(
                 claim,
-                enrichment,
+                enriched,
                 ChangeAiMerge.merge(rules, outcome, change, settings.contextThreshold()),
                 outcome.succeeded() ? files.failure() : AI_FAILED
         );
@@ -195,6 +202,7 @@ class ChangeProcessingWorker {
             AiChangeClassifier ai,
             Claim claim,
             MergedPullRequest change,
+            LinkedContext linked,
             CategoryRef rulesCategory,
             List<CategoryRef> catalog
     ) {
@@ -204,6 +212,7 @@ class ChangeProcessingWorker {
             AiClassification answer = ai.classify(AiClassificationRequest.of(
                     claim.changeId(),
                     change,
+                    linked.issues(),
                     language,
                     rulesCategory,
                     catalog,
@@ -219,7 +228,8 @@ class ChangeProcessingWorker {
         }
     }
 
-    private void complete(Claim claim, Enrichment enrichment, ChangeAiMerge.ClassifiedChange outcome, String error) {
+    private void complete(Claim claim, Enriched enriched, ChangeAiMerge.ClassifiedChange outcome, String error) {
+        Enrichment enrichment = enriched.enrichment();
         ChangedFiles files = enrichment.files();
         transactionTemplate.executeWithoutResult(status -> {
             ChangeProcessingJob job = jobRepository.findById(claim.jobId()).orElseThrow();
@@ -230,6 +240,7 @@ class ChangeProcessingWorker {
             Instant now = now();
             Change change = findChange(job);
             change.refreshDetails(enrichment.change());
+            change.recordLinkedContext(enriched.linkedContext());
             change.completeProcessing(files, outcome, now);
             duplicateDetector.detect(change);
             job.complete(error, now);
@@ -246,7 +257,8 @@ class ChangeProcessingWorker {
     // A job whose AI call may already have happened is finished from the recorded files.
     private void completeWithoutAi(ChangeProcessingJob job, Change change, Instant now) {
         ChangedFiles files = change.recordedFiles();
-        ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files,
+        LinkedContext linked = change.recordedLinkedContext();
+        ChangeClassification rules = ChangeClassifier.classify(change.pullRequest(), files, linked,
                 sensitivePaths.forProject(change.getOrganizationId(), change.getProjectId()),
                 categoryService.active(change.getOrganizationId()));
         AiOutcome outcome = aiClassifiers.active()
@@ -258,16 +270,34 @@ class ChangeProcessingWorker {
         log.warn("Completed change {} without AI because its classification did not finish.", change.getId());
     }
 
-    // The source says which provider to ask and how to address its project.
-    private Enrichment enrich(Claim claim) {
+    /**
+     * Everything an outside system can add: what the change's own provider says about it,
+     * and what the Project's issue tracker says about what it mentions.
+     */
+    private Enriched enrich(Claim claim) {
         Optional<SourceCredentials> credentials = sourceAccess.find(claim.organizationId(), claim.projectId(),
                 claim.sourceId());
         Optional<String> token = credentials.flatMap(SourceCredentials::accessToken);
         if (token.isEmpty()) {
-            return Enrichment.of(ChangedFiles.unavailable(ChangedFiles.NO_ACCESS_TOKEN, false), claim.pullRequest());
+            return new Enriched(
+                    Enrichment.of(ChangedFiles.unavailable(ChangedFiles.NO_ACCESS_TOKEN, false), claim.pullRequest()),
+                    LinkedContext.NOT_CONFIGURED
+            );
         }
-        return enrichers.of(credentials.get().sourceType())
-                .enrich(credentials.get(), token.get(), claim.pullRequest());
+        SourceEnricher enricher = enrichers.of(credentials.get().sourceType());
+        Enrichment enrichment = enricher.enrich(credentials.get(), token.get(), claim.pullRequest());
+        LinkedContext linked = linkedContext.enrich(
+                claim.organizationId(),
+                claim.projectId(),
+                enrichment.change(),
+                enricher,
+                credentials.get(),
+                token.get()
+        );
+        return new Enriched(enrichment, linked);
+    }
+
+    private record Enriched(Enrichment enrichment, LinkedContext linkedContext) {
     }
 
     // Only a job still collecting files is retried; once the AI may have been asked, it never is.

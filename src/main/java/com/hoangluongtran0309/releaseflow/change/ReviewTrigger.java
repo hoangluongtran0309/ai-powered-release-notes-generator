@@ -41,6 +41,10 @@ public record ReviewTrigger(ReviewTriggerType type, String detail) {
         return new ReviewTrigger(ReviewTriggerType.CONTEXT_INSUFFICIENT, reasons.isEmpty() ? null : String.join(", ", reasons));
     }
 
+    static ReviewTrigger linkedContextUnavailable(LinkedContextStatus status) {
+        return new ReviewTrigger(ReviewTriggerType.LINKED_CONTEXT_UNAVAILABLE, status.name());
+    }
+
     static ReviewTrigger duplicateCandidate(UUID earlierChangeId) {
         return new ReviewTrigger(ReviewTriggerType.DUPLICATE_CANDIDATE, earlierChangeId.toString());
     }
@@ -54,6 +58,7 @@ public record ReviewTrigger(ReviewTriggerType type, String detail) {
             case CLASSIFIER_FALLBACK -> "AI classification failed";
             case CATEGORY_SUGGESTION_PENDING -> "AI proposed a new category " + detail;
             case CONTEXT_INSUFFICIENT -> detail == null ? "Not enough context" : "Not enough context: " + detail;
+            case LINKED_CONTEXT_UNAVAILABLE -> "Linked issues incomplete";
             case DUPLICATE_CANDIDATE -> "Possible duplicate of an earlier change";
         };
     }

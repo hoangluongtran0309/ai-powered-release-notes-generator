@@ -100,6 +100,8 @@ class ReleaseNotePreviewTest {
                 null,
                 ProcessingStatus.COMPLETED,
                 ChangedFileStatus.COLLECTED,
+                null,
+                List.of(),
                 List.of(),
                 List.of(),
                 null,

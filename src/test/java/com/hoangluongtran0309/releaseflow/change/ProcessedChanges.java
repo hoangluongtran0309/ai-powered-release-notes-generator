@@ -28,7 +28,8 @@ final class ProcessedChanges {
                 UUID.randomUUID(), Instant.now());
         change.completeProcessing(
                 ORDINARY_FILES,
-                ChangeAiMerge.merge(ChangeClassifier.classify(pullRequest, ORDINARY_FILES, RULES, TestCategories.CATALOG), null, null),
+                ChangeAiMerge.merge(ChangeClassifier.classify(pullRequest, ORDINARY_FILES,
+                        LinkedContext.of(LinkedContextStatus.NOT_CONFIGURED, List.of()), RULES, TestCategories.CATALOG), null, null),
                 Instant.now()
         );
         return change;

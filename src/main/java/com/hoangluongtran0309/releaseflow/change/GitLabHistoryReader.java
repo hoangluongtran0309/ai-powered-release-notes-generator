@@ -44,14 +44,16 @@ class GitLabHistoryReader implements SourceHistoryReader {
     public HistoryPage read(
             SourceCredentials credentials,
             String token,
-            ImportCursor cursor,
+            String providerCursor,
             Instant windowStart,
             Instant windowEnd
     ) {
+        // Both providers number their pages, and a blank cursor means the first.
+        int page = providerCursor.isBlank() ? 1 : Integer.parseInt(providerCursor);
         ProviderListing listing = gitLabApiClient.mergedMergeRequests(
                 credentials.apiBaseUrl(),
                 credentials.externalProjectKey(),
-                cursor.page(),
+                page,
                 windowStart,
                 token
         );
@@ -67,6 +69,6 @@ class GitLabHistoryReader implements SourceHistoryReader {
                     HistoryTimes.readOrNull(() -> MergedMergeRequest.fromListItem(mergeRequest))
             ));
         }
-        return HistoryPage.listed(items, listing.lastPage());
+        return HistoryPage.listed(items, Integer.toString(page + 1), listing.lastPage());
     }
 }

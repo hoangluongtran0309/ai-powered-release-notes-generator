@@ -41,6 +41,8 @@ public class GitLabApiClient {
 
     static final int PAGE_SIZE = ProviderListing.PAGE_SIZE;
     static final int MAX_DIFF_PAGES = 10;
+    static final int MAX_COMMIT_PAGES = 3;
+    static final int MAX_COMMITS = 250;
 
     private static final Logger log = LoggerFactory.getLogger(GitLabApiClient.class);
     private static final String TOKEN_HEADER = "PRIVATE-TOKEN";
@@ -185,6 +187,53 @@ public class GitLabApiClient {
             return ProviderListing.listed(mergeRequests);
         } catch (JacksonException exception) {
             return ProviderListing.failed(ProviderListing.Status.INVALID_RESPONSE, null);
+        }
+    }
+
+    /**
+     * The messages of a merge request's commits, up to {@value #MAX_COMMIT_PAGES} pages.
+     * They are read only to find issue keys, so a list that could not be read is empty
+     * rather than an error the change waits on.
+     */
+    public Optional<List<String>> mergeRequestCommits(
+            String baseUrl,
+            String projectKey,
+            int mergeRequestIid,
+            String token
+    ) {
+        requireNoTransaction();
+        List<String> messages = new ArrayList<>();
+        try {
+            for (int page = 1; page <= MAX_COMMIT_PAGES && messages.size() < MAX_COMMITS; page++) {
+                String body = client(baseUrl).get()
+                        .uri(
+                                "/api/v4/projects/{project}/merge_requests/{iid}/commits?per_page={size}&page={page}",
+                                projectKey,
+                                mergeRequestIid,
+                                PAGE_SIZE,
+                                page
+                        )
+                        .header(TOKEN_HEADER, token)
+                        .retrieve()
+                        .body(String.class);
+                JsonNode commits = objectMapper.readTree(body == null ? "" : body);
+                if (commits == null || !commits.isArray()) {
+                    return Optional.empty();
+                }
+                for (JsonNode commit : commits.values()) {
+                    if (messages.size() == MAX_COMMITS) {
+                        break;
+                    }
+                    messages.add(commit.path("message").asString(""));
+                }
+                if (commits.size() < PAGE_SIZE) {
+                    break;
+                }
+            }
+            return Optional.of(List.copyOf(messages));
+        } catch (RestClientException | JacksonException exception) {
+            log.warn("Could not list the commits of {}!{}.", projectKey, mergeRequestIid);
+            return Optional.empty();
         }
     }
 

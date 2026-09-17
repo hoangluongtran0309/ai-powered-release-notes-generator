@@ -188,6 +188,33 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
                 .doesNotThrowAnyException();
     }
 
+    @Test
+    void keepsLinkedIssuesToALookupThatGotFarEnoughToReadThem() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        insertChange(organization, project, 1, "Title", VALID_SHA);
+        String issues = "[{\"key\":\"APP-1\",\"title\":\"Export\"}]";
+
+        for (String status : new String[]{"PARTIAL", "UNAVAILABLE", "COLLECTED"}) {
+            assertThatCode(() -> setLinkedContext(status, issues)).doesNotThrowAnyException();
+        }
+        for (String status : new String[]{"NOT_SUPPORTED", "NOT_CONFIGURED", "NOT_FOUND"}) {
+            assertThatCode(() -> setLinkedContext(status, null)).doesNotThrowAnyException();
+            assertThatThrownBy(() -> setLinkedContext(status, issues))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
+        assertThatThrownBy(() -> setLinkedContext("PENDING", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> setLinkedContext("COLLECTED", "{\"key\":\"APP-1\"}"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // A change recorded before V21 has no lookup at all.
+        assertThatCode(() -> setLinkedContext(null, null)).doesNotThrowAnyException();
+    }
+
+    private void setLinkedContext(String status, String issues) {
+        jdbcTemplate.update("UPDATE changes SET linked_context_status = ?, linked_issues = ?::jsonb", status, issues);
+    }
+
     // Since ADR-0009 an AI result may settle a change, and may accompany a category the rules chose.
     @Test
     void keepsAiStateConsistent() {

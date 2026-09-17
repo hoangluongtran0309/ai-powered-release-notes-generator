@@ -3,11 +3,14 @@ package com.hoangluongtran0309.releaseflow.project;
 import com.hoangluongtran0309.releaseflow.github.GitHubApiClient;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabApiClient;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabBaseUrl;
+import com.hoangluongtran0309.releaseflow.jira.JiraApiClient;
+import com.hoangluongtran0309.releaseflow.jira.JiraSiteUrl;
 import com.hoangluongtran0309.releaseflow.linear.LinearApiClient;
 import com.hoangluongtran0309.releaseflow.source.ProviderAccess;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -17,6 +20,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -37,6 +41,8 @@ public class IntegrationSourceService {
     private static final String GITHUB_TOKEN_PURPOSE = "github-access-token";
     private static final String GITLAB_TOKEN_PURPOSE = "gitlab-access-token";
     private static final String LINEAR_TOKEN_PURPOSE = "linear-access-token";
+    private static final String JIRA_TOKEN_PURPOSE = "jira-access-token";
+    private static final String POLLING_DELIVERY = "POLLING";
     private static final String WEBHOOK_DELIVERY = "WEBHOOK";
 
     private final ProjectRepository projectRepository;
@@ -46,6 +52,9 @@ public class IntegrationSourceService {
     private final GitLabApiClient gitLabApiClient;
     private final GitLabBaseUrl gitLabBaseUrl;
     private final LinearApiClient linearApiClient;
+    private final JiraApiClient jiraApiClient;
+    private final JiraSiteUrl jiraSiteUrl;
+    private final Duration pollInterval;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final SecureRandom secureRandom;
@@ -59,6 +68,9 @@ public class IntegrationSourceService {
             GitLabApiClient gitLabApiClient,
             GitLabBaseUrl gitLabBaseUrl,
             LinearApiClient linearApiClient,
+            JiraApiClient jiraApiClient,
+            JiraSiteUrl jiraSiteUrl,
+            @Value("${releaseflow.jira.poll-interval}") Duration pollInterval,
             PlatformTransactionManager transactionManager,
             Clock clock
     ) {
@@ -70,6 +82,9 @@ public class IntegrationSourceService {
                 gitLabApiClient,
                 gitLabBaseUrl,
                 linearApiClient,
+                jiraApiClient,
+                jiraSiteUrl,
+                pollInterval,
                 transactionManager,
                 clock,
                 new SecureRandom()
@@ -84,6 +99,9 @@ public class IntegrationSourceService {
             GitLabApiClient gitLabApiClient,
             GitLabBaseUrl gitLabBaseUrl,
             LinearApiClient linearApiClient,
+            JiraApiClient jiraApiClient,
+            JiraSiteUrl jiraSiteUrl,
+            Duration pollInterval,
             PlatformTransactionManager transactionManager,
             Clock clock,
             SecureRandom secureRandom
@@ -95,6 +113,9 @@ public class IntegrationSourceService {
         this.gitLabApiClient = gitLabApiClient;
         this.gitLabBaseUrl = gitLabBaseUrl;
         this.linearApiClient = linearApiClient;
+        this.jiraApiClient = jiraApiClient;
+        this.jiraSiteUrl = jiraSiteUrl;
+        this.pollInterval = pollInterval;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.secureRandom = secureRandom;
@@ -112,6 +133,7 @@ public class IntegrationSourceService {
             case GITHUB -> createGitHub(organizationId, projectId, request);
             case GITLAB -> createGitLab(organizationId, projectId, request);
             case LINEAR -> createLinear(organizationId, projectId, request);
+            case JIRA -> createJira(organizationId, projectId, request);
         };
     }
 
@@ -156,6 +178,7 @@ public class IntegrationSourceService {
                 projectKey,
                 owner,
                 repository,
+                null,
                 null,
                 null,
                 WebhookAuthMode.GITHUB_HMAC,
@@ -209,6 +232,7 @@ public class IntegrationSourceService {
                 null,
                 null,
                 apiBaseUrl,
+                null,
                 null,
                 request.getWebhookAuthMode(),
                 webhookId,
@@ -276,9 +300,78 @@ public class IntegrationSourceService {
                 null,
                 null,
                 workspaceId,
+                null,
                 WebhookAuthMode.LINEAR_HMAC,
                 webhookId,
                 webhookPath(SourceType.LINEAR, webhookId),
+                null,
+                createdAt
+        );
+    }
+
+    /**
+     * Connects a Jira project. Nothing will ever be delivered here, so no webhook identity
+     * or secret is made; instead the source is given the schedule ReleaseFlow will read it
+     * on, starting one interval from now. Jira is asked to confirm the account and token
+     * before anything is written, and never inside a transaction.
+     */
+    private IntegrationSourceCreated createJira(
+            UUID organizationId,
+            UUID projectId,
+            IntegrationSourceRequest request
+    ) {
+        // The only Jira address a request may choose, so the Cloud rules decide it.
+        String siteUrl = jiraSiteUrl.validated(request.getSiteUrl());
+        String projectKey = request.getProjectKey().strip().toUpperCase(Locale.ROOT);
+        String accountEmail = request.getAccountEmail();
+        requireNotConnected(organizationId, SourceType.JIRA, projectKey);
+
+        ProviderAccess access = jiraApiClient.checkProjectAccess(
+                siteUrl, projectKey, accountEmail, request.getApiToken());
+        if (access == ProviderAccess.REJECTED) {
+            throw new SourceTokenRejectedException(SourceType.JIRA);
+        }
+        if (access == ProviderAccess.UNAVAILABLE) {
+            throw new SourceUnavailableException(SourceType.JIRA);
+        }
+
+        UUID sourceId = UUID.randomUUID();
+        Instant createdAt = clock.instant();
+        save(
+                () -> {
+                    IntegrationSource source = IntegrationSource.jira(
+                            sourceId,
+                            organizationId,
+                            projectId,
+                            projectKey,
+                            siteUrl,
+                            accountEmail,
+                            createdAt,
+                            createdAt.plus(pollInterval)
+                    );
+                    source.replaceToken(
+                            credentialCipher.encrypt(request.getApiToken(), tokenAuthenticatedData(source)),
+                            createdAt
+                    );
+                    return source;
+                },
+                SourceType.JIRA
+        );
+
+        // Nothing is delivered to a Jira source, so there is no path and no secret.
+        return new IntegrationSourceCreated(
+                sourceId,
+                projectId,
+                SourceType.JIRA,
+                projectKey,
+                null,
+                null,
+                siteUrl,
+                null,
+                accountEmail,
+                WebhookAuthMode.NONE,
+                null,
+                null,
                 null,
                 createdAt
         );
@@ -311,6 +404,7 @@ public class IntegrationSourceService {
                     source.getExternalProjectKey(),
                     source.getExternalWorkspaceKey(),
                     source.getApiBaseUrl(),
+                    source.getCredentialIdentity(),
                     source.getRepositoryOwner(),
                     source.getRepositoryName()
             );
@@ -325,6 +419,12 @@ public class IntegrationSourceService {
             case GITLAB -> gitLabApiClient.checkProjectAccess(
                     coordinates.apiBaseUrl(),
                     coordinates.externalProjectKey(),
+                    token
+            );
+            case JIRA -> jiraApiClient.checkProjectAccess(
+                    coordinates.apiBaseUrl(),
+                    coordinates.externalProjectKey(),
+                    coordinates.credentialIdentity(),
                     token
             );
             // A Linear token is only accepted while it still reaches the same workspace.
@@ -394,12 +494,13 @@ public class IntegrationSourceService {
         return new IntegrationSourceView(
                 source.getId(),
                 source.getSourceType(),
-                WEBHOOK_DELIVERY,
+                source.getSourceType().isPolled() ? POLLING_DELIVERY : WEBHOOK_DELIVERY,
                 source.getExternalProjectKey(),
                 source.getRepositoryOwner(),
                 source.getRepositoryName(),
                 source.getApiBaseUrl(),
                 source.getExternalWorkspaceKey(),
+                source.getCredentialIdentity(),
                 source.getWebhookAuthMode(),
                 source.getWebhookId(),
                 webhookPath(source.getSourceType(), source.getWebhookId()),
@@ -409,8 +510,23 @@ public class IntegrationSourceService {
                 source.getTokenUpdatedAt(),
                 source.getConnectionStatus(),
                 source.getLastSyncAt(),
-                source.getLastErrorCode()
+                source.getLastErrorCode(),
+                source.getNextPollAt()
         );
+    }
+
+    /** A poll that finished: the cursor covers the window it read, and the next one is booked. */
+    @Transactional
+    public void recordPoll(UUID organizationId, UUID sourceId, Instant cursorAt, Instant at) {
+        sourceRepository.findByIdAndOrganizationId(sourceId, organizationId)
+                .ifPresent(source -> source.recordPoll(cursorAt, at.plus(pollInterval), at));
+    }
+
+    /** A poll that failed: the cursor stays where it was, so the next attempt misses nothing. */
+    @Transactional
+    public void recordPollFailure(UUID organizationId, UUID sourceId, String errorCode, Instant retryAt, Instant at) {
+        sourceRepository.findByIdAndOrganizationId(sourceId, organizationId)
+                .ifPresent(source -> source.recordPollFailure(errorCode, retryAt, at));
     }
 
     static String webhookPath(SourceType sourceType, UUID webhookId) {
@@ -418,6 +534,8 @@ public class IntegrationSourceService {
             case GITHUB -> "/webhooks/github/" + webhookId;
             case GITLAB -> "/webhooks/gitlab/" + webhookId;
             case LINEAR -> "/webhooks/linear/" + webhookId;
+            // Nothing is delivered to a polled source, so it is reachable at no path.
+            case JIRA -> null;
         };
     }
 
@@ -441,6 +559,13 @@ public class IntegrationSourceService {
                     source.getOrganizationId(),
                     source.getProjectId(),
                     source.getId(),
+                    source.getExternalProjectKey()
+            );
+            case JIRA -> typedAuthenticatedData(
+                    source.getOrganizationId(),
+                    source.getProjectId(),
+                    source.getId(),
+                    SourceType.JIRA,
                     source.getExternalProjectKey()
             );
         };
@@ -480,13 +605,23 @@ public class IntegrationSourceService {
 
     // The type line keeps a Linear ciphertext from being read as another provider's.
     static byte[] linearAuthenticatedData(UUID organizationId, UUID projectId, UUID sourceId, String teamId) {
+        return typedAuthenticatedData(organizationId, projectId, sourceId, SourceType.LINEAR, teamId);
+    }
+
+    static byte[] typedAuthenticatedData(
+            UUID organizationId,
+            UUID projectId,
+            UUID sourceId,
+            SourceType sourceType,
+            String externalProjectKey
+    ) {
         return String.join(
                         "\n",
                         organizationId.toString(),
                         projectId.toString(),
                         sourceId.toString(),
-                        SourceType.LINEAR.name(),
-                        teamId
+                        sourceType.name(),
+                        externalProjectKey
                 )
                 .getBytes(StandardCharsets.UTF_8);
     }
@@ -497,6 +632,7 @@ public class IntegrationSourceService {
             case GITHUB -> GITHUB_TOKEN_PURPOSE;
             case GITLAB -> GITLAB_TOKEN_PURPOSE;
             case LINEAR -> LINEAR_TOKEN_PURPOSE;
+            case JIRA -> JIRA_TOKEN_PURPOSE;
         };
         return String.join(
                         "\n",
@@ -530,6 +666,7 @@ public class IntegrationSourceService {
             String externalProjectKey,
             String externalWorkspaceKey,
             String apiBaseUrl,
+            String credentialIdentity,
             String repositoryOwner,
             String repositoryName
     ) {

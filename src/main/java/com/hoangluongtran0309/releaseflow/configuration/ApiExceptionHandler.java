@@ -47,6 +47,7 @@ import com.hoangluongtran0309.releaseflow.change.WebhookRepositoryMismatchExcept
 import com.hoangluongtran0309.releaseflow.change.WebhookSignatureInvalidException;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabHostNotAllowedException;
 import com.hoangluongtran0309.releaseflow.gitlab.InvalidGitLabBaseUrlException;
+import com.hoangluongtran0309.releaseflow.jira.InvalidJiraSiteException;
 import com.hoangluongtran0309.releaseflow.project.ProjectApiController;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.SourceAlreadyConnectedException;
@@ -256,6 +257,16 @@ public class ApiExceptionHandler {
                 "GitLab host not allowed",
                 exception.getMessage(),
                 "gitlab_host_not_allowed"
+        ));
+    }
+
+    @ExceptionHandler(InvalidJiraSiteException.class)
+    ResponseEntity<ProblemDetail> invalidJiraSite(InvalidJiraSiteException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid Jira site URL",
+                exception.getMessage(),
+                "jira_site_invalid"
         ));
     }
 

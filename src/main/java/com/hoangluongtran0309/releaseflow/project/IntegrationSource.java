@@ -51,17 +51,29 @@ class IntegrationSource {
     @Column(name = "external_workspace_key", length = 100, updatable = false)
     private String externalWorkspaceKey;
 
+    // Only a source whose credential names an account has one, so far Jira.
+    @Column(name = "credential_identity", length = 255, updatable = false)
+    private String credentialIdentity;
+
+    // Only a polled source has a schedule; a delivered one is told instead of asking.
+    @Column(name = "poll_cursor_at")
+    private Instant pollCursorAt;
+
+    @Column(name = "next_poll_at")
+    private Instant nextPollAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "webhook_auth_mode", nullable = false, length = 30, updatable = false)
     private WebhookAuthMode webhookAuthMode;
 
-    @Column(name = "webhook_id", nullable = false, unique = true)
+    // A polled source is never delivered to, so it has no identity to be delivered at.
+    @Column(name = "webhook_id", unique = true)
     private UUID webhookId;
 
-    @Column(name = "secret_nonce", nullable = false, columnDefinition = "bytea")
+    @Column(name = "secret_nonce", columnDefinition = "bytea")
     private byte[] secretNonce;
 
-    @Column(name = "secret_ciphertext", nullable = false, columnDefinition = "bytea")
+    @Column(name = "secret_ciphertext", columnDefinition = "bytea")
     private byte[] secretCiphertext;
 
     @Column(name = "created_at", nullable = false)
@@ -111,8 +123,8 @@ class IntegrationSource {
         this.externalProjectKey = externalProjectKey;
         this.webhookAuthMode = webhookAuthMode;
         this.webhookId = webhookId;
-        this.secretNonce = secretNonce.clone();
-        this.secretCiphertext = secretCiphertext.clone();
+        this.secretNonce = secretNonce == null ? null : secretNonce.clone();
+        this.secretCiphertext = secretCiphertext == null ? null : secretCiphertext.clone();
         this.createdAt = createdAt;
         this.connectionStatus = ConnectionStatus.ACTIVE;
     }
@@ -143,6 +155,56 @@ class IntegrationSource {
         source.repositoryOwner = repositoryOwner;
         source.repositoryName = repositoryName;
         return source;
+    }
+
+    /**
+     * A Jira project. Nothing is delivered here, so there is no webhook identity and no
+     * secret; instead the source carries the schedule ReleaseFlow reads it on.
+     */
+    static IntegrationSource jira(
+            UUID id,
+            UUID organizationId,
+            UUID projectId,
+            String projectKey,
+            String siteUrl,
+            String accountEmail,
+            Instant createdAt,
+            Instant firstPollAt
+    ) {
+        IntegrationSource source = new IntegrationSource(
+                id,
+                organizationId,
+                projectId,
+                SourceType.JIRA,
+                projectKey,
+                WebhookAuthMode.NONE,
+                null,
+                null,
+                null,
+                createdAt
+        );
+        source.apiBaseUrl = siteUrl;
+        source.credentialIdentity = accountEmail;
+        source.pollCursorAt = createdAt;
+        source.nextPollAt = firstPollAt;
+        return source;
+    }
+
+    /** A poll that finished moves the cursor to the window it covered and books the next one. */
+    void recordPoll(Instant cursorAt, Instant nextPollAt, Instant at) {
+        this.pollCursorAt = cursorAt;
+        this.nextPollAt = nextPollAt;
+        this.lastSyncAt = at;
+        this.lastErrorCode = null;
+        this.connectionStatus = ConnectionStatus.ACTIVE;
+    }
+
+    /** A poll that failed keeps its cursor, so nothing is skipped, and waits before asking again. */
+    void recordPollFailure(String errorCode, Instant retryAt, Instant at) {
+        this.lastSyncAt = at;
+        this.lastErrorCode = errorCode;
+        this.nextPollAt = retryAt;
+        this.connectionStatus = ConnectionStatus.ERROR;
     }
 
     static IntegrationSource linear(
@@ -245,11 +307,23 @@ class IntegrationSource {
     }
 
     byte[] getSecretNonce() {
-        return secretNonce.clone();
+        return secretNonce == null ? null : secretNonce.clone();
     }
 
     byte[] getSecretCiphertext() {
-        return secretCiphertext.clone();
+        return secretCiphertext == null ? null : secretCiphertext.clone();
+    }
+
+    String getCredentialIdentity() {
+        return credentialIdentity;
+    }
+
+    Instant getPollCursorAt() {
+        return pollCursorAt;
+    }
+
+    Instant getNextPollAt() {
+        return nextPollAt;
     }
 
     Instant getCreatedAt() {

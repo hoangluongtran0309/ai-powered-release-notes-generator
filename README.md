@@ -16,15 +16,20 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V20`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V21`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
-- create-only GitHub repository, GitLab project, and Linear team sources, several
-  per Project;
+- create-only GitHub repository, GitLab project, Linear team, and Jira Cloud
+  project sources, several per Project;
 - a unique webhook identity and 256-bit signing secret for each integration;
 - AES-256-GCM encryption at rest with one-time secret reveal;
 - signed GitHub, GitLab, and Linear webhook endpoints that record each merged
   pull request, merged merge request, and completed issue once as a normalized
   change, and show the last verified delivery per source;
+- a Jira project read every five minutes for issues that moved into Done, with
+  no webhook to set up;
+- Jira issues mentioned by a pull or merge request's title, description, branch,
+  or commits, shown on the change, given to the AI, and available to release
+  note templates;
 - an optional, write-only access token per source, confirmed with the provider
   and stored encrypted;
 - a durable processing queue that asks each change's provider for what it can
@@ -111,9 +116,11 @@ REST clients use the same session and CSRF policy as the server-rendered UI:
 6. Connect a source with `POST /api/projects/{projectId}/sources`:
    `{"type": "GITHUB", "owner", "repository"}`,
    `{"type": "GITLAB", "apiBaseUrl", "projectPath", "webhookAuthMode"}`, or
-   `{"type": "LINEAR", "teamId", "webhookSecret", "apiToken"}`. For GitHub and
-   GitLab, save the returned `webhookSecret` immediately; it is never returned
-   again. Linear makes its own secret, so you supply it and nothing is returned.
+   `{"type": "LINEAR", "teamId", "webhookSecret", "apiToken"}`, or
+   `{"type": "JIRA", "siteUrl", "projectKey", "accountEmail", "apiToken"}`. For
+   GitHub and GitLab, save the returned `webhookSecret` immediately; it is never
+   returned again. Linear makes its own secret, so you supply it and nothing is
+   returned. Jira has no webhook at all, so nothing is returned either.
    A Project may have several sources; `GET /api/projects/{projectId}/sources`
    lists them.
 7. Optionally set a source's access token with
@@ -128,7 +135,8 @@ same name on the two providers is two separate sources. Connecting a source and
 setting its token are for administrators; every member can list sources. An
 unknown source returns `404 source_not_found`, and one already connected returns
 `409 github_repository_already_connected`,
-`409 gitlab_project_already_connected`, or `409 linear_team_already_connected`.
+`409 gitlab_project_already_connected`, `409 linear_team_already_connected`, or
+`409 jira_project_already_connected`.
 
 `GET /api/status` remains public.
 
@@ -332,6 +340,55 @@ Linear names no delivery ReleaseFlow can record as a GUID, so a Linear change
 carries no delivery ID. Each issue is still stored once per source, by its UUID,
 so redeliveries are harmless.
 
+## Poll Jira
+
+Jira needs nothing configured on its side. Connect a Jira Cloud project with its
+site (`https://your-site.atlassian.net`), its project key (`APP`), the email of
+the account ReleaseFlow signs in as, and an
+[Atlassian API token](https://id.atlassian.com/manage-profile/security/api-tokens)
+for that account that can browse the project. ReleaseFlow asks Jira to confirm
+them before storing anything, and answers `400 jira_site_invalid` for a site that
+is not an HTTPS `atlassian.net` address with no port, credentials, query, or
+fragment, `400 jira_token_rejected` when Jira refuses the account and token, and
+`503 jira_unavailable` when it cannot be reached.
+
+From then on, ReleaseFlow reads the project every
+`RELEASEFLOW_JIRA_POLL_INTERVAL` (five minutes). Each read asks for the issues in
+a Done status category that were updated since the previous read, reaching back
+`RELEASEFLOW_JIRA_POLL_OVERLAP` (ten minutes) so nothing at the edge is lost, and
+records each issue that was resolved in that window once. Issues resolved before
+the project was connected are never read. A change from Jira:
+
+- is numbered after its key — `APP-123` is `#123` — and titled
+  `APP-123: summary`, with the reporter as its author and
+  `{site}/browse/APP-123` as its link;
+- has no changed files, so it is checked with the same sensitive-word scan as a
+  Linear issue;
+- starts with its key, so the Conventional Commit title rule never matches it:
+  without AI, a Jira change is Unknown and needs review.
+
+A read that fails keeps its place and tries again, and the source shows
+**Connection failing** until one succeeds. The Change Inbox shows each Jira
+project's last and next read; a Jira project has no history import.
+
+### Linked Jira issues
+
+When a Project has a Jira source, each GitHub or GitLab change is checked for
+that project's issue keys in its title, description, target branch, and up to
+250 commit messages. At most ten issues are read from Jira and shown under
+**Linked issues** on the change, given to the AI as untrusted evidence, and
+available to audience templates:
+
+```mustache
+{{#linkedIssues}} [{{key}}]({{url}}) {{title}} ({{type}}, {{status}}){{/linkedIssues}}
+```
+
+Commit messages are only searched for keys; they are never stored. When commits
+could not be read, or Jira would not show an issue the change mentions, the
+change is retried and then marked **Linked issues incomplete**, which forces
+review. A key followed by a hyphen, as in `feature/APP-3-export`, is not taken
+as a mention.
+
 ## Access tokens
 
 
@@ -345,7 +402,9 @@ repository, with **Pull requests: Read-only** permission (a classic token needs
 `repo` for a private repository). For GitLab, create a project access token with
 the `read_api` scope. For Linear, create an API key that can read the team —
 that one is required when the team is connected, because confirming it is also
-how ReleaseFlow learns the workspace. An administrator enters it under the
+how ReleaseFlow learns the workspace. For Jira, the API token is required too,
+and always belongs to the account email the source was connected with. An
+administrator enters it under the
 source in the Project's card on the Projects page, or calls:
 
 ```text
@@ -354,12 +413,14 @@ PUT /api/projects/{projectId}/sources/{sourceId}/token {"token"}   (administrato
 
 ReleaseFlow first asks the provider to confirm the token — GitHub for the
 repository's pull requests, GitLab for the project, Linear for the team, which it
-accepts only while the key still reaches the same workspace — then stores it
+accepts only while the key still reaches the same workspace, Jira for the project
+— then stores it
 encrypted with AES-256-GCM. The token is never returned; the source only reports
 `accessTokenConfigured` and `accessTokenUpdatedAt`. Sending a new token replaces
 the old one. Errors are `400 github_token_rejected` or `400 gitlab_token_rejected`
-or `400 linear_token_rejected` when the provider refuses the token,
-`503 github_unavailable` or `503 gitlab_unavailable` when it cannot be reached,
+or `400 linear_token_rejected` or `400 jira_token_rejected` when the provider
+refuses the token, `503 github_unavailable`, `503 gitlab_unavailable`, or
+`503 jira_unavailable` when it cannot be reached,
 `404 source_not_found`, and `403` for members.
 
 GitLab's changed files come from the merge request's diffs, at most ten pages of
@@ -378,11 +439,11 @@ rather than whatever it said the instant it was completed.
 ## History import
 
 Webhooks bring in the pull and merge requests merged after a source is
-connected. To add the ones merged before, an administrator opens the **History
-import** panel of the Change Inbox and chooses **Import last 90 days** for a
+connected. To add the ones merged before, an administrator opens the **Source
+sync** panel of the Change Inbox and chooses **Import last 90 days** for a
 source with an access token, or calls the REST endpoints below. Only a source
-whose provider keeps a history ReleaseFlow can read appears there; Linear does
-not, and asking anyway answers `409 source_import_not_supported`. A background
+whose provider keeps a history ReleaseFlow can read offers it; Linear and Jira
+do not, and asking anyway answers `409 source_import_not_supported`. A background
 worker reads the source's history 100 items per page — GitHub's closed pull
 requests, most recently updated first, or GitLab's merged merge requests updated
 after the window's start, least recently updated first — and records every one
@@ -410,14 +471,16 @@ POST /api/projects/{projectId}/sources/{sourceId}/imports/resume    (administrat
 
 Each import reports `status` (`PENDING`, `RUNNING`, `RETRY_SCHEDULED`,
 `COMPLETED`, `PARTIAL`, or `FAILED`), `scannedCount`, `importedCount`, the
-window, `lastSyncAt`, `lastErrorCode`, and `canResumeImport`. Errors are
+window, `lastSyncAt`, `lastErrorCode`, and `canResumeImport`. A polled source
+reports `polled` and `nextPollAt`, and its latest job is its latest poll. Errors are
 `409 source_token_missing`, `409 source_sync_in_progress`,
 `409 source_import_not_resumable`, and `404 source_not_found`. See
 [ADR-0016](docs/adr/0016-integration-sources-and-history-import.md).
 
 See also [ADR-0017](docs/adr/0017-gitlab-sources.md) for the GitLab source and
 [ADR-0018](docs/adr/0018-linear-sources.md) for the Linear source, which has no
-history to import.
+history to import, and [ADR-0019](docs/adr/0019-jira-sources-and-linked-context.md)
+for Jira polling and linked issues.
 
 These provider settings are optional:
 
@@ -431,6 +494,11 @@ These provider settings are optional:
 | `RELEASEFLOW_LINEAR_API_BASE_URL` | `https://api.linear.app` | Where Linear's GraphQL API is called |
 | `RELEASEFLOW_LINEAR_TIMEOUT` | `PT5S` | Connect and read timeout for Linear |
 | `RELEASEFLOW_LINEAR_WEBHOOK_CLOCK_SKEW` | `PT60S` | How stale a signed Linear delivery may be |
+| `RELEASEFLOW_JIRA_TIMEOUT` | `PT10S` | Connect and read timeout for Jira |
+| `RELEASEFLOW_JIRA_POLL_INTERVAL` | `PT5M` | How often each Jira project is read |
+| `RELEASEFLOW_JIRA_POLL_OVERLAP` | `PT10M` | How far each read reaches back before the previous one |
+| `RELEASEFLOW_JIRA_DESCRIPTION_MAX_CHARACTERS` | `8000` | The longest Jira description kept as evidence |
+| `RELEASEFLOW_JIRA_API_BASE_URL` | (empty) | Local testing only: send every Jira call here instead of the site |
 | `RELEASEFLOW_WEBHOOK_MAX_BODY_BYTES` | `1048576` | The largest delivery any provider may send |
 
 ## Change Inbox
@@ -727,9 +795,10 @@ starting with a letter; fixed once created), a **display name**, a
 narrative, and a **template**. Templates are
 [Mustache](https://mustache.github.io/mustache.5.html) and render one change as
 Markdown with the variables `whatChanged`, `whyChanged`, `technicalDetail`,
-`migrationStep`, `narrative`, `pullRequestNumber`, and `pullRequestUrl`. A
-section such as `{{#narrative}} — {{.}}{{/narrative}}` disappears when the
-value is empty. **Preview** renders a sample change. A template is checked when
+`migrationStep`, `narrative`, `pullRequestNumber`, `pullRequestUrl`, and
+`linkedIssues` — a list whose items have `key`, `title`, `type`, `status`, and
+`url`, escaped like any other tracker text. A section such as
+`{{#narrative}} — {{.}}{{/narrative}}` disappears when the value is empty. **Preview** renders a sample change. A template is checked when
 it is saved: it must compile, use only these variables, and use `{{narrative}}`
 rather than naming another audience.
 

@@ -61,7 +61,7 @@ class ReleaseNoteWriterTest {
                 Instant.parse("2026-09-01T10:00:00Z"), "https://github.com/acme/releaseflow/pull/1",
                 TestCategories.FEATURE.code(), TestCategories.FEATURE.displayName(), TestCategories.FEATURE.group(),
                 false, false, List.of(), ClassificationSource.RULES, AiStatus.SUCCEEDED, null, null, false, null, null,
-                null, ProcessingStatus.COMPLETED, ChangedFileStatus.COLLECTED, List.of(), List.of(), summary, "en", null,
+                null, ProcessingStatus.COMPLETED, ChangedFileStatus.COLLECTED, null, List.of(), List.of(), List.of(), summary, "en", null,
                 narratives, null, null, null, null, null
         );
     }

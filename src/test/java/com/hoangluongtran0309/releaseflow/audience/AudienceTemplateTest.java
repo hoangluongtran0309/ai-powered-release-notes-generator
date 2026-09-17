@@ -1,8 +1,11 @@
 package com.hoangluongtran0309.releaseflow.audience;
 
+import com.hoangluongtran0309.releaseflow.jira.LinkedIssue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,7 +19,8 @@ class AudienceTemplateTest {
             "",
             "Download data from any table.",
             12,
-            "https://github.com/acme/app/pull/12"
+            "https://github.com/acme/app/pull/12",
+            List.of()
     );
 
     @Test
@@ -79,6 +83,40 @@ class AudienceTemplateTest {
                 .isInstanceOf(InvalidAudienceTemplateException.class)
                 .hasMessageStartingWith("This template is not valid Mustache: ")
                 .extracting("code").isEqualTo(InvalidAudienceTemplateException.INVALID);
+    }
+
+    @Test
+    void listsTheIssuesAChangeMentionsAndLeavesTheSectionOutWithoutThem() {
+        String template = "- {{whatChanged}}{{#linkedIssues}} [{{key}}]({{url}}) {{title}} ({{type}}, {{status}}){{/linkedIssues}}";
+        AudienceItem linked = new AudienceItem("Export.", "", "", "", "", 12, "https://github.com/acme/app/pull/12",
+                List.of(
+                        new LinkedIssue("APP-7", "Export tables", "never shown", "Story", "Done",
+                                "https://acme.atlassian.net/browse/APP-7"),
+                        new LinkedIssue("APP-8", "Stream rows", "", "Task", "Done",
+                                "https://acme.atlassian.net/browse/APP-8")
+                ));
+
+        AudienceTemplate.validate(template);
+        assertThat(AudienceTemplate.render(template, linked)).isEqualTo(
+                "- Export. [APP-7](https://acme.atlassian.net/browse/APP-7) Export tables (Story, Done)"
+                        + " [APP-8](https://acme.atlassian.net/browse/APP-8) Stream rows (Task, Done)");
+        assertThat(AudienceTemplate.render(template, ITEM)).isEqualTo("- Adds <b>CSV</b> & JSON export.");
+        assertThat(AudienceTemplate.sample(template)).contains("[APP-7](https://acme.atlassian.net/browse/APP-7)");
+        assertThat(AudienceItem.VARIABLES).endsWith("linkedIssues");
+        // A tracker's description is long, untrusted prose, so a note cannot print it.
+        assertThatThrownBy(() -> AudienceTemplate.validate("{{#linkedIssues}}{{description}}{{/linkedIssues}}"))
+                .isInstanceOf(InvalidAudienceTemplateException.class);
+    }
+
+    @Test
+    void theShippedPresetsIgnoreLinkedIssues() {
+        AudienceItem linked = new AudienceItem(ITEM.whatChanged(), ITEM.whyChanged(), ITEM.technicalDetail(),
+                ITEM.migrationStep(), ITEM.narrative(), ITEM.pullRequestNumber(), ITEM.pullRequestUrl(),
+                List.of(new LinkedIssue("APP-7", "Export tables", "", "Story", "Done",
+                        "https://acme.atlassian.net/browse/APP-7")));
+
+        AudiencePresets.forLanguage("en").forEach(preset -> assertThat(AudienceTemplate.render(preset.templateBody(), linked))
+                .isEqualTo(AudienceTemplate.render(preset.templateBody(), ITEM)));
     }
 
     @Test

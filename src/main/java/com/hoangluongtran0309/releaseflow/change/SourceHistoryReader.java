@@ -6,8 +6,9 @@ import com.hoangluongtran0309.releaseflow.source.SourceType;
 import java.time.Instant;
 
 /**
- * Reads one page of a source's merged pull or merge requests. Called outside any
- * transaction; the import decides what to do with the page.
+ * Reads one page of what a source has recorded, whether an administrator asked for its
+ * history or a schedule came round. Called outside any transaction; the sync decides what
+ * to do with the page.
  */
 interface SourceHistoryReader {
 
@@ -22,10 +23,13 @@ interface SourceHistoryReader {
     /** The short, stable code that says this provider could not be reached. */
     String unavailableCode();
 
+    /**
+     * @param providerCursor what this reader last called the page, or blank to begin
+     */
     HistoryPage read(
             SourceCredentials credentials,
             String token,
-            ImportCursor cursor,
+            String providerCursor,
             Instant windowStart,
             Instant windowEnd
     );

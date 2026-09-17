@@ -318,8 +318,57 @@ version has been released.
   team mismatch, the keyword fallback, the GraphQL restatement, and the refused
   history import.
 
+- Jira as a fourth source type (ADR-0019): a Project can connect a Jira Cloud
+  project, which ReleaseFlow reads every `RELEASEFLOW_JIRA_POLL_INTERVAL` (five
+  minutes) for issues that moved into a Done status since it was connected. An
+  issue becomes a change numbered after its key (`APP-123` is `#123`), titled
+  `APP-123: summary`, and linked to `{site}/browse/APP-123`.
+- Jira polls as `JIRA_POLL` source sync jobs that nobody requests: each source
+  keeps `poll_cursor_at` and `next_poll_at`, a due source with no active job gets
+  one poll over `[cursor − RELEASEFLOW_JIRA_POLL_OVERLAP, now]`, a completed poll
+  advances the cursor, and a failed one keeps it and tries again.
+- Jira source setup that takes a site URL, project key, account email, and API
+  token, checks them with Jira before storing anything, and creates no webhook
+  or secret. A site must be an HTTPS `atlassian.net` host with no port,
+  credentials, query, or fragment (`400 jira_site_invalid`); a refused or
+  unreachable Jira answers `jira_token_rejected` or `jira_unavailable`.
+- Linked context: a GitHub or GitLab change looks up the Jira issues its title,
+  description, target branch, and commit messages mention (at most ten), and
+  records them with a `linkedContextStatus` of `NOT_SUPPORTED`,
+  `NOT_CONFIGURED`, `NOT_FOUND`, `PARTIAL`, `UNAVAILABLE`, or `COLLECTED`.
+- Commit-message collection for GitHub and GitLab (at most 250 over three
+  pages), used only to find issue keys and never stored.
+- The `LINKED_CONTEXT_UNAVAILABLE` review trigger, raised after retries when
+  commits could not be read or Jira would not show a mentioned issue.
+- Linked issues in the AI prompt as an untrusted `linked_issues` array, in the
+  Change Inbox beside the changed files, and in audience templates as a
+  `linkedIssues` section with `key`, `title`, `type`, `status`, and `url`.
+- A Jira poll row in the Change Inbox showing its last and next read, and a Jira
+  card on the Projects page with its site, account, and schedule.
+- `RELEASEFLOW_JIRA_TIMEOUT`, `RELEASEFLOW_JIRA_DESCRIPTION_MAX_CHARACTERS`,
+  `RELEASEFLOW_JIRA_POLL_INTERVAL`, `RELEASEFLOW_JIRA_POLL_OVERLAP`, and the
+  local-only `RELEASEFLOW_JIRA_API_BASE_URL`.
+- Flyway migration `V21` for Jira sources, polls, and linked context, and
+  Testcontainers coverage of the schedule, paging, overlap, retries, every
+  linked-context status, and the new constraints.
+
 ### Changed
 
+- `SourceImportWorker` is now `SourceSyncWorker`, because it runs polls as well
+  as imports, and `ImportCursor` is now `SyncCursor`, whose provider half is
+  opaque. A GitHub or GitLab cursor for the first page is now stored as `:2`
+  rather than `1:2`; older values still parse. `provider_cursor` is
+  `VARCHAR(500)`.
+- `source_sync_jobs.requested_by` and `requester_name` are nullable, and only an
+  import has them. `webhook_id` and the secret columns of `integration_sources`
+  are nullable, and only a source that is delivered to has them.
+- The Change Inbox panel "History import" is now "Source sync", and
+  `SourceSyncView` reports `polled` and `nextPollAt`.
+- A token the provider refuses, or a provider that cannot be reached, while
+  connecting a source on the Projects page is reported on the form instead of
+  failing the request.
+- The AI system prompt says linked issues are untrusted evidence, like every
+  other provider value.
 - A change records its source's type. `changes.source_type` is tied to the source
   by the composite foreign key `(source_id, source_type)`, and
   `changes_commit_matches_type` replaces three `NOT NULL` declarations: a GitHub

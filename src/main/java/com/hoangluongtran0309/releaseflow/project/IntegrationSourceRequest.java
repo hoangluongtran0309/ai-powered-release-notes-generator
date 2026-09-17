@@ -4,8 +4,8 @@ import com.hoangluongtran0309.releaseflow.source.SourceType;
 import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
 
 /**
- * A source to connect: a GitHub repository, a GitLab project on an allowed instance, or a
- * Linear team. Which fields are required depends on the type, so they are checked
+ * A source to connect: a GitHub repository, a GitLab project on an allowed instance, a
+ * Linear team, or a Jira project. Which fields are required depends on the type, so they are checked
  * together by {@link IntegrationSourceRequestValidator}.
  */
 @ValidIntegrationSourceRequest
@@ -29,6 +29,12 @@ public class IntegrationSourceRequest {
     private String webhookSecret;
 
     private String apiToken;
+
+    private String projectKey;
+
+    private String siteUrl;
+
+    private String accountEmail;
 
     public SourceType getType() {
         return type;
@@ -95,6 +101,30 @@ public class IntegrationSourceRequest {
         this.apiToken = apiToken == null ? null : apiToken.strip();
     }
 
+    public String getProjectKey() {
+        return projectKey;
+    }
+
+    public void setProjectKey(String projectKey) {
+        this.projectKey = projectKey == null ? null : projectKey.strip();
+    }
+
+    public String getSiteUrl() {
+        return siteUrl;
+    }
+
+    public void setSiteUrl(String siteUrl) {
+        this.siteUrl = siteUrl == null ? null : siteUrl.strip();
+    }
+
+    public String getAccountEmail() {
+        return accountEmail;
+    }
+
+    public void setAccountEmail(String accountEmail) {
+        this.accountEmail = accountEmail == null ? null : accountEmail.strip();
+    }
+
     public WebhookAuthMode getWebhookAuthMode() {
         return webhookAuthMode;
     }
@@ -109,6 +139,7 @@ public class IntegrationSourceRequest {
     public String toString() {
         return "IntegrationSourceRequest[type=%s, owner=%s, repository=%s, projectPath=%s, apiBaseUrl=%s, "
                 .formatted(type, owner, repository, projectPath, apiBaseUrl)
-                + "teamId=%s, webhookSecret=***, apiToken=***]".formatted(teamId);
+                + "teamId=%s, projectKey=%s, siteUrl=%s, accountEmail=%s, webhookSecret=***, apiToken=***]"
+                        .formatted(teamId, projectKey, siteUrl, accountEmail);
     }
 }

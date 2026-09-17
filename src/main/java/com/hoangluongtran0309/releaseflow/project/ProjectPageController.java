@@ -6,6 +6,7 @@ import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabHostNotAllowedException;
 import com.hoangluongtran0309.releaseflow.gitlab.InvalidGitLabBaseUrlException;
+import com.hoangluongtran0309.releaseflow.jira.InvalidJiraSiteException;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
@@ -94,6 +95,18 @@ public class ProjectPageController {
         } catch (InvalidGitLabBaseUrlException | GitLabHostNotAllowedException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
             bindingResult.rejectValue("apiBaseUrl", "source.apiBaseUrl.invalid", exception.getMessage());
+            model.addAttribute("sourceError", exception.getMessage());
+        } catch (InvalidJiraSiteException exception) {
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            bindingResult.rejectValue("siteUrl", "source.siteUrl.invalid", exception.getMessage());
+            model.addAttribute("sourceError", exception.getMessage());
+        } catch (SourceTokenRejectedException exception) {
+            // The provider was asked before anything was written, so nothing was stored.
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            bindingResult.rejectValue("apiToken", "source.apiToken.rejected", exception.getMessage());
+            model.addAttribute("sourceError", exception.getMessage());
+        } catch (SourceUnavailableException exception) {
+            response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
             model.addAttribute("sourceError", exception.getMessage());
         }
 

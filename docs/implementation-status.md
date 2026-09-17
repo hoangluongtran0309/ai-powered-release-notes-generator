@@ -181,9 +181,25 @@
     issue tracker's;
   - history import refused for a type that has none, in REST and in the UI.
 
+- Jira sources and linked context (ADR-0019), with Flyway `V21`, which reaches
+  parity milestone M2 — every planned source exists:
+  - a Jira Cloud project connected with its `atlassian.net` site, key, account
+    email, and API token, confirmed with Jira before anything is stored, and
+    with no webhook or secret;
+  - polling as `JIRA_POLL` source sync jobs that nobody requests, scheduled from
+    each source's `next_poll_at`, reading issues that moved into Done through
+    the JQL search with a ten-minute overlap, and keeping the cursor on failure;
+  - `SourceSyncWorker` and an opaque `SyncCursor`, so imports and polls share
+    one claim, retry, and recovery path;
+  - linked context for GitHub and GitLab changes: up to 250 commit messages read
+    only to find keys, up to ten Jira issues fetched, six recorded statuses, and
+    the `LINKED_CONTEXT_UNAVAILABLE` trigger;
+  - linked issues in the AI prompt, the Change Inbox, and audience templates;
+  - a Jira card on the Projects page and a poll row in the Change Inbox.
+
 ## In progress
 
-- Nothing. The Linear source slice is complete and awaiting review.
+- Nothing. The Jira source slice is complete and awaiting review.
 
 ## Planned
 
@@ -193,10 +209,12 @@ deliberately deferred list below, one reviewed slice at a time.
 ## Deliberately deferred
 
 - Role changes and member removal.
-- Source providers other than GitHub, GitLab, and Linear (Jira), and automatic AI
-  retries.
-- Polling sources, commit messages, GitLab group-level webhooks, Linear projects
-  and cycles, and queues or retries for work other than enrichment and imports.
+- Source providers other than GitHub, GitLab, Linear, and Jira Cloud (Jira
+  Server or Data Center), Jira webhooks, and automatic AI retries.
+- GitLab group-level webhooks, Linear projects and cycles, linked context from
+  Linear or from more than one Jira source per Project, Jira issue types and
+  statuses as classification signals, and queues or retries for work other than
+  enrichment, imports, and polls.
 - Validating a repository with GitHub when it is connected, disconnecting or
   replacing a source, rotating a Linear signing secret without reconnecting, and
   secret or token rotation reminders.

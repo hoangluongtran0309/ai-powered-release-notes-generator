@@ -4,6 +4,7 @@ import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.source.ChangedFile;
 import com.hoangluongtran0309.releaseflow.change.ChangeAiMerge.ClassifiedChange;
+import com.hoangluongtran0309.releaseflow.jira.LinkedIssue;
 import com.hoangluongtran0309.releaseflow.source.ChangedFiles;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import jakarta.persistence.Column;
@@ -146,6 +147,14 @@ class Change {
     @Column(name = "changed_files", columnDefinition = "jsonb")
     private List<ChangedFile> changedFiles;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "linked_context_status", length = 20)
+    private LinkedContextStatus linkedContextStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "linked_issues", columnDefinition = "jsonb")
+    private List<LinkedIssue> linkedIssues;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "review_triggers", nullable = false, columnDefinition = "jsonb")
     private List<ReviewTrigger> reviewTriggers;
@@ -252,6 +261,28 @@ class Change {
      * issue may have been edited between being completed and being read back. Identity,
      * labels, and times are never touched.
      */
+    /** What the Project's issue tracker could add; evidence beside the change, never about it. */
+    void recordLinkedContext(LinkedContext context) {
+        requireProcessing();
+        this.linkedContextStatus = context.status();
+        this.linkedIssues = context.issues().isEmpty() ? null : new ArrayList<>(context.issues());
+    }
+
+    /** The linked context as recorded; a change recorded before the lookup counts as absent. */
+    LinkedContext recordedLinkedContext() {
+        return linkedContextStatus == null
+                ? LinkedContext.NOT_CONFIGURED
+                : LinkedContext.of(linkedContextStatus, getLinkedIssues());
+    }
+
+    List<LinkedIssue> getLinkedIssues() {
+        return linkedIssues == null ? List.of() : List.copyOf(linkedIssues);
+    }
+
+    LinkedContextStatus getLinkedContextStatus() {
+        return linkedContextStatus;
+    }
+
     void refreshDetails(MergedPullRequest change) {
         requireProcessing();
         this.title = change.title();

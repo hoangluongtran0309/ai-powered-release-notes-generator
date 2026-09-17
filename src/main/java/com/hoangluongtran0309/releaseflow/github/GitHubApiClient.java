@@ -37,6 +37,8 @@ public class GitHubApiClient {
 
     static final int PAGE_SIZE = ProviderListing.PAGE_SIZE;
     static final int MAX_PAGES = 5;
+    static final int MAX_COMMIT_PAGES = 3;
+    static final int MAX_COMMITS = 250;
 
     private static final Logger log = LoggerFactory.getLogger(GitHubApiClient.class);
     private static final String API_VERSION = "2022-11-28";
@@ -180,6 +182,49 @@ public class GitHubApiClient {
             return ProviderListing.listed(pullRequests);
         } catch (JacksonException exception) {
             return ProviderListing.failed(ProviderListing.Status.INVALID_RESPONSE, null);
+        }
+    }
+
+    /**
+     * The messages of a pull request's commits, up to {@value #MAX_COMMIT_PAGES} pages.
+     * They are read only to find issue keys, so a list that could not be read is empty
+     * rather than an error the change waits on.
+     */
+    public Optional<List<String>> pullRequestCommits(String owner, String repository, int number, String token) {
+        requireNoTransaction();
+        List<String> messages = new ArrayList<>();
+        try {
+            for (int page = 1; page <= MAX_COMMIT_PAGES && messages.size() < MAX_COMMITS; page++) {
+                String body = restClient.get()
+                        .uri(
+                                "/repos/{owner}/{repository}/pulls/{number}/commits?per_page={size}&page={page}",
+                                owner,
+                                repository,
+                                number,
+                                PAGE_SIZE,
+                                page
+                        )
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .retrieve()
+                        .body(String.class);
+                JsonNode commits = objectMapper.readTree(body == null ? "" : body);
+                if (commits == null || !commits.isArray()) {
+                    return Optional.empty();
+                }
+                for (JsonNode commit : commits.values()) {
+                    if (messages.size() == MAX_COMMITS) {
+                        break;
+                    }
+                    messages.add(commit.path("commit").path("message").asString(""));
+                }
+                if (commits.size() < PAGE_SIZE) {
+                    break;
+                }
+            }
+            return Optional.of(List.copyOf(messages));
+        } catch (RestClientException | JacksonException exception) {
+            log.warn("Could not list the commits of {}/{}#{}.", owner, repository, number);
+            return Optional.empty();
         }
     }
 

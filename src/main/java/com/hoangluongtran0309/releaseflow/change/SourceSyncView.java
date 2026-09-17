@@ -4,14 +4,18 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A source and the latest import of its history. Every import field is {@code null} or
- * zero when the source was never imported.
+ * A source and its latest sync job. Every job field is {@code null} or zero when the
+ * source was never synced. A polled source is never imported by hand: its job is the
+ * poll ReleaseFlow scheduled itself, and {@code nextPollAt} says when the next one is
+ * due.
  */
 public record SourceSyncView(
         UUID sourceId,
         String externalProjectKey,
         String deliveryMechanism,
         boolean supportsImport,
+        boolean polled,
+        Instant nextPollAt,
         boolean accessTokenConfigured,
         String status,
         Instant windowStart,
@@ -29,7 +33,7 @@ public record SourceSyncView(
         boolean canResumeImport
 ) {
 
-    /** Whether an import is queued or running, so another cannot start. */
+    /** Whether a job is queued or running, so another cannot start. */
     public boolean inProgress() {
         return "PENDING".equals(status) || "RUNNING".equals(status) || "RETRY_SCHEDULED".equals(status);
     }

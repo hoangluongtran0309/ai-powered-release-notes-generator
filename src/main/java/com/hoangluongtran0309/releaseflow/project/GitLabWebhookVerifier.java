@@ -78,7 +78,7 @@ public class GitLabWebhookVerifier {
                             secret
                     );
             // A GitLab source is never set up with another provider's scheme.
-            case GITHUB_HMAC, LINEAR_HMAC -> false;
+            case GITHUB_HMAC, LINEAR_HMAC, NONE -> false;
         };
     }
 

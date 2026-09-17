@@ -6,6 +6,9 @@ import com.hoangluongtran0309.releaseflow.source.SourceCredentials;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.Optional;
+
 /** GitLab can list a merge request's diffs; it never restates the merge request itself. */
 @Component
 class GitLabSourceEnricher implements SourceEnricher {
@@ -30,5 +33,19 @@ class GitLabSourceEnricher implements SourceEnricher {
                 token
         );
         return Enrichment.of(files, change);
+    }
+
+    @Override
+    public Optional<List<String>> commitMessages(
+            SourceCredentials credentials,
+            String token,
+            MergedPullRequest change
+    ) {
+        return gitLabApiClient.mergeRequestCommits(
+                credentials.apiBaseUrl(),
+                credentials.externalProjectKey(),
+                change.number(),
+                token
+        );
     }
 }

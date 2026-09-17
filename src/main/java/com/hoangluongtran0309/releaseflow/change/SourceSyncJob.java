@@ -45,7 +45,7 @@ class SourceSyncJob {
     @Column(name = "window_end", nullable = false, updatable = false)
     private Instant windowEnd;
 
-    @Column(name = "provider_cursor", nullable = false, length = 100)
+    @Column(name = "provider_cursor", nullable = false, length = 500)
     private String providerCursor;
 
     @Column(name = "scanned_count", nullable = false)
@@ -104,11 +104,39 @@ class SourceSyncJob {
         job.status = Status.PENDING;
         job.windowStart = windowStart;
         job.windowEnd = windowEnd;
-        job.providerCursor = ImportCursor.START.toString();
+        job.providerCursor = SyncCursor.START.toString();
         job.itemLimit = itemLimit;
         job.nextAttemptAt = now;
         job.requestedBy = requestedBy;
         job.requesterName = requesterName;
+        job.createdAt = now;
+        return job;
+    }
+
+    /**
+     * A poll of a source whose schedule came round. It has no requester, because nobody
+     * asked, and no item limit, because a poll reads whatever the window holds.
+     */
+    static SourceSyncJob poll(
+            UUID organizationId,
+            UUID projectId,
+            UUID sourceId,
+            Instant windowStart,
+            Instant windowEnd,
+            Instant now
+    ) {
+        SourceSyncJob job = new SourceSyncJob();
+        job.id = UUID.randomUUID();
+        job.organizationId = organizationId;
+        job.projectId = projectId;
+        job.sourceId = sourceId;
+        job.type = Type.JIRA_POLL;
+        job.status = Status.PENDING;
+        job.windowStart = windowStart;
+        job.windowEnd = windowEnd;
+        job.providerCursor = SyncCursor.START.toString();
+        job.itemLimit = Integer.MAX_VALUE;
+        job.nextAttemptAt = now;
         job.createdAt = now;
         return job;
     }
@@ -125,7 +153,7 @@ class SourceSyncJob {
     }
 
     /** Saves how far the import got; a failed page is tried again from here. */
-    void advance(ImportCursor cursor, int scanned, int imported) {
+    void advance(SyncCursor cursor, int scanned, int imported) {
         this.providerCursor = cursor.toString();
         this.scannedCount += scanned;
         this.importedCount += imported;
@@ -202,8 +230,12 @@ class SourceSyncJob {
         return windowEnd;
     }
 
-    ImportCursor getCursor() {
-        return ImportCursor.parse(providerCursor);
+    Type getType() {
+        return type;
+    }
+
+    SyncCursor getCursor() {
+        return SyncCursor.parse(providerCursor);
     }
 
     int getScannedCount() {
@@ -243,7 +275,10 @@ class SourceSyncJob {
     }
 
     enum Type {
-        HISTORICAL_IMPORT
+        /** An administrator asked for what the provider recorded before it was connected. */
+        HISTORICAL_IMPORT,
+        /** A polled source's schedule came round; nobody asked. */
+        JIRA_POLL
     }
 
     enum Status {
