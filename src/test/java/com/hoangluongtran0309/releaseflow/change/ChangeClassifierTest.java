@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ChangeClassifierTest {
 
+    private static final LinkedContext NO_TRACKER = LinkedContext.of(LinkedContextStatus.NOT_CONFIGURED, List.of());
     private static final SensitivePaths RULES =
             new SensitivePathRules(List.of("**/db/migration/**", "**/*.sql", "**/security/**")).forProject(List.of());
 
@@ -29,6 +30,7 @@ class ChangeClassifierTest {
                         new ChangedFile("src/main/java/Audit.java", null, ChangedFileKind.ADDED),
                         new ChangedFile("src/main/resources/db/migration/V9__audit.sql", null, ChangedFileKind.ADDED)
                 )),
+                NO_TRACKER,
                 RULES,
                 TestCategories.CATALOG
         );
@@ -46,6 +48,7 @@ class ChangeClassifierTest {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("fix: handle empty tables"),
                 ChangedFiles.unavailable(ChangedFiles.NO_ACCESS_TOKEN, false),
+                NO_TRACKER,
                 RULES,
                 TestCategories.CATALOG
         );
@@ -65,6 +68,7 @@ class ChangeClassifierTest {
                         new ChangedFile("README.MD", null, ChangedFileKind.MODIFIED),
                         new ChangedFile("guide/setup.adoc", "guide/install.rst", ChangedFileKind.RENAMED)
                 )),
+                NO_TRACKER,
                 RULES,
                 TestCategories.CATALOG
         );
@@ -79,6 +83,7 @@ class ChangeClassifierTest {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("docs: rotate keys"),
                 ChangedFiles.collected(List.of(new ChangedFile("docs/security/keys.md", null, ChangedFileKind.MODIFIED))),
+                NO_TRACKER,
                 RULES,
                 TestCategories.CATALOG
         );
@@ -93,6 +98,7 @@ class ChangeClassifierTest {
         ChangeClassification classification = ChangeClassifier.classify(
                 pullRequest("chore: empty merge"),
                 ChangedFiles.collected(List.of()),
+                NO_TRACKER,
                 RULES,
                 TestCategories.CATALOG
         );
@@ -328,6 +334,7 @@ class ChangeClassifierTest {
         return ChangeClassifier.classify(
                 pullRequest,
                 ChangedFiles.collected(List.of(new ChangedFile("src/main/java/App.java", null, ChangedFileKind.MODIFIED))),
+                NO_TRACKER,
                 RULES,
                 catalog
         );

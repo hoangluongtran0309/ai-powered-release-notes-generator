@@ -216,6 +216,7 @@ class OpenAiCompatibleClassifierTest {
                 description,
                 List.of("good first issue"),
                 "main",
+                List.of(),
                 OutputLanguage.parse(language),
                 lockedCategory,
                 TestCategories.CATALOG,

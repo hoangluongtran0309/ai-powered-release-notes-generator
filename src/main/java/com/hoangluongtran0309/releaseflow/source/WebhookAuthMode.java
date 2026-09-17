@@ -9,5 +9,7 @@ public enum WebhookAuthMode {
     /** GitLab: the secret repeated verbatim in {@code X-Gitlab-Token}. */
     GITLAB_SECRET_TOKEN,
     /** Linear: hex HMAC-SHA256 of the raw body in {@code Linear-Signature}. */
-    LINEAR_HMAC
+    LINEAR_HMAC,
+    /** Nothing is delivered, so nothing has to prove itself: ReleaseFlow polls instead. */
+    NONE
 }

@@ -66,12 +66,14 @@ final class ChangeClassifier {
     }
 
     /**
+     * @param linkedContext what the Project's issue tracker could add, if it has one
      * @param sensitivePaths the Project's effective sensitive-path rules
      * @param catalog the Organization's active categories
      */
     static ChangeClassification classify(
             MergedPullRequest pullRequest,
             ChangedFiles files,
+            LinkedContext linkedContext,
             SensitivePaths sensitivePaths,
             List<CategoryRef> catalog
     ) {
@@ -88,6 +90,10 @@ final class ChangeClassifier {
             triggers.addAll(SensitiveKeywords.matches(pullRequest.title(), pullRequest.description()));
         } else {
             triggers.add(ReviewTrigger.changedFilesUnavailable());
+        }
+        // An issue the tracker would not show is evidence nobody read, so a person must.
+        if (linkedContext.status().incomplete()) {
+            triggers.add(ReviewTrigger.linkedContextUnavailable(linkedContext.status()));
         }
         CategoryRef documentation = null;
         boolean documentationOnly = files.isCollected()

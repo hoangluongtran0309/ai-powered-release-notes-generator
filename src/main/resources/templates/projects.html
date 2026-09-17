@@ -126,19 +126,22 @@
                                th:text="${source.apiBaseUrl}">https://gitlab.com</p>
                             <p class="text-xs text-slate-500" th:if="${source.type.name() == 'LINEAR'}"
                                th:text="|Workspace ${source.externalWorkspaceKey}|">Workspace acme</p>
+                            <p class="text-xs text-slate-500" th:if="${source.type.name() == 'JIRA'}"
+                               th:text="|${source.apiBaseUrl} as ${source.credentialIdentity}|">https://acme.atlassian.net as ops@acme.test</p>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="badge badge-sm badge-ghost" th:switch="${source.type.name()}">
                                 <span th:case="'GITHUB'">GitHub</span>
                                 <span th:case="'GITLAB'">GitLab</span>
                                 <span th:case="'LINEAR'">Linear</span>
+                                <span th:case="'JIRA'">Jira</span>
                             </span>
                             <span class="badge badge-sm badge-error badge-soft" th:if="${source.connectionStatus.name() == 'ERROR'}"
                                   th:title="${source.lastErrorCode}">Connection failing</span>
                         </div>
                     </div>
                     <dl class="grid gap-4 text-sm">
-                        <div x-data="copyText()">
+                        <div x-data="copyText()" th:if="${source.webhookPath != null}">
                             <dt class="text-slate-500">Webhook path</dt>
                             <dd class="join mt-1 w-full">
                                 <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
@@ -146,7 +149,21 @@
                                 <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
                             </dd>
                         </div>
-                        <div>
+                        <div th:if="${source.type.name() == 'JIRA'}">
+                            <dt class="text-slate-500">Polling</dt>
+                            <dd class="mt-1 font-semibold" th:if="${source.lastSyncAt != null}">
+                                Last read
+                                <time th:datetime="${source.lastSyncAt}"
+                                      th:text="|${#temporals.format(source.lastSyncAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
+                            </dd>
+                            <dd class="mt-1 text-slate-600" th:unless="${source.lastSyncAt != null}">Not read yet</dd>
+                            <dd class="mt-1 text-slate-600" th:if="${source.nextPollAt != null}">
+                                Next read due
+                                <time th:datetime="${source.nextPollAt}"
+                                      th:text="|${#temporals.format(source.nextPollAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:19 UTC</time>
+                            </dd>
+                        </div>
+                        <div th:if="${source.webhookPath != null}">
                             <dt class="text-slate-500">Last delivery</dt>
                             <dd class="mt-1 font-semibold" th:if="${source.lastDeliveryAt != null}">
                                 <time th:datetime="${source.lastDeliveryAt}"
@@ -185,6 +202,10 @@
                                 A Linear API key that can read this team. ReleaseFlow checks that it still reaches the
                                 same workspace, stores it encrypted, and never shows it again.
                             </p>
+                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'JIRA'}">
+                                An Atlassian API token for the account above, which can browse this project. ReleaseFlow
+                                checks it with Jira, stores it encrypted, and never shows it again.
+                            </p>
                         </div>
                         <div class="alert alert-error" role="alert" th:if="${tokenFailing and tokenError != null}">
                             <span th:text="${tokenError}">The provider did not accept this token.</span>
@@ -204,7 +225,9 @@
                     <strong>Pull requests</strong> event; on GitLab, the saved secret and the
                     <strong>Merge request events</strong> trigger; on Linear, the <strong>Issues</strong> event, with
                     Linear's own signing secret pasted into ReleaseFlow when the team was connected. Each merged pull
-                    request, merge request, and completed issue is recorded once; import earlier ones from the
+                    request, merge request, and completed issue is recorded once. Jira needs no webhook: ReleaseFlow
+                    reads each Jira project every few minutes for issues completed since it was connected. Import
+                    earlier changes from the
                     <a class="link" th:href="@{/changes(project=${project.id})}">Change Inbox</a>, where a source keeps
                     a history to import.
                 </p>
@@ -221,7 +244,7 @@
                   x-data="{ type: $el.dataset.type }">
                 <div>
                     <h3 class="font-bold" th:text="${sourceCount == 0} ? 'Connect a source' : 'Add another source'">Connect a source</h3>
-                    <p class="mt-1 text-sm text-slate-600">Each source gets its own webhook secret, encrypted with AES-256-GCM and shown only once.</p>
+                    <p class="mt-1 text-sm text-slate-600">Each webhook source gets its own secret, encrypted with AES-256-GCM and shown only once. A Jira project is read on a schedule instead.</p>
                 </div>
                 <div class="alert alert-error" role="alert" th:if="${failing and sourceError != null}">
                     <span th:text="${sourceError}">This repository is already connected to another project.</span>
@@ -232,6 +255,7 @@
                         <option value="GITHUB" th:selected="${!failing or sourceRequest.type.name() == 'GITHUB'}">GitHub repository</option>
                         <option value="GITLAB" th:selected="${failing and sourceRequest.type.name() == 'GITLAB'}">GitLab project</option>
                         <option value="LINEAR" th:selected="${failing and sourceRequest.type.name() == 'LINEAR'}">Linear team</option>
+                        <option value="JIRA" th:selected="${failing and sourceRequest.type.name() == 'JIRA'}">Jira project</option>
                     </select>
                 </label>
                 <template x-if="type === 'GITHUB'">
@@ -315,8 +339,45 @@
                         </label>
                     </div>
                 </template>
+                <template x-if="type === 'JIRA'">
+                    <div class="grid gap-4">
+                        <p class="text-sm text-slate-600">
+                            ReleaseFlow reads this project every few minutes for issues moved to a <strong>Done</strong>
+                            status, so there is no webhook to create. Issues completed before now are not read.
+                        </p>
+                        <label class="form-control"><span class="label-text font-medium">Jira site</span>
+                            <input type="url" name="siteUrl" maxlength="255" placeholder="https://acme.atlassian.net"
+                                   class="input input-bordered w-full" :required="type === 'JIRA'"
+                                   th:value="${failing} ? ${sourceRequest.siteUrl} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('siteUrl')} ? 'input-error'">
+                            <span class="label-text-alt text-slate-500">A Jira Cloud site on atlassian.net.</span>
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('siteUrl')}" th:errors="*{siteUrl}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">Project key</span>
+                            <input type="text" name="projectKey" maxlength="100" placeholder="APP"
+                                   class="input input-bordered w-full font-mono" :required="type === 'JIRA'"
+                                   th:value="${failing} ? ${sourceRequest.projectKey} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('projectKey')} ? 'input-error'">
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('projectKey')}" th:errors="*{projectKey}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">Account email</span>
+                            <input type="email" name="accountEmail" maxlength="255" placeholder="release-bot@acme.test"
+                                   class="input input-bordered w-full" :required="type === 'JIRA'"
+                                   th:value="${failing} ? ${sourceRequest.accountEmail} : ''"
+                                   th:classappend="${failing and #fields.hasErrors('accountEmail')} ? 'input-error'">
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('accountEmail')}" th:errors="*{accountEmail}"></span>
+                        </label>
+                        <label class="form-control"><span class="label-text font-medium">API token</span>
+                            <input type="password" name="apiToken" maxlength="255" autocomplete="off" spellcheck="false"
+                                   class="input input-bordered w-full font-mono" :required="type === 'JIRA'"
+                                   th:classappend="${failing and #fields.hasErrors('apiToken')} ? 'input-error'">
+                            <span class="label-text-alt text-slate-500">Checked with Jira before anything is stored.</span>
+                            <span class="field-error" th:if="${failing and #fields.hasErrors('apiToken')}" th:errors="*{apiToken}"></span>
+                        </label>
+                    </div>
+                </template>
                 <button type="submit" class="btn w-full" th:classappend="${sourceCount == 0} ? 'btn-primary' : 'btn-outline'"
-                        x-text="type === 'LINEAR' ? 'Connect the team' : 'Generate webhook credentials'">Generate webhook credentials</button>
+                        x-text="type === 'LINEAR' ? 'Connect the team' : (type === 'JIRA' ? 'Connect the project' : 'Generate webhook credentials')">Generate webhook credentials</button>
             </form>
 
             <div class="mt-auto pt-5">

@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.category.CategoryGroup;
+import com.hoangluongtran0309.releaseflow.jira.LinkedIssue;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
 import com.hoangluongtran0309.releaseflow.source.ChangedFile;
 
@@ -38,6 +39,8 @@ public record ChangeView(
         Instant reviewedAt,
         ProcessingStatus processingStatus,
         ChangedFileStatus changedFileStatus,
+        LinkedContextStatus linkedContextStatus,
+        List<LinkedIssue> linkedIssues,
         List<ChangedFile> changedFiles,
         List<ReviewTrigger> reviewTriggers,
         NeutralSummary neutralSummary,
@@ -56,6 +59,7 @@ public record ChangeView(
         audienceNarratives = audienceNarratives == null
                 ? Map.of()
                 : Collections.unmodifiableMap(new TreeMap<>(audienceNarratives));
+        linkedIssues = linkedIssues == null ? List.of() : List.copyOf(linkedIssues);
     }
 
     /** What this change says to one audience, or an empty string. */
@@ -68,7 +72,7 @@ public record ChangeView(
         return new ChangeView(id, pullRequestNumber, title, description, authorLogin, labels, targetBranch, mergeCommitSha,
                 mergedAt, url, category, categoryName, categoryGroup, breaking, needsReview, reasons,
                 classificationSource, aiStatus, aiModel, aiFailure, aiEligible, reviewedBy, reviewerName, reviewedAt,
-                processingStatus, changedFileStatus, changedFiles, reviewTriggers, summary, language, aiProvider,
+                processingStatus, changedFileStatus, linkedContextStatus, linkedIssues, changedFiles, reviewTriggers, summary, language, aiProvider,
                 narratives, summaryEditorName, summaryEditedAt, context, sourceId, origin);
     }
 
@@ -113,6 +117,8 @@ public record ChangeView(
                 change.getReviewedAt(),
                 change.getProcessingStatus(),
                 change.getChangedFileStatus(),
+                change.getLinkedContextStatus(),
+                change.getLinkedIssues(),
                 change.getChangedFiles(),
                 change.getReviewTriggers(),
                 change.getNeutralSummary(),

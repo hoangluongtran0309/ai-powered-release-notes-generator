@@ -22,17 +22,20 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * Reads a source's history for due import jobs. Each provider has its own
- * {@link SourceHistoryReader}; every merged pull or merge request it returns goes through
- * {@link ChangeIntake}, exactly like a webhook delivery. The provider is called outside
- * any transaction; the cursor and counts are saved after every page.
+ * Reads what a source has recorded, for the two reasons there are to ask: an administrator
+ * requested its history, or a polled source's schedule came round. Each provider has its
+ * own {@link SourceHistoryReader}, and everything it returns goes through
+ * {@link ChangeIntake}, exactly like a webhook delivery. The provider is called outside any
+ * transaction; the cursor and counts are saved after every page.
  */
 @Component
-class SourceImportWorker {
+class SourceSyncWorker {
 
     static final int MAX_ATTEMPTS = 5;
     static final Duration MAX_RETRY_AFTER = Duration.ofHours(1);
     static final Duration STALE_AFTER = Duration.ofMinutes(10);
+    // A poll that gave up still comes back, because the schedule is the whole point.
+    static final Duration POLL_RETRY_AFTER_FAILURE = Duration.ofMinutes(15);
     static final String NO_ACCESS_TOKEN = ChangedFiles.NO_ACCESS_TOKEN;
     static final String ACCESS_REJECTED = ChangedFiles.ACCESS_REJECTED;
     static final String RATE_LIMITED = "rate_limited";
@@ -40,9 +43,10 @@ class SourceImportWorker {
     static final String SOURCE_MISSING = "source_missing";
     static final String UNEXPECTED_ERROR = "unexpected_error";
 
-    private static final Logger log = LoggerFactory.getLogger(SourceImportWorker.class);
+    private static final Logger log = LoggerFactory.getLogger(SourceSyncWorker.class);
 
     private final SourceSyncJobRepository jobRepository;
+    private final JiraPollScheduler pollScheduler;
     private final SourceAccess sourceAccess;
     private final SourceHistoryReaders readers;
     private final ChangeIntake intake;
@@ -51,8 +55,9 @@ class SourceImportWorker {
     private final Clock clock;
     private final boolean enabled;
 
-    SourceImportWorker(
+    SourceSyncWorker(
             SourceSyncJobRepository jobRepository,
+            JiraPollScheduler pollScheduler,
             SourceAccess sourceAccess,
             SourceHistoryReaders readers,
             ChangeIntake intake,
@@ -62,6 +67,7 @@ class SourceImportWorker {
             @Value("${releaseflow.processing.enabled}") boolean enabled
     ) {
         this.jobRepository = jobRepository;
+        this.pollScheduler = pollScheduler;
         this.sourceAccess = sourceAccess;
         this.readers = readers;
         this.intake = intake;
@@ -93,6 +99,8 @@ class SourceImportWorker {
      */
     boolean processOne() {
         Instant now = now();
+        // Nobody asks for a poll, so the schedule has to speak for itself first.
+        pollScheduler.scheduleDuePolls(now);
         transactionTemplate.executeWithoutResult(status -> {
             int recovered = jobRepository.recoverStale(now.minus(STALE_AFTER), now);
             if (recovered > 0) {
@@ -102,7 +110,7 @@ class SourceImportWorker {
         Optional<Claim> claim = transactionTemplate.execute(status -> jobRepository.lockNextDue(now).map(job -> {
             job.claim(now);
             return new Claim(job.getId(), job.getOrganizationId(), job.getProjectId(), job.getSourceId(),
-                    job.getWindowStart(), job.getWindowEnd(), job.getCursor(), job.getImportedCount(),
+                    job.getType(), job.getWindowStart(), job.getWindowEnd(), job.getCursor(), job.getImportedCount(),
                     job.getItemLimit(), job.getAttempts(), now);
         }));
         if (claim.isEmpty()) {
@@ -130,10 +138,11 @@ class SourceImportWorker {
             return;
         }
         SourceHistoryReader reader = readers.of(credentials.get().sourceType());
-        ImportCursor cursor = claim.cursor();
+        SyncCursor cursor = claim.cursor();
         int imported = claim.importedSoFar();
         while (true) {
-            HistoryPage page = reader.read(credentials.get(), token.get(), cursor, claim.windowStart(), claim.windowEnd());
+            HistoryPage page = reader.read(
+                    credentials.get(), token.get(), cursor.provider(), claim.windowStart(), claim.windowEnd());
             switch (page.status()) {
                 case LISTED -> {
                     // Handled below.
@@ -156,7 +165,7 @@ class SourceImportWorker {
                 }
             }
 
-            Scan scan = readPage(claim, credentials.get(), reader, page.items(), cursor, imported);
+            Scan scan = readPage(claim, credentials.get(), reader, page, cursor, imported);
             imported += scan.imported();
             // A page the provider says is its last one ends the import.
             Ending ending = scan.ending() == Ending.MORE && page.lastPage() ? Ending.COMPLETE : scan.ending();
@@ -177,10 +186,12 @@ class SourceImportWorker {
             Claim claim,
             SourceCredentials credentials,
             SourceHistoryReader reader,
-            List<HistoryItem> items,
-            ImportCursor cursor,
+            HistoryPage page,
+            SyncCursor cursor,
             int importedBefore
     ) {
+        List<HistoryItem> items = page.items();
+        SyncCursor nextPage = cursor.nextPage(page.nextProviderCursor());
         int scanned = 0;
         int imported = 0;
         for (int index = cursor.offset(); index < items.size(); index++) {
@@ -205,16 +216,16 @@ class SourceImportWorker {
             if (outcome == ChangeIntake.Outcome.RECORDED) {
                 imported++;
                 if (importedBefore + imported >= claim.itemLimit()) {
-                    ImportCursor next = index + 1 < items.size() ? cursor.at(index + 1) : cursor.nextPage();
+                    SyncCursor next = index + 1 < items.size() ? cursor.at(index + 1) : nextPage;
                     return new Scan(scanned, imported, next, Ending.LIMIT);
                 }
             }
         }
-        return new Scan(scanned, imported, cursor.nextPage(), Ending.MORE);
+        return new Scan(scanned, imported, nextPage, Ending.MORE);
     }
 
     // Saves the page's progress and, when the import ends, its outcome; false if the claim was lost.
-    private boolean progress(Claim claim, ImportCursor next, Scan scan, Ending ending) {
+    private boolean progress(Claim claim, SyncCursor next, Scan scan, Ending ending) {
         Boolean held = transactionTemplate.execute(status -> jobRepository.findById(claim.jobId())
                 .filter(job -> job.isClaimedAt(claim.claimedAt()))
                 .map(job -> {
@@ -222,15 +233,24 @@ class SourceImportWorker {
                     Instant now = now();
                     if (ending == Ending.COMPLETE) {
                         job.complete(now);
-                        sourceService.recordSync(claim.organizationId(), claim.sourceId(), now, null, false);
+                        recordSuccess(claim, now);
                     } else if (ending == Ending.LIMIT) {
                         job.stopAtLimit(now);
-                        sourceService.recordSync(claim.organizationId(), claim.sourceId(), now, null, false);
+                        recordSuccess(claim, now);
                     }
                     return true;
                 })
                 .orElse(false));
         return Boolean.TRUE.equals(held);
+    }
+
+    // A poll books its next round; an import only records that it ran.
+    private void recordSuccess(Claim claim, Instant now) {
+        if (claim.jobType() == SourceSyncJob.Type.JIRA_POLL) {
+            sourceService.recordPoll(claim.organizationId(), claim.sourceId(), claim.windowEnd(), now);
+        } else {
+            sourceService.recordSync(claim.organizationId(), claim.sourceId(), now, null, false);
+        }
     }
 
     // A transient failure waits and tries again, as long as the provider said or with backoff; the fifth fails.
@@ -244,6 +264,10 @@ class SourceImportWorker {
                 : backoff(claim.attempt());
         Instant retryAt = now().plus(wait);
         update(claim, job -> job.retryLater(error, retryAt));
+        if (claim.jobType() == SourceSyncJob.Type.JIRA_POLL) {
+            // The cursor stays where it was, so the next attempt misses nothing.
+            sourceService.recordPollFailure(claim.organizationId(), claim.sourceId(), error, retryAt, now());
+        }
         log.info("Retrying import job {} at {} after attempt {} ({}).", claim.jobId(), retryAt, claim.attempt(), error);
     }
 
@@ -251,7 +275,12 @@ class SourceImportWorker {
         update(claim, job -> {
             Instant now = now();
             job.fail(error, now);
-            sourceService.recordSync(claim.organizationId(), claim.sourceId(), now, error, credentialRejected);
+            if (claim.jobType() == SourceSyncJob.Type.JIRA_POLL) {
+                sourceService.recordPollFailure(claim.organizationId(), claim.sourceId(), error,
+                        now.plus(POLL_RETRY_AFTER_FAILURE), now);
+            } else {
+                sourceService.recordSync(claim.organizationId(), claim.sourceId(), now, error, credentialRejected);
+            }
         });
         log.warn("Import job {} failed ({}).", claim.jobId(), error);
     }
@@ -278,7 +307,7 @@ class SourceImportWorker {
         LIMIT
     }
 
-    private record Scan(int scanned, int imported, ImportCursor next, Ending ending) {
+    private record Scan(int scanned, int imported, SyncCursor next, Ending ending) {
     }
 
     private record Claim(
@@ -286,9 +315,10 @@ class SourceImportWorker {
             UUID organizationId,
             UUID projectId,
             UUID sourceId,
+            SourceSyncJob.Type jobType,
             Instant windowStart,
             Instant windowEnd,
-            ImportCursor cursor,
+            SyncCursor cursor,
             int importedSoFar,
             int itemLimit,
             int attempt,

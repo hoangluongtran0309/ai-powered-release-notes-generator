@@ -16,6 +16,15 @@ interface SourceSyncJobRepository extends JpaRepository<SourceSyncJob, UUID> {
 
     List<SourceSyncJob> findAllByOrganizationIdAndProjectIdOrderByCreatedAtDescIdDesc(UUID organizationId, UUID projectId);
 
+    // A source whose job is still queued, running, or waiting to retry has no room for another.
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1 FROM source_sync_jobs
+                WHERE source_id = :sourceId AND status IN ('PENDING', 'RUNNING', 'RETRY_SCHEDULED')
+            )
+            """, nativeQuery = true)
+    boolean hasActiveJob(@Param("sourceId") UUID sourceId);
+
     // SKIP LOCKED lets several workers claim different jobs without waiting on each other.
     @Query(value = """
             SELECT * FROM source_sync_jobs

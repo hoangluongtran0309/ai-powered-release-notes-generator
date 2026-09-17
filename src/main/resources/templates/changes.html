@@ -57,15 +57,39 @@
             <button type="submit" class="btn btn-primary">Apply</button>
         </form>
 
-        <section class="surface-card mt-6 p-5" id="source-imports" aria-label="History import"
-                 th:unless="${#lists.isEmpty(imports.?[supportsImport])}">
-            <h2 class="section-heading">History import</h2>
+        <section class="surface-card mt-6 p-5" id="source-imports" aria-label="Source sync"
+                 th:unless="${#lists.isEmpty(imports.?[supportsImport or polled])}">
+            <h2 class="section-heading">Source sync</h2>
             <p class="section-copy">
                 Changes reach ReleaseFlow by webhook from the moment a source is connected. For a source that keeps a
                 history ReleaseFlow can read, an import adds the ones merged in the last 90 days, up to a limit per
-                run, through the same processing.
+                run, through the same processing. A Jira project is read every few minutes instead, and needs no import.
             </p>
             <ul class="mt-4 grid gap-3">
+                <li class="subtle-panel flex flex-wrap items-center gap-3 p-3"
+                    th:each="sync : ${imports}" th:if="${sync.polled}"
+                    th:id="|poll-${sync.sourceId}|">
+                    <span class="font-semibold" th:text="${sync.externalProjectKey}">APP</span>
+                    <span class="badge badge-sm badge-ghost">Polled</span>
+                    <span class="badge badge-sm" th:if="${sync.status != null}" th:switch="${sync.status}">
+                        <span th:case="'PENDING'">Queued</span>
+                        <span th:case="'RUNNING'">Reading</span>
+                        <span th:case="'RETRY_SCHEDULED'">Waiting to retry</span>
+                        <span th:case="'COMPLETED'">Up to date</span>
+                        <span th:case="'PARTIAL'">Up to date</span>
+                        <span th:case="'FAILED'">Failed</span>
+                    </span>
+                    <span class="text-sm text-slate-600" th:if="${sync.lastSyncAt != null}">
+                        last read <time th:datetime="${sync.lastSyncAt}"
+                                        th:text="|${#temporals.format(sync.lastSyncAt, 'd MMM, HH:mm', 'UTC')} UTC|">11 Sep, 09:14 UTC</time>
+                    </span>
+                    <span class="text-sm text-slate-600" th:unless="${sync.lastSyncAt != null}">not read yet</span>
+                    <span class="text-sm text-slate-500" th:if="${sync.nextPollAt != null}">
+                        next read at <time th:datetime="${sync.nextPollAt}"
+                                           th:text="|${#temporals.format(sync.nextPollAt, 'HH:mm', 'UTC')} UTC|">09:19 UTC</time>
+                    </span>
+                    <span class="text-sm text-red-700" th:if="${sync.lastError != null}" th:text="|Error: ${sync.lastError}|">Error: access_rejected</span>
+                </li>
                 <li class="subtle-panel flex flex-wrap items-center gap-3 p-3"
                     th:each="sync : ${imports}" th:if="${sync.supportsImport}"
                     th:id="|import-${sync.sourceId}|">
@@ -309,6 +333,24 @@
                                th:text="|Written by ${change.summaryEditorName}|">Written by Mai Tran</p>
                         </dl>
                     </details>
+                    <details class="mt-3 text-sm" th:unless="${#lists.isEmpty(change.linkedIssues)}">
+                        <summary class="cursor-pointer font-medium text-slate-600"
+                                 th:text="|Linked issues (${#lists.size(change.linkedIssues)})|">Linked issues (1)</summary>
+                        <ul class="mt-2 space-y-2 text-slate-700">
+                            <li th:each="issue : ${change.linkedIssues}">
+                                <a class="link font-mono text-xs" th:href="${issue.url()}" th:text="${issue.key()}"
+                                   rel="noopener noreferrer" target="_blank">APP-7</a>
+                                <span th:text="${issue.title()}">Publish release notes per audience</span>
+                                <span class="badge badge-ghost badge-xs" th:if="${issue.type() != null}" th:text="${issue.type()}">Story</span>
+                                <span class="badge badge-ghost badge-xs" th:if="${issue.status() != null}" th:text="${issue.status()}">Done</span>
+                            </li>
+                        </ul>
+                    </details>
+                    <p class="mt-2 text-xs text-amber-700"
+                       th:if="${change.linkedContextStatus != null and change.linkedContextStatus.incomplete()}"
+                       th:text="${change.linkedContextStatus.name() == 'PARTIAL'}
+                                ? 'Commit messages could not be read, so an issue this change mentions may be missing.'
+                                : 'Jira did not return every issue this change mentions.'">Jira did not return every issue this change mentions.</p>
                     <details class="mt-3 text-sm" th:unless="${#lists.isEmpty(change.changedFiles)}">
                         <summary class="cursor-pointer font-medium text-slate-600"
                                  th:text="|Changed files (${#lists.size(change.changedFiles)})|">Changed files (3)</summary>

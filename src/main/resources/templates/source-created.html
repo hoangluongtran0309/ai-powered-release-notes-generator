@@ -2,22 +2,28 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout/main}">
 <head>
-    <title>Save webhook credentials</title>
+    <title>Source connected</title>
 </head>
 <body>
 <p layout:fragment="page-title">Projects</p>
 <div layout:fragment="content"
-     th:with="gitLab=${source.type.name() == 'GITLAB'}, linear=${source.type.name() == 'LINEAR'}">
+     th:with="gitHub=${source.type.name() == 'GITHUB'}, gitLab=${source.type.name() == 'GITLAB'},
+              linear=${source.type.name() == 'LINEAR'}, jira=${source.type.name() == 'JIRA'},
+              secretShown=${source.webhookSecret != null}">
     <header class="page-header">
         <div>
             <p class="page-eyebrow" th:switch="${source.type.name()}">
                 <span th:case="'GITHUB'">GitHub connected</span>
                 <span th:case="'GITLAB'">GitLab connected</span>
                 <span th:case="'LINEAR'">Linear connected</span>
+                <span th:case="'JIRA'">Jira connected</span>
             </p>
-            <h1 class="page-heading" th:text="${linear} ? 'The team is connected' : 'Save these webhook credentials now'">
+            <h1 class="page-heading"
+                th:text="${linear} ? 'The team is connected' : (${jira} ? 'The project is connected' : 'Save these webhook credentials now')">
                 Save these webhook credentials now</h1>
-            <p class="page-subtitle">ReleaseFlow stores only an encrypted copy of the secret.</p>
+            <p class="page-subtitle" th:text="${jira}
+                    ? 'ReleaseFlow stores only an encrypted copy of the API token.'
+                    : 'ReleaseFlow stores only an encrypted copy of the secret.'">ReleaseFlow stores only an encrypted copy of the secret.</p>
         </div>
     </header>
 
@@ -33,7 +39,18 @@
             </p>
         </div>
 
-        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:unless="${linear}">
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:if="${jira}">
+            <p class="text-sm font-semibold text-emerald-900">
+                <span>Jira project</span>
+                <span th:text="${source.externalProjectKey}">APP</span>
+            </p>
+            <p class="mt-1 text-xs text-emerald-800">
+                There is nothing to paste anywhere: ReleaseFlow reads this project on a schedule, so Jira needs no
+                webhook.
+            </p>
+        </div>
+
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:if="${secretShown}">
             <p class="text-sm font-semibold text-emerald-900">
                 <span>Signing secret for</span>
                 <span th:text="${source.externalProjectKey}">owner/repository</span>
@@ -52,6 +69,7 @@
                     <span th:case="'GITHUB'">Repository</span>
                     <span th:case="'GITLAB'">Project</span>
                     <span th:case="'LINEAR'">Team</span>
+                    <span th:case="'JIRA'">Project key</span>
                 </dt>
                 <dd class="mt-1 font-semibold" th:text="${source.externalProjectKey}">owner/repository</dd>
             </div>
@@ -63,7 +81,15 @@
                 <dt class="text-slate-500">Workspace</dt>
                 <dd class="mt-1 font-semibold" th:text="${source.externalWorkspaceKey}">workspace</dd>
             </div>
-            <div x-data="copyText()">
+            <div th:if="${jira}">
+                <dt class="text-slate-500">Jira site</dt>
+                <dd class="mt-1 font-semibold" th:text="${source.apiBaseUrl}">https://acme.atlassian.net</dd>
+            </div>
+            <div th:if="${jira}">
+                <dt class="text-slate-500">Account</dt>
+                <dd class="mt-1 font-semibold" th:text="${source.credentialIdentity}">release-bot@acme.test</dd>
+            </div>
+            <div x-data="copyText()" th:if="${source.webhookPath != null}">
                 <dt class="text-slate-500">Webhook path</dt>
                 <dd class="join mt-1 w-full">
                     <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
@@ -71,7 +97,7 @@
                     <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
                 </dd>
             </div>
-            <div x-data="copyText()" th:unless="${linear}">
+            <div x-data="copyText()" th:if="${secretShown}">
                 <dt class="text-slate-500">Webhook secret</dt>
                 <dd class="join mt-1 w-full">
                     <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
@@ -82,7 +108,7 @@
             </div>
         </dl>
 
-        <p class="mt-6 text-sm text-slate-600" th:unless="${gitLab}">
+        <p class="mt-6 text-sm text-slate-600" th:if="${gitHub}">
             In the repository's <strong>Settings → Webhooks</strong>, use your ReleaseFlow address followed by the path
             above as the payload URL, content type <code>application/json</code>, this secret, and the
             <strong>Pull requests</strong> event.
@@ -104,8 +130,14 @@
             moves into a completed state.
         </p>
 
+        <p class="mt-6 text-sm text-slate-600" th:if="${jira}">
+            The first read happens a few minutes from now, and every few minutes after that. Each issue moved into a
+            <strong>Done</strong> status since now is recorded once, numbered after its key. GitHub and GitLab changes
+            in this Project that mention one of its keys will also show that issue.
+        </p>
+
         <a class="btn btn-primary mt-6" th:href="@{/projects}"
-           th:text="${linear} ? 'Back to projects' : 'I have saved the secret'">I have saved the secret</a>
+           th:text="${secretShown} ? 'I have saved the secret' : 'Back to projects'">I have saved the secret</a>
     </article>
 </div>
 </body>

@@ -16,6 +16,8 @@ public enum ReviewTriggerType {
     CATEGORY_SUGGESTION_PENDING,
     /** The pull request gave too little evidence; the detail lists the reasons. */
     CONTEXT_INSUFFICIENT,
+    /** The issue tracker could not explain everything the change mentions. */
+    LINKED_CONTEXT_UNAVAILABLE,
     /** An earlier change looks the same; the detail is that change's ID. */
     DUPLICATE_CANDIDATE
 }

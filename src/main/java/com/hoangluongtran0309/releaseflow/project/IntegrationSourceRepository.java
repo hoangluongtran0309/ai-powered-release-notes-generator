@@ -30,6 +30,16 @@ interface IntegrationSourceRepository extends JpaRepository<IntegrationSource, U
     // before its tenant is trusted (ADR-0002).
     Optional<IntegrationSource> findByWebhookId(UUID webhookId);
 
+    // A change is enriched from the Project's tracker, which is found by type, not by ID.
+    List<IntegrationSource> findAllByOrganizationIdAndProjectIdAndSourceTypeOrderByCreatedAtAscIdAsc(
+            UUID organizationId,
+            UUID projectId,
+            SourceType sourceType
+    );
+
+    /** The polled sources whose schedule has come round. */
+    List<IntegrationSource> findAllBySourceTypeAndNextPollAtLessThanEqual(SourceType sourceType, Instant now);
+
     boolean existsByOrganizationIdAndSourceTypeAndExternalProjectKey(
             UUID organizationId,
             SourceType sourceType,

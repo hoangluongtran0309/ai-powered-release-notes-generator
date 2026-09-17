@@ -4,6 +4,7 @@ import com.hoangluongtran0309.releaseflow.audience.AudienceItem;
 import com.hoangluongtran0309.releaseflow.audience.AudienceTemplate;
 import com.hoangluongtran0309.releaseflow.change.ChangeView;
 import com.hoangluongtran0309.releaseflow.change.NeutralSummary;
+import com.hoangluongtran0309.releaseflow.jira.LinkedIssue;
 
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -103,7 +104,8 @@ final class ReleaseNoteDigest {
                     "",
                     change.narrative(audienceCode),
                     change.pullRequestNumber(),
-                    change.url()
+                    change.url(),
+                    linkedIssues(change)
             );
         }
         return new AudienceItem(
@@ -113,8 +115,26 @@ final class ReleaseNoteDigest {
                 summary.migrationStep(),
                 change.narrative(audienceCode),
                 change.pullRequestNumber(),
-                change.url()
+                change.url(),
+                linkedIssues(change)
         );
+    }
+
+    /**
+     * The issues a change mentions, as a template may print them. Every value but the
+     * URL ReleaseFlow built itself is the tracker's own text, so it is escaped.
+     */
+    private static List<LinkedIssue> linkedIssues(ChangeView change) {
+        return change.linkedIssues().stream()
+                .map(issue -> new LinkedIssue(
+                        issue.key(),
+                        ReleaseNoteMarkdown.escape(issue.title()),
+                        "",
+                        issue.type() == null ? null : ReleaseNoteMarkdown.escape(issue.type()),
+                        issue.status() == null ? null : ReleaseNoteMarkdown.escape(issue.status()),
+                        issue.url()
+                ))
+                .toList();
     }
 
     private static String overview(Map<Section, List<ChangeView>> sections, Labels labels) {

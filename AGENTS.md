@@ -9,16 +9,18 @@ classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
-source, GitLab source, and Linear source slices: one Spring Boot application,
-PostgreSQL/Flyway V1-V20,
+source, GitLab source, Linear source, and Jira source slices: one Spring Boot
+application, PostgreSQL/Flyway V1-V21,
 administrator
 registration, member
 invitations with administrator and member roles, session
 authentication, tenant-scoped Projects with one or more GitHub repository,
-GitLab project, or Linear team sources, per-source encrypted webhook secrets, a
-resumable 90-day history import for the providers that keep one, webhook
-endpoints that record normalized merged pull requests, merged merge requests, and
-completed issues idempotently once the source's own secret proves the delivery,
+GitLab project, Linear team, or Jira Cloud project sources, per-source encrypted
+webhook secrets, a resumable 90-day history import for the providers that keep
+one, webhook endpoints that record normalized merged pull requests, merged merge
+requests, and completed issues idempotently once the source's own secret proves
+the delivery, scheduled Jira polls, Jira issues linked to the code changes that
+mention them,
 write-only access tokens, a durable
 `SKIP LOCKED` worker that asks each provider for what it can add, outside
 transactions,
@@ -68,6 +70,10 @@ Read `README.md`, `docs/architecture.md`, and
   no credentials, query, or fragment; the allowlist is checked again before every
   call and a redirect is never followed. A diff GitLab collapsed, truncated, or
   called too large makes the whole file list unavailable, never short.
+- A Jira site is an HTTPS `atlassian.net` host with no port, credentials, query,
+  or fragment, checked again before every call; a redirect is never followed and
+  confirms nothing. `RELEASEFLOW_JIRA_API_BASE_URL` is deployment configuration
+  for local stand-ins, never something a request can set.
 - A provider that mints its own webhook secret gets it pasted in and never
   echoed; ReleaseFlow generates one only where it can. A Linear delivery is
   proven by its delivery header, a stamp within a minute, its workspace, and a
@@ -77,6 +83,10 @@ Read `README.md`, `docs/architecture.md`, and
   source that cannot report files at all is not a failed fetch: it falls back to
   the keyword scan of the change's own title and description, and only a match
   forces review.
+- A change's linked issues are evidence only. They never settle a change, and a
+  lookup that could not read the commits or an issue it found adds
+  `LINKED_CONTEXT_UNAVAILABLE` rather than being ignored. Commit messages are
+  read only to find issue keys and are never stored or sent to the AI.
 - A `PROCESSING` change cannot be reviewed, sent to AI, or released.
 - A release's changes are chosen while it is a draft; during review a change
   can only be rejected, which removes it. A release is approved only when every
@@ -84,6 +94,9 @@ Read `README.md`, `docs/architecture.md`, and
   the change itself through `ChangeReviewService`.
 - Background work uses its own job table, short claim and result
   transactions, and `FOR UPDATE SKIP LOCKED`; retries stay bounded.
+- Work nobody asked for is still a job row. A poll is scheduled from its
+  source's own `next_poll_at`, never from a request, and carries no requester.
+  Its cursor moves only when a poll completes, so a failure never skips an issue.
 - A change is identified by its source and the source's ID for it. Webhooks and
   imports record changes only through `ChangeIntake`, so neither duplicates the
   other, and one import per source runs at a time. A delivery ID is recorded only
@@ -92,8 +105,9 @@ Read `README.md`, `docs/architecture.md`, and
   repository for GitHub or its type and project path for GitLab; never rewrite
   those columns, or existing secrets stop decrypting.
 - Each source type has exactly one `SourceEnricher`, and one
-  `SourceHistoryReader` when it has a history; a type missing either fails at
-  startup. A provider may restate a change's wording, never its identity, labels,
+  `SourceHistoryReader` when it has a history or is polled; a type missing
+  either fails at startup. A source is either delivered to (a webhook identity
+  and secret) or polled (a schedule), never both. A provider may restate a change's wording, never its identity, labels,
   or times.
 - A change records its source's type, which the database ties to the source
   itself. Only a code host's change has a merge commit and a target branch.

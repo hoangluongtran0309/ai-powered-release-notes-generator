@@ -68,7 +68,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
-    private SourceImportWorker importWorker;
+    private SourceSyncWorker importWorker;
 
     @Autowired
     private ChangeProcessingWorker changeWorker;
@@ -153,7 +153,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM changes WHERE processing_status = 'COMPLETED'", Long.class)).isOne();
         mockMvc.perform(get("/changes").param("project", admin.projectId().toString()).session(admin.session()))
-                .andExpect(content().string(containsString("History import")))
+                .andExpect(content().string(containsString("Source sync")))
                 .andExpect(content().string(containsString("123 scanned, 120 imported")))
                 .andExpect(content().string(containsString(">Imported</span>")));
     }
@@ -174,7 +174,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
         importWorker.processOne();
         assertThat(jdbcTemplate.queryForMap("SELECT status, provider_cursor, imported_count FROM source_sync_jobs"))
                 .containsEntry("status", "PARTIAL")
-                .containsEntry("provider_cursor", "1:2")
+                .containsEntry("provider_cursor", ":2")
                 .containsEntry("imported_count", 2);
         mockMvc.perform(get("/api/projects/{projectId}/imports", admin.projectId()).session(admin.session()))
                 .andExpect(jsonPath("$[0].canResumeImport").value(true));
@@ -186,7 +186,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
         importWorker.processOne();
         assertThat(jdbcTemplate.queryForMap("SELECT status, provider_cursor, imported_count FROM source_sync_jobs"))
                 .containsEntry("status", "PARTIAL")
-                .containsEntry("provider_cursor", "1:4");
+                .containsEntry("provider_cursor", ":4");
         resume(admin, admin.sourceId()).andExpect(status().isAccepted());
         importWorker.processOne();
         assertThat(jdbcTemplate.queryForMap("SELECT status, imported_count, scanned_count FROM source_sync_jobs"))
@@ -235,7 +235,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
         importWorker.processOne();
         assertThat(jdbcTemplate.queryForMap("SELECT status, attempts, last_error FROM source_sync_jobs"))
                 .containsEntry("status", "FAILED")
-                .containsEntry("attempts", SourceImportWorker.MAX_ATTEMPTS)
+                .containsEntry("attempts", SourceSyncWorker.MAX_ATTEMPTS)
                 .containsEntry("last_error", ChangedFiles.GITHUB_UNAVAILABLE);
         mockMvc.perform(get("/api/projects/{projectId}/imports", admin.projectId()).session(admin.session()))
                 .andExpect(jsonPath("$[0].status").value("FAILED"))
@@ -259,7 +259,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(jdbcTemplate.queryForMap("SELECT status, attempts, last_error FROM source_sync_jobs"))
                 .containsEntry("status", "FAILED")
                 .containsEntry("attempts", 1)
-                .containsEntry("last_error", SourceImportWorker.ACCESS_REJECTED);
+                .containsEntry("last_error", SourceSyncWorker.ACCESS_REJECTED);
         mockMvc.perform(get("/api/projects/{projectId}/sources", admin.projectId()).session(admin.session()))
                 .andExpect(jsonPath("$[0].connectionStatus").value("ERROR"))
                 .andExpect(jsonPath("$[0].lastErrorCode").value("access_rejected"));
@@ -362,7 +362,7 @@ class SourceImportIntegrationTest extends PostgreSqlIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"owner\":\"acme\",\"repository\":\"x\"}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/changes").param("project", admin.projectId().toString()).session(member))
-                .andExpect(content().string(containsString("History import")))
+                .andExpect(content().string(containsString("Source sync")))
                 .andExpect(content().string(not(containsString("Import last 90 days"))));
 
         startImport(other, admin.sourceId())

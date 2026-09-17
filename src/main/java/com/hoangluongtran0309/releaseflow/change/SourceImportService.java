@@ -115,6 +115,7 @@ class SourceImportService {
         return sources.stream().map(source -> view(source, latest.get(source.id()))).toList();
     }
 
+    // A polled source syncs itself, so asking for an import by hand is refused too.
     private static void requireImportable(IntegrationSourceView source) {
         if (!source.type().supportsHistoryImport()) {
             throw new SourceImportNotSupportedException(source.type());
@@ -127,6 +128,8 @@ class SourceImportService {
                 source.externalProjectKey(),
                 source.deliveryMechanism(),
                 source.type().supportsHistoryImport(),
+                source.type().isPolled(),
+                source.nextPollAt(),
                 source.accessTokenConfigured(),
                 job == null ? null : job.getStatus().name(),
                 job == null ? null : job.getWindowStart(),

@@ -6,8 +6,9 @@ import com.hoangluongtran0309.releaseflow.source.WebhookAuthMode;
 import java.time.Instant;
 import java.util.UUID;
 
-// The access token itself is write-only; the view only says whether one is set. Both
-// source types deliver changes by signed webhook.
+// The access token itself is write-only; the view only says whether one is set. A
+// webhook source has a webhook identity and a path; a polled source has nextPollAt
+// instead, and never both.
 public record IntegrationSourceView(
         UUID id,
         SourceType type,
@@ -17,6 +18,7 @@ public record IntegrationSourceView(
         String repository,
         String apiBaseUrl,
         String externalWorkspaceKey,
+        String credentialIdentity,
         WebhookAuthMode webhookAuthMode,
         UUID webhookId,
         String webhookPath,
@@ -26,6 +28,7 @@ public record IntegrationSourceView(
         Instant accessTokenUpdatedAt,
         ConnectionStatus connectionStatus,
         Instant lastSyncAt,
-        String lastErrorCode
+        String lastErrorCode,
+        Instant nextPollAt
 ) {
 }

@@ -57,7 +57,7 @@ class GitLabImportIntegrationTest extends PostgreSqlIntegrationTest {
     private RegistrationService registrationService;
 
     @Autowired
-    private SourceImportWorker importWorker;
+    private SourceSyncWorker importWorker;
 
     @Autowired
     private ChangeProcessingWorker changeWorker;
@@ -154,14 +154,14 @@ class GitLabImportIntegrationTest extends PostgreSqlIntegrationTest {
         importWorker.processOne();
         assertThat(jdbcTemplate.queryForMap("SELECT status, provider_cursor, imported_count FROM source_sync_jobs"))
                 .containsEntry("status", "PARTIAL")
-                .containsEntry("provider_cursor", "1:2")
+                .containsEntry("provider_cursor", ":2")
                 .containsEntry("imported_count", 2);
 
         resume(admin).andExpect(status().isAccepted()).andExpect(jsonPath("$.importedCount").value(0));
         importWorker.processOne();
         assertThat(jdbcTemplate.queryForMap("SELECT status, provider_cursor FROM source_sync_jobs"))
                 .containsEntry("status", "PARTIAL")
-                .containsEntry("provider_cursor", "1:4");
+                .containsEntry("provider_cursor", ":4");
 
         resume(admin).andExpect(status().isAccepted());
         importWorker.processOne();
@@ -200,7 +200,7 @@ class GitLabImportIntegrationTest extends PostgreSqlIntegrationTest {
         }
         assertThat(jdbcTemplate.queryForMap("SELECT status, attempts, last_error FROM source_sync_jobs"))
                 .containsEntry("status", "FAILED")
-                .containsEntry("attempts", SourceImportWorker.MAX_ATTEMPTS)
+                .containsEntry("attempts", SourceSyncWorker.MAX_ATTEMPTS)
                 .containsEntry("last_error", ChangedFiles.GITLAB_UNAVAILABLE);
         mockMvc.perform(get("/api/projects/{projectId}/imports", admin.projectId()).session(admin.session()))
                 .andExpect(jsonPath("$[0].lastErrorCode").value("gitlab_unavailable"))
@@ -218,7 +218,7 @@ class GitLabImportIntegrationTest extends PostgreSqlIntegrationTest {
         assertThat(jdbcTemplate.queryForMap("SELECT status, attempts, last_error FROM source_sync_jobs"))
                 .containsEntry("status", "FAILED")
                 .containsEntry("attempts", 1)
-                .containsEntry("last_error", SourceImportWorker.ACCESS_REJECTED);
+                .containsEntry("last_error", SourceSyncWorker.ACCESS_REJECTED);
         mockMvc.perform(get("/api/projects/{projectId}/sources", admin.projectId()).session(admin.session()))
                 .andExpect(jsonPath("$[0].connectionStatus").value("ERROR"))
                 .andExpect(jsonPath("$[0].lastErrorCode").value("access_rejected"));

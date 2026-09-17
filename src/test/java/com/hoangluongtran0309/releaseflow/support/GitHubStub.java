@@ -25,12 +25,13 @@ import java.util.regex.Pattern;
 
 /**
  * A local HTTP server standing in for the GitHub REST API: the pull request access
- * check and the paginated pull request file list.
+ * check, the paginated pull request file list, and a pull request's commits.
  */
 public final class GitHubStub implements AutoCloseable {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Pattern FILES = Pattern.compile("/repos/[^/]+/[^/]+/pulls/\\d+/files");
+    private static final Pattern COMMITS = Pattern.compile("/repos/[^/]+/[^/]+/pulls/\\d+/commits");
     private static final Pattern PULLS = Pattern.compile("/repos/[^/]+/[^/]+/pulls");
     private static final Pattern PAGE = Pattern.compile("(?:^|&)page=(\\d+)");
     private static final int PAGE_SIZE = 100;
@@ -41,6 +42,8 @@ public final class GitHubStub implements AutoCloseable {
     private volatile List<Map<String, Object>> files = List.of();
     private volatile Failure filesFailure;
     private volatile Failure accessFailure;
+    private volatile List<Map<String, Object>> commits = List.of();
+    private volatile Failure commitsFailure;
     private volatile List<Map<String, Object>> pullRequests = List.of();
     private volatile Failure listFailure;
     private final AtomicInteger listFailuresLeft = new AtomicInteger();
@@ -95,6 +98,21 @@ public final class GitHubStub implements AutoCloseable {
 
     public void failFiles(int status, Map<String, String> headers) {
         filesFailure = new Failure(status, headers);
+    }
+
+    /** The commit messages of every pull request, in order. */
+    public void respondWithCommits(String... messages) {
+        commits = java.util.Arrays.stream(messages)
+                .map(message -> Map.<String, Object>of("sha", "c".repeat(40), "commit", Map.of("message", message)))
+                .toList();
+    }
+
+    public void failCommits(int status) {
+        commitsFailure = new Failure(status, Map.of());
+    }
+
+    public List<RecordedRequest> commitRequests() {
+        return requests.stream().filter(request -> COMMITS.matcher(request.path()).matches()).toList();
     }
 
     public void failAccessCheck(int status) {
@@ -154,6 +172,8 @@ public final class GitHubStub implements AutoCloseable {
         files = List.of();
         filesFailure = null;
         accessFailure = null;
+        commits = List.of();
+        commitsFailure = null;
         pullRequests = List.of();
         listFailure = null;
         listFailuresLeft.set(0);
@@ -184,7 +204,19 @@ public final class GitHubStub implements AutoCloseable {
             return;
         }
 
-        if (FILES.matcher(path).matches()) {
+        if (COMMITS.matcher(path).matches()) {
+            Failure failure = commitsFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            Matcher matcher = PAGE.matcher(query);
+            int page = matcher.find() ? Integer.parseInt(matcher.group(1)) : 1;
+            List<Map<String, Object>> all = commits;
+            int from = Math.min(all.size(), (page - 1) * PAGE_SIZE);
+            int to = Math.min(all.size(), from + PAGE_SIZE);
+            send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(all.subList(from, to)));
+        } else if (FILES.matcher(path).matches()) {
             Failure failure = filesFailure;
             if (failure != null) {
                 send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");

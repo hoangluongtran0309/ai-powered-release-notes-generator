@@ -56,7 +56,8 @@ class AudiencePresetDivergenceTest {
                 "Set EXPORT_QUEUE_ENABLED=true before upgrading.",
                 narrative,
                 42,
-                "https://github.com/acme/app/pull/42"
+                "https://github.com/acme/app/pull/42",
+                List.of()
         );
     }
 

@@ -44,14 +44,16 @@ class GitHubHistoryReader implements SourceHistoryReader {
     public HistoryPage read(
             SourceCredentials credentials,
             String token,
-            ImportCursor cursor,
+            String providerCursor,
             Instant windowStart,
             Instant windowEnd
     ) {
+        // Both providers number their pages, and a blank cursor means the first.
+        int page = providerCursor.isBlank() ? 1 : Integer.parseInt(providerCursor);
         ProviderListing listing = gitHubApiClient.closedPullRequests(
                 credentials.repositoryOwner(),
                 credentials.repositoryName(),
-                cursor.page(),
+                page,
                 token
         );
         if (listing.status() != ProviderListing.Status.LISTED) {
@@ -66,6 +68,6 @@ class GitHubHistoryReader implements SourceHistoryReader {
                     HistoryTimes.readOrNull(() -> MergedPullRequest.from(pullRequest))
             ));
         }
-        return HistoryPage.listed(items, listing.lastPage());
+        return HistoryPage.listed(items, Integer.toString(page + 1), listing.lastPage());
     }
 }

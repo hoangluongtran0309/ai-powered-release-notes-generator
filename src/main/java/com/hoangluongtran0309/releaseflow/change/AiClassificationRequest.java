@@ -3,7 +3,7 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguage;
 import com.hoangluongtran0309.releaseflow.audience.AudienceBrief;
 import com.hoangluongtran0309.releaseflow.category.CategoryRef;
-
+import com.hoangluongtran0309.releaseflow.jira.LinkedIssue;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -23,6 +23,7 @@ record AiClassificationRequest(
         String description,
         List<String> labels,
         String targetBranch,
+        List<LinkedIssue> linkedIssues,
         OutputLanguage outputLanguage,
         CategoryRef lockedCategory,
         List<CategoryRef> categories,
@@ -42,6 +43,7 @@ record AiClassificationRequest(
     static AiClassificationRequest of(
             UUID changeId,
             MergedPullRequest pullRequest,
+            List<LinkedIssue> linkedIssues,
             OutputLanguage outputLanguage,
             CategoryRef rulesCategory,
             List<CategoryRef> categories,
@@ -54,6 +56,7 @@ record AiClassificationRequest(
                 pullRequest.description(),
                 pullRequest.labels(),
                 pullRequest.targetBranch(),
+                linkedIssues,
                 outputLanguage,
                 rulesCategory.isUnknown() ? null : rulesCategory,
                 categories,
