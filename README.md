@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V21`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V22`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - create-only GitHub repository, GitLab project, Linear team, and Jira Cloud
   project sources, several per Project;
@@ -71,11 +71,16 @@ The application currently provides:
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme;
 - a non-root container image and a Docker Compose demo stack with PostgreSQL;
+- automation rules that deliver a published release note to a GitHub Release, a
+  Slack channel, or a list of email addresses, in an order the rule fixes, with a
+  durable run history, an outcome nobody may repeat without confirming it, and no
+  way for a rule to hold up the release that triggered it;
 - GitHub Actions gates for tests, CodeQL, dependency review, secret scanning,
   and container vulnerability scanning.
 
-Every slice in the current plan is implemented; external distribution and a
-public changelog are deliberately deferred. See the
+Every slice in the current plan is implemented; scheduled and webhook
+automation triggers, further distribution integrations, and a public changelog
+are deliberately deferred. See the
 [implementation status](docs/implementation-status.md).
 
 ## Requirements
@@ -100,6 +105,24 @@ export RELEASEFLOW_DB_PASSWORD='replace-with-a-local-secret'
 export RELEASEFLOW_CREDENTIAL_MASTER_KEY='replace-with-the-generated-base64-key'
 ./mvnw spring-boot:run
 ```
+
+Email automation also needs an SMTP server and a sender address:
+
+```bash
+export RELEASEFLOW_SMTP_HOST=smtp.example.com
+export RELEASEFLOW_SMTP_PORT=587
+export RELEASEFLOW_SMTP_USERNAME=releaseflow
+export RELEASEFLOW_SMTP_PASSWORD='replace-with-a-local-secret'
+export RELEASEFLOW_SMTP_AUTH=true
+export RELEASEFLOW_SMTP_STARTTLS=true
+export RELEASEFLOW_AUTOMATION_EMAIL_FROM='releases@example.com'
+```
+
+Without them, an email action simply cannot be enabled; the rest of automation
+works. `RELEASEFLOW_AUTOMATION_TIMEOUT` (default `PT10S`) bounds a Slack or SMTP
+delivery, and `RELEASEFLOW_SLACK_ALLOWED_HOSTS` (default
+`hooks.slack.com,hooks.slack-gov.com`) is the only set of origins a Slack webhook
+URL may name.
 
 Set `RELEASEFLOW_SESSION_COOKIE_SECURE=true` whenever the application is served
 over HTTPS. Open `http://localhost:8080/register` to create the first
@@ -126,6 +149,8 @@ REST clients use the same session and CSRF policy as the server-rendered UI:
 7. Optionally set a source's access token with
    `PUT /api/projects/{projectId}/sources/{sourceId}/token` (see
    [Access tokens](#access-tokens)).
+8. Optionally write automation rules through `/api/automation/rules` (see
+   [Automation](#automation)).
 
 Authenticated users can perform the same workflow at `/projects`. Repository
 owners, repository names, and GitLab project paths are canonicalized to
@@ -1020,6 +1045,77 @@ It returns the release with `status`, `publishedAt`, `publisherName`, and
 `preview` hold its legacy note instead. Publishing a release that is not
 approved returns `409 release_status_conflict`; any operation on a published
 release returns `409 release_published`.
+
+## Automation
+
+A rule delivers a published release note where its readers already are. Open
+**Automation** in the sidebar, which administrators alone can see. A rule names
+what makes it run — a release being published, or an administrator running it by
+hand — the project it watches (or every project), and the actions it carries out,
+in order. Each action names the audience and language whose note it delivers.
+
+Write the rule first; it starts disabled. Enabling it is the moment ReleaseFlow
+checks that the deliveries can be made: the project and every audience belong to
+your Organization, the language is one your Organization writes notes in, a
+GitHub Release action's project has exactly one GitHub source, the deployment can
+carry the action out at all, and the configuration and secret are usable. A rule
+that is refused says which of those failed.
+
+Three kinds of action exist:
+
+| Action | What it needs | What it does |
+| --- | --- | --- |
+| GitHub Release | The project's own GitHub source and its access token | Publishes the note as the release of the version's tag, marking the body so a repeat knows its own work |
+| Slack | An incoming webhook URL, which is the action's secret | Posts the note to the channel, up to 39,000 characters |
+| Email | `RELEASEFLOW_AUTOMATION_EMAIL_FROM` and an SMTP server | Sends the note to between 1 and 100 addresses |
+
+A Slack webhook URL must name an origin the deployment allows —
+`hooks.slack.com` or `hooks.slack-gov.com` unless `RELEASEFLOW_SLACK_ALLOWED_HOSTS`
+says otherwise — and is checked again before every delivery. A secret is
+write-only: once stored, no response, page, or log ever repeats it, and leaving
+the field empty while editing keeps the one already there.
+
+Publishing a release records that it happened and nothing more, so a rule nobody
+can carry out never holds up a release. Within a second the worker creates one
+run per matching rule and walks its actions in order. The run history shows each
+delivery and how it ended. The first action that fails stops the ones behind it,
+and **Run again** repeats only that one. An action whose outcome nobody could
+confirm — a connection that dropped after the request went out, or a worker that
+stopped for five minutes — is recorded as unknown and never sent again on its
+own; repeating it asks you to confirm the delivery may happen twice. **Cancel**
+lets the action already on its way record its result and stops the rest.
+
+REST clients do the same thing:
+
+```bash
+curl -X POST http://localhost:8080/api/automation/rules \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Announce","triggerType":"RELEASE_PUBLISHED","projectId":"<project>",
+       "actions":[{"actionType":"SLACK","audienceId":"<audience>","language":"en",
+                   "secret":"https://hooks.slack.com/services/T0/B0/secret"}]}'
+curl -X POST http://localhost:8080/api/automation/rules/<rule>/enable
+curl -X POST http://localhost:8080/api/automation/rules/<rule>/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"releaseId":"<release>","requestId":"<uuid you choose>"}'
+curl 'http://localhost:8080/api/automation/runs?page=0&size=20'
+curl -X POST http://localhost:8080/api/automation/runs/<run>/retry \
+  -H 'Content-Type: application/json' -d '{"confirmUnknown":true}'
+```
+
+`POST /{id}/execute` answers `202` with the run. The request ID is yours to
+choose and is the promise that a repeat is the same run rather than a second
+delivery. `DELETE /api/automation/rules/{id}` archives a rule, which cancels the
+runs it had not finished and frees its name. `GET /api/automation/runs` answers
+`{"items", "page", "size", "total"}`, with `size` between 1 and 100.
+
+Refusals carry a stable code: `automation_rule_name_taken`,
+`automation_github_source_missing`, `automation_email_not_configured`,
+`automation_run_not_retryable`, and `automation_unknown_needs_confirmation` are
+`409`; `automation_action_required`, `automation_audience_not_found`,
+`automation_language_not_configured`, `automation_slack_webhook_invalid`, and
+`invalid_automation_run_page` are `400`. Every automation path is administrator
+only, and a rule from another Organization is `404`, never `403`. See
+[ADR-0020](docs/adr/0020-automation-rules-and-runs.md).
 
 ## Verify
 

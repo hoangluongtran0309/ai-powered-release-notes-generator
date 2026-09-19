@@ -9,8 +9,8 @@ classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
-source, GitLab source, Linear source, and Jira source slices: one Spring Boot
-application, PostgreSQL/Flyway V1-V21,
+source, GitLab source, Linear source, Jira source, and automation slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V22,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -33,6 +33,9 @@ per-change review and approval to publication (several per Project, with a
 planned release time), administrator-managed audiences with Mustache templates
 and AI narratives, one release note per audience and language written at
 approval, translated by an optional DeepL queue, and frozen at publication,
+administrator-written automation rules that deliver a published note to a GitHub
+Release, a Slack channel, or a list of addresses through a durable run its worker
+walks one action at a time,
 REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
 Read `README.md`, `docs/architecture.md`, and
@@ -143,6 +146,24 @@ Read `README.md`, `docs/architecture.md`, and
   every note is ready, and translation retries stay bounded.
 - Tenant-owned repository lookups include both resource ID and the current
   principal's Organization ID.
+- Publishing a release records that it happened and nothing else. Automation runs
+  are created after that transaction commits, from the outbox row the publication
+  left, so no rule can hold up or undo a release. A rule with nothing to deliver
+  becomes a failed action, never a refused publication.
+- A delivery cannot be repeated safely. An action whose outcome nobody could
+  confirm is recorded as unknown, never retried on its own, and repeated only
+  when a person confirms the duplicate. The first action of a run that does not
+  succeed stops the ones behind it, and a retry resets only that action.
+- An action's secret is bound to its own action, written once and never read back
+  into a response, a page, or a log. A GitHub Release action has no secret: it
+  borrows the project's one GitHub source and its token, and fails when the
+  project has none or more than one.
+- No outbound client follows a redirect. A Slack webhook URL may only name an
+  origin the deployment allows, checked when it is stored and again before every
+  delivery.
+- A rule is written freely and starts disabled; enabling it is where ReleaseFlow
+  promises the deliveries can be made. Archiving or disabling a rule cancels the
+  runs it had not finished.
 - GitHub Actions stay pinned to commit SHAs, images to digests, and downloaded
   CI tools to SHA-256 checksums. Compose secrets never get default values.
 

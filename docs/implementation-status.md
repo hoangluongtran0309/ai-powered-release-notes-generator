@@ -197,9 +197,32 @@
   - linked issues in the AI prompt, the Change Inbox, and audience templates;
   - a Jira card on the Projects page and a poll row in the Change Inbox.
 
+- Automation rules and runs (ADR-0020), with Flyway `V22`:
+  - a rule that fires when a release is published or when an administrator runs
+    it, scoped to one project or to every project, holding an ordered list of
+    actions, each naming the audience and language whose note it delivers;
+  - enabling as the promise the deliveries can be made: project and audience
+    ownership, a configured release language, one GitHub source for a GitHub
+    Release action, a deployment that can carry the action out, and a usable
+    configuration and secret;
+  - publication that writes one outbox row and nothing else, so no rule can undo
+    a release, and a worker that turns it into runs after the commit — once per
+    rule and release, and once per manual request ID;
+  - durable runs with `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `UNKNOWN`, and
+    `CANCELLED`: the first action that does not succeed stops the rest, an action
+    whose worker stopped becomes unknown after five minutes and is never repeated
+    without a person confirming the duplicate, a retry resets only that action,
+    and cancelling lets the action already running record its result;
+  - GitHub Release deliveries that borrow the project's source token and mark
+    their own release, Slack deliveries to an allowlisted incoming webhook, and
+    email deliveries through the deployment's SMTP server;
+  - action secrets encrypted and bound to their action, never read back;
+  - an administrator-only `/api/automation/**` and `/automation`, with the run
+    history as the first paged list in ReleaseFlow.
+
 ## In progress
 
-- Nothing. The Jira source slice is complete and awaiting review.
+- Nothing. The automation slice is complete and awaiting review.
 
 ## Planned
 
@@ -220,7 +243,9 @@ deliberately deferred list below, one reviewed slice at a time.
   secret or token rotation reminders.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
-- Automation, distribution integrations, and a public changelog.
+- Scheduled, reminder, and incoming-webhook automation triggers, automation
+  actions other than GitHub Releases, Slack, and email, distribution
+  integrations, and a public changelog.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
   tests, production observability (Actuator, metrics, Prometheus, Grafana),
   image publication, release automation, and an open-core/enterprise module

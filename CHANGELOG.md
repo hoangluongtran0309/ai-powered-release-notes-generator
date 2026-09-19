@@ -351,9 +351,56 @@ version has been released.
 - Flyway migration `V21` for Jira sources, polls, and linked context, and
   Testcontainers coverage of the schedule, paging, overlap, retries, every
   linked-context status, and the new constraints.
+- Automation rules that deliver a published release note where its readers
+  already are (ADR-0020): a rule fires when a release is published or when an
+  administrator runs it by hand, covers one project or every project, and holds
+  an ordered list of actions, each naming the audience and language whose note
+  it delivers.
+- Enabling a rule as the moment ReleaseFlow promises the deliveries can be made:
+  the project and every audience belong to the Organization, the language is one
+  the Organization writes notes in, a GitHub Release action's project has exactly
+  one GitHub source, the deployment can carry the action out, and its
+  configuration and secret are usable. Disabling or archiving a rule cancels the
+  runs it had not finished.
+- Publishing a release that writes one outbox row and nothing else, so a rule
+  nobody can carry out never rolls the publication back. A worker turns the row
+  into runs after the commit, once per rule and release, and a repeated manual
+  request returns the same run rather than delivering twice.
+- Durable runs with `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `UNKNOWN`, and
+  `CANCELLED`. The first action that does not succeed stops the ones behind it.
+  An action whose worker stopped becomes `UNKNOWN` after five minutes and is
+  never sent again on its own; repeating it takes `confirmUnknown`, answered with
+  `409 automation_unknown_needs_confirmation` until it is given. A retry resets
+  only the first action that failed, and cancelling lets the action already
+  running record its result.
+- GitHub Release deliveries that borrow the project's own source token and mark
+  the release body with `<!-- releaseflow-action:{id} -->`, so a repeat knows its
+  own work and never overwrites a release somebody else made; Slack deliveries to
+  an incoming webhook whose origin the deployment allows, checked again before
+  every delivery and capped at 39,000 characters; and email deliveries through
+  the deployment's SMTP server to between 1 and 100 addresses.
+- Action secrets encrypted with AES-256-GCM and bound to their own action, never
+  returned by a response, a page, or a log.
+- Administrator-only `GET|POST /api/automation/rules`, `GET|PUT|DELETE
+  /api/automation/rules/{id}`, `/enable`, `/disable`, `POST /{id}/execute`
+  answering `202`, and `GET /api/automation/runs?page&size` with
+  `GET|POST /runs/{id}`, `/retry`, and `/cancel`, alongside an `/automation`
+  page that does the same things.
+- `RELEASEFLOW_AUTOMATION_TIMEOUT`, `RELEASEFLOW_AUTOMATION_EMAIL_FROM`,
+  `RELEASEFLOW_SLACK_ALLOWED_HOSTS`, and `RELEASEFLOW_SMTP_HOST`,
+  `RELEASEFLOW_SMTP_PORT`, `RELEASEFLOW_SMTP_USERNAME`,
+  `RELEASEFLOW_SMTP_PASSWORD`, `RELEASEFLOW_SMTP_AUTH`, and
+  `RELEASEFLOW_SMTP_STARTTLS`.
+- Flyway migration `V22` for automation rules, actions, runs, action runs, and
+  the publication outbox, and Testcontainers coverage of the action order,
+  concurrent claims, an expired lease, retries and cancellation, idempotency,
+  stubbed GitHub, Slack, and SMTP servers, and the new constraints.
 
 ### Changed
 
+- The GitHub client's timeout defaults to 10 seconds rather than 5, because
+  publishing a GitHub Release goes through it. `RELEASEFLOW_GITHUB_TIMEOUT`
+  still sets it.
 - `SourceImportWorker` is now `SourceSyncWorker`, because it runs polls as well
   as imports, and `ImportCursor` is now `SyncCursor`, whose provider half is
   opaque. A GitHub or GitLab cursor for the first page is now stored as `:2`
@@ -428,6 +475,11 @@ version has been released.
   while it is Processing (`409 change_processing` for reviews).
 
 ### Security
+
+- The GitHub and DeepL clients now refuse redirects explicitly, as the GitLab,
+  Jira, and Linear clients already did. A Slack webhook URL is checked against a
+  deployment allowlist when it is stored and again before every delivery, so a
+  stored address can never send a release note somewhere else.
 
 - Tomcat is pinned to 11.0.25 to fix CVE-2026-65182, CVE-2026-65905, and
   CVE-2026-68525 until the Spring Boot parent manages a fixed version.

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title>Automation</title>
+</head>
+<body>
+<p layout:fragment="page-title">Automation</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">Organization administration</p>
+            <h1 class="page-heading">Automation</h1>
+            <p class="page-subtitle">
+                A rule delivers a published release note where its readers already are. Its actions run in order, and the
+                first one that fails stops the rest. A delivery nobody could confirm waits for you rather than repeating
+                itself.
+            </p>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Rule was not found.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.saved != null}"><span>Rule saved.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.enabled != null}"><span>Rule enabled.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.disabled != null}"><span>Rule disabled. Runs that had not finished were cancelled.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.archived != null}"><span>Rule archived.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.executed != null}"><span>Run queued.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.retried != null}"><span>The failed action will run again.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.cancelled != null}"><span>Run cancelled.</span></div>
+
+    <section class="surface-card p-6" id="automation-rules">
+        <h2 class="section-heading">Rules</h2>
+        <p class="section-copy" th:if="${#lists.isEmpty(rules)}">No rules yet. Write one below.</p>
+        <div class="mt-4 overflow-x-auto" th:unless="${#lists.isEmpty(rules)}">
+            <table class="table">
+                <thead>
+                <tr><th>Name</th><th>Runs when</th><th>Scope</th><th>Actions</th><th>Status</th><th><span class="sr-only">Manage</span></th></tr>
+                </thead>
+                <tbody>
+                <tr th:each="rule : ${rules}" th:id="|rule-${rule.id}|">
+                    <td class="font-semibold" th:text="${rule.name}">Announce to Slack</td>
+                    <td th:text="${rule.triggerType.label}">Release published</td>
+                    <td>
+                        <span th:if="${rule.organizationWide()}">Every project</span>
+                        <span th:unless="${rule.organizationWide()}" th:text="${rule.projectName}">Checkout</span>
+                    </td>
+                    <td>
+                        <ol class="text-sm">
+                            <li th:each="action : ${rule.actions}"
+                                th:text="|${action.position + 1}. ${action.actionType.label} — ${action.audienceName} (${action.language})|">
+                                1. Slack — End user (en)
+                            </li>
+                        </ol>
+                    </td>
+                    <td>
+                        <span class="badge badge-sm badge-success badge-soft" th:if="${rule.enabled}">Enabled</span>
+                        <span class="badge badge-sm badge-ghost" th:unless="${rule.enabled}">Disabled</span>
+                    </td>
+                    <td>
+                        <div class="flex flex-wrap justify-end gap-2">
+                            <a class="btn btn-ghost btn-sm" th:href="@{/automation/{id}(id=${rule.id})}">Edit</a>
+                            <form method="post" th:action="@{/automation/{id}/enable(id=${rule.id})}" th:unless="${rule.enabled}">
+                                <button type="submit" class="btn btn-primary btn-sm">Enable</button>
+                            </form>
+                            <form method="post" th:action="@{/automation/{id}/disable(id=${rule.id})}" th:if="${rule.enabled}">
+                                <button type="submit" class="btn btn-outline btn-sm">Disable</button>
+                            </form>
+                            <details th:if="${rule.triggerType.name() == 'MANUAL'}">
+                                <summary class="btn btn-outline btn-sm">Run now</summary>
+                                <form class="mt-2 grid gap-2" method="post" th:action="@{/automation/{id}/execute(id=${rule.id})}">
+                                    <input type="hidden" name="requestId" th:value="${requestId}">
+                                    <select name="releaseId" class="select select-bordered select-sm" required aria-label="Release">
+                                        <option th:each="release : ${releases}" th:value="${release.id}" th:text="${release.version}">1.4.0</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-primary btn-sm">Run</button>
+                                </form>
+                            </details>
+                            <form method="post" th:action="@{/automation/{id}/archive(id=${rule.id})}">
+                                <button type="submit" class="btn btn-ghost btn-sm">Archive</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="surface-card mt-6 p-6" id="automation-rule-form">
+        <h2 class="section-heading" th:text="${editing == null} ? 'New rule' : 'Edit rule'">New rule</h2>
+        <p class="section-copy">
+            A rule without a project watches every project. A new rule starts disabled: enabling it is what checks that
+            every action can be carried out. A secret left empty keeps the one already stored.
+        </p>
+        <form class="mt-4 grid gap-4" method="post" th:object="${ruleForm}"
+              th:action="${editing == null} ? @{/automation} : @{/automation/{id}(id=${editing.id})}">
+            <div class="grid gap-4 md:grid-cols-3">
+                <label class="form-control"><span class="label-text font-medium">Name</span>
+                    <input type="text" th:field="*{name}" maxlength="120" required class="input input-bordered w-full"
+                           th:errorclass="input-error">
+                    <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></span>
+                </label>
+                <label class="form-control"><span class="label-text font-medium">Runs when</span>
+                    <select th:field="*{triggerType}" class="select select-bordered w-full" th:errorclass="select-error">
+                        <option th:each="trigger : ${triggers}" th:value="${trigger.name()}" th:text="${trigger.label}">Release published</option>
+                    </select>
+                    <span class="field-error" th:if="${#fields.hasErrors('triggerType')}" th:errors="*{triggerType}"></span>
+                </label>
+                <label class="form-control"><span class="label-text font-medium">Project</span>
+                    <select th:field="*{projectId}" class="select select-bordered w-full">
+                        <option value="">Every project</option>
+                        <option th:each="project : ${projects}" th:value="${project.id}" th:text="${project.name}">Checkout</option>
+                    </select>
+                </label>
+            </div>
+
+            <fieldset class="subtle-panel grid gap-3 p-4">
+                <legend class="label-text font-medium">Actions, in order</legend>
+                <div class="grid gap-2 md:grid-cols-5" th:each="action, row : *{actions}">
+                    <input type="hidden" th:field="*{actions[__${row.index}__].id}">
+                    <label class="form-control"><span class="label-text">Deliver to</span>
+                        <select th:field="*{actions[__${row.index}__].actionType}" class="select select-bordered select-sm">
+                            <option value="">—</option>
+                            <option th:each="type : ${actionTypes}" th:value="${type.name()}" th:text="${type.label}">Slack</option>
+                        </select>
+                    </label>
+                    <label class="form-control"><span class="label-text">Audience</span>
+                        <select th:field="*{actions[__${row.index}__].audienceId}" class="select select-bordered select-sm">
+                            <option value="">—</option>
+                            <option th:each="audience : ${audiences}" th:value="${audience.id}" th:text="${audience.displayName}">End user</option>
+                        </select>
+                    </label>
+                    <label class="form-control"><span class="label-text">Language</span>
+                        <select th:field="*{actions[__${row.index}__].language}" class="select select-bordered select-sm">
+                            <option value="">—</option>
+                            <option th:each="language : ${languages}" th:value="${language}" th:text="${language}">en</option>
+                        </select>
+                    </label>
+                    <label class="form-control"><span class="label-text">Email recipients</span>
+                        <input type="text" th:field="*{actions[__${row.index}__].recipients}"
+                               class="input input-bordered input-sm" placeholder="a@example.com, b@example.com">
+                    </label>
+                    <label class="form-control"><span class="label-text">Slack webhook URL</span>
+                        <input type="password" th:field="*{actions[__${row.index}__].secret}" autocomplete="off"
+                               class="input input-bordered input-sm" placeholder="https://hooks.slack.com/services/…">
+                    </label>
+                </div>
+            </fieldset>
+
+            <div class="flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary" th:text="${editing == null} ? 'Add rule' : 'Save rule'">Add rule</button>
+                <a class="btn btn-ghost" th:href="@{/automation}" th:if="${editing != null}">Cancel</a>
+            </div>
+        </form>
+    </section>
+
+    <section class="surface-card mt-6 p-6" id="automation-runs">
+        <h2 class="section-heading">Run history</h2>
+        <p class="section-copy" th:if="${#lists.isEmpty(runs.items)}">Nothing has run yet.</p>
+        <div class="mt-4 overflow-x-auto" th:unless="${#lists.isEmpty(runs.items)}">
+            <table class="table">
+                <thead>
+                <tr><th>Rule</th><th>Release</th><th>Ran because</th><th>Started by</th><th>Status</th><th>Deliveries</th><th><span class="sr-only">Manage</span></th></tr>
+                </thead>
+                <tbody>
+                <tr th:each="run : ${runs.items}" th:id="|run-${run.id}|">
+                    <td class="font-semibold" th:text="${run.ruleName}">Announce to Slack</td>
+                    <td th:text="${run.releaseVersion}">1.4.0</td>
+                    <td th:text="${run.triggerType.label}">Release published</td>
+                    <td th:text="${run.initiatorName} ?: '—'">Ada</td>
+                    <td>
+                        <span class="badge badge-sm badge-success badge-soft" th:if="${run.status.name() == 'SUCCEEDED'}" th:text="${run.status.label}">Succeeded</span>
+                        <span class="badge badge-sm badge-error badge-soft" th:if="${run.status.name() == 'FAILED'}" th:text="${run.status.label}">Failed</span>
+                        <span class="badge badge-sm badge-warning badge-soft" th:if="${run.status.name() == 'UNKNOWN'}" th:text="${run.status.label}">Outcome unknown</span>
+                        <span class="badge badge-sm badge-ghost" th:if="${run.status.name() == 'PENDING' or run.status.name() == 'RUNNING' or run.status.name() == 'CANCELLED'}"
+                              th:text="${run.status.label}">Pending</span>
+                    </td>
+                    <td>
+                        <ol class="text-sm">
+                            <li th:each="action : ${run.actions}" th:id="|action-run-${action.id}|">
+                                <span th:text="|${action.position + 1}. ${action.actionType.label} — ${action.status.label}|">1. Slack — Succeeded</span>
+                                <code class="text-xs" th:if="${action.errorCode != null}" th:text="${action.errorCode}">slack_rejected</code>
+                                <a class="link" th:if="${action.externalReference != null}" th:href="${action.externalReference}"
+                                   rel="noreferrer noopener" target="_blank">Open</a>
+                            </li>
+                        </ol>
+                    </td>
+                    <td>
+                        <div class="flex flex-wrap justify-end gap-2">
+                            <form method="post" th:action="@{/automation/runs/{id}/retry(id=${run.id})}" th:if="${run.retryable()}">
+                                <label class="label-text mr-2" th:if="${run.needsUnknownConfirmation()}">
+                                    <input type="checkbox" name="confirmUnknown" value="true" class="checkbox checkbox-sm" required>
+                                    This may deliver twice
+                                </label>
+                                <button type="submit" class="btn btn-outline btn-sm">Run again</button>
+                            </form>
+                            <form method="post" th:action="@{/automation/runs/{id}/cancel(id=${run.id})}" th:if="${run.cancellable()}">
+                                <button type="submit" class="btn btn-ghost btn-sm">Cancel</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-4 flex gap-2" th:if="${runs.hasPrevious() or runs.hasNext()}">
+            <a class="btn btn-ghost btn-sm" th:if="${runs.hasPrevious()}" th:href="@{/automation(page=${runs.page - 1})}">Newer</a>
+            <a class="btn btn-ghost btn-sm" th:if="${runs.hasNext()}" th:href="@{/automation(page=${runs.page + 1})}">Older</a>
+        </div>
+    </section>
+</div>
+</body>
+</html>

@@ -1026,6 +1026,59 @@ release, and writes to its `release_changes`, `release_change_reviews`, and
 `releases_project_version_unique` prevents a later release from reusing a
 published version.
 
+## Automation
+
+A Rule is an Organization's standing instruction: when this trigger fires, deliver the
+release note through these Actions, in order. A Rule without a project watches every
+project of the Organization. It starts disabled, because enabling it is what checks the
+deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
+
+- **Rules and Actions.** `automation_rules` holds the name, unique per Organization
+  whatever the casing while the rule is active, the trigger, the optional project, and
+  the `enabled` and `active` flags. `automation_rule_actions` holds one step each: a
+  position from 0, the kind, the audience and language whose note it delivers, a JSONB
+  configuration, and an encrypted secret. The position is unique per rule and deferred to
+  commit, so reordering inside one transaction never collides with itself. A secret is
+  bound to the Organization, rule, action, and kind by `AutomationSecrets`, and is
+  write-only: responses and pages say only that one is configured.
+- **Enabling.** `AutomationRuleService.enable` checks, in order, the project's ownership,
+  every audience's ownership and language, a single GitHub source for a GitHub Release
+  action on a project-scoped rule, whether the deployment can carry the action out at
+  all, and the action's own configuration and decrypted secret.
+- **From publication to runs.** `ReleaseService.publish` publishes `ReleasePublished`
+  inside its own transaction. `ReleasePublishedListener` writes one
+  `automation_publish_jobs` row and does nothing else, so no rule can undo a publication.
+  `AutomationWorker` drains that outbox after the commit and creates one
+  `automation_runs` row per matching enabled rule, with an `automation_action_runs` row
+  per action carrying the note, configuration, and encrypted secret as they were. A
+  publication fires each rule once, and a repeated manual request returns the same run.
+- **Worker.** It ticks every second and drains what it finds. A claim takes the next
+  pending action of a run that is neither finished nor being cancelled, and only once
+  every earlier action has succeeded, with `FOR UPDATE OF action_run SKIP LOCKED`. The
+  provider is called with no transaction open, and the result is written in a short
+  transaction that first checks the claim is still this worker's.
+- **Outcomes.** `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `UNKNOWN`, `CANCELLED`. The
+  first action that fails or ends unknown stops the ones behind it. An action whose
+  worker stopped becomes `UNKNOWN` after five minutes and is never sent again on its own;
+  a person repeating it confirms the duplicate. A retry resets only the first action that
+  did not succeed. Cancelling lets the action already running record its result and stops
+  the rest. Only an error code is stored, never a provider's words.
+- **Actions.** A GitHub Release action borrows the project's own source token, publishes
+  the note as the release of the version's tag, and marks the body with
+  `<!-- releaseflow-action:{id} -->` so a repeat knows its own work from somebody else's.
+  A Slack action posts through an incoming webhook whose origin the deployment allows,
+  checked again before every delivery, up to 39,000 characters. An email action sends
+  through the deployment's SMTP server to between 1 and 100 addresses. No outbound client
+  follows a redirect.
+- **An action with no note still runs.** A release with no ready note for an action's
+  audience and language gives the action no snapshot, and it fails as
+  `release_note_missing` when the worker reaches it. The release publishes either way.
+
+`AutomationRuleApiController` and `AutomationRunApiController` serve
+`/api/automation/**`, and `AutomationPageController` serves `/automation`; both are
+administrator-only by URL rule. The run history pages with `AutomationRunPage`
+(`items`, `page`, `size`, `total`), which is the only paged list in ReleaseFlow.
+
 ## User interface
 
 Pages are server-rendered Thymeleaf templates composed with the Layout Dialect:

@@ -41,7 +41,11 @@ final class DeepLTranslator implements Translator {
 
     DeepLTranslator(String apiKey, String baseUrl, Duration timeout, ObjectMapper objectMapper) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(timeout).build()
+                HttpClient.newBuilder()
+                        .connectTimeout(timeout)
+                        // A redirect proves nothing about who answered, so it is never followed.
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build()
         );
         requestFactory.setReadTimeout(timeout);
         this.restClient = RestClient.builder()

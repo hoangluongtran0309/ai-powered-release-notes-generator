@@ -27,10 +27,16 @@ public abstract class PostgreSqlIntegrationTest {
         // Tests drive the change worker explicitly instead of racing its schedule.
         registry.add("releaseflow.processing.enabled", () -> "false");
         registry.add("releaseflow.translation.worker-enabled", () -> "false");
+        registry.add("releaseflow.automation.worker-enabled", () -> "false");
     }
 
     /** Every Organization owns audiences and categories, which must go before the Organization itself. */
     protected void deleteOrganizationSettings() {
+        supportJdbcTemplate.update("DELETE FROM automation_action_runs");
+        supportJdbcTemplate.update("DELETE FROM automation_runs");
+        supportJdbcTemplate.update("DELETE FROM automation_publish_jobs");
+        supportJdbcTemplate.update("DELETE FROM automation_rule_actions");
+        supportJdbcTemplate.update("DELETE FROM automation_rules");
         supportJdbcTemplate.update("DELETE FROM translation_jobs");
         supportJdbcTemplate.update("DELETE FROM translation_cache");
         supportJdbcTemplate.update("DELETE FROM organization_translation_settings");
