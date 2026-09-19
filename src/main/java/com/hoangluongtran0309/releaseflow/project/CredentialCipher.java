@@ -13,7 +13,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 @Component
-final class CredentialCipher {
+public final class CredentialCipher {
 
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final int KEY_LENGTH_BYTES = 32;
@@ -33,7 +33,7 @@ final class CredentialCipher {
         this.secureRandom = secureRandom;
     }
 
-    EncryptedSecret encrypt(String plaintext, byte[] additionalAuthenticatedData) {
+    public EncryptedSecret encrypt(String plaintext, byte[] additionalAuthenticatedData) {
         if (plaintext == null || plaintext.isBlank()) {
             throw new IllegalArgumentException("Credential plaintext is required.");
         }
@@ -50,7 +50,7 @@ final class CredentialCipher {
         }
     }
 
-    String decrypt(EncryptedSecret encryptedSecret, byte[] additionalAuthenticatedData) {
+    public String decrypt(EncryptedSecret encryptedSecret, byte[] additionalAuthenticatedData) {
         try {
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(
@@ -82,9 +82,9 @@ final class CredentialCipher {
         return decoded;
     }
 
-    record EncryptedSecret(byte[] nonce, byte[] ciphertext) {
+    public record EncryptedSecret(byte[] nonce, byte[] ciphertext) {
 
-        EncryptedSecret {
+        public EncryptedSecret {
             nonce = nonce.clone();
             ciphertext = ciphertext.clone();
         }

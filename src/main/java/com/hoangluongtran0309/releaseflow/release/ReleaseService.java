@@ -16,6 +16,7 @@ import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.translation.TranslationFinished;
 import com.hoangluongtran0309.releaseflow.translation.TranslationState;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -64,6 +65,7 @@ class ReleaseService {
     private final AudienceReleaseNoteRepository noteRepository;
     private final LegacyReleaseNoteRepository legacyNoteRepository;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     ReleaseService(
@@ -81,6 +83,7 @@ class ReleaseService {
             AudienceReleaseNoteRepository noteRepository,
             LegacyReleaseNoteRepository legacyNoteRepository,
             ObjectMapper objectMapper,
+            ApplicationEventPublisher events,
             Clock clock
     ) {
         this.projectService = projectService;
@@ -97,6 +100,7 @@ class ReleaseService {
         this.noteRepository = noteRepository;
         this.legacyNoteRepository = legacyNoteRepository;
         this.objectMapper = objectMapper;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -350,7 +354,9 @@ class ReleaseService {
     /**
      * Freezes an approved release together with its audience notes, recording who
      * published it and when. Every note must be ready first. From then on the database
-     * rejects any change to either.
+     * rejects any change to either. Listeners hear about it inside this transaction and
+     * may record work to do; none of them may do it here, because anything that throws
+     * would undo the publication.
      */
     @Transactional
     ReleaseView publish(ReleaseFlowPrincipal publisher, UUID projectId, UUID releaseId) {
@@ -365,12 +371,21 @@ class ReleaseService {
                 throw new TranslationsNotReadyException();
             }
         }
-        release.publish(publisher.userId(), publisher.displayName(), clock.instant());
+        Instant publishedAt = clock.instant();
+        release.publish(publisher.userId(), publisher.displayName(), publishedAt);
         try {
             releaseRepository.flush();
         } catch (DataIntegrityViolationException exception) {
             throw translate(exception);
         }
+        events.publishEvent(new ReleasePublished(
+                publisher.organizationId(),
+                projectId,
+                releaseId,
+                release.getVersion(),
+                publisher.userId(),
+                publishedAt
+        ));
         return view(release, includedChanges(release));
     }
 

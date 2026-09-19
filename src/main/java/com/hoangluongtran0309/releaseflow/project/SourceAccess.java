@@ -53,6 +53,19 @@ public class SourceAccess {
                 .map(this::credentials);
     }
 
+    /**
+     * The Project's only source of one type. A Project with none, or with more than
+     * one, has no single answer, so automation refuses rather than guessing which
+     * repository a release belongs in.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SourceCredentials> findSole(UUID organizationId, UUID projectId, SourceType sourceType) {
+        List<IntegrationSource> sources = sourceRepository
+                .findAllByOrganizationIdAndProjectIdAndSourceTypeOrderByCreatedAtAscIdAsc(
+                        organizationId, projectId, sourceType);
+        return sources.size() == 1 ? Optional.of(credentials(sources.getFirst())) : Optional.empty();
+    }
+
     /** The polled sources whose next poll is due, oldest cursor first. */
     @Transactional(readOnly = true)
     public List<PolledSource> findDuePolls(SourceType sourceType, Instant now) {

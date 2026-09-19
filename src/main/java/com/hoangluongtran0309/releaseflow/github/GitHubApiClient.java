@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -54,7 +55,11 @@ public class GitHubApiClient {
             Clock clock
     ) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(timeout).build()
+                HttpClient.newBuilder()
+                        .connectTimeout(timeout)
+                        // A redirect proves nothing about who answered, so it is never followed.
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build()
         );
         requestFactory.setReadTimeout(timeout);
         this.restClient = RestClient.builder()
@@ -225,6 +230,98 @@ public class GitHubApiClient {
         } catch (RestClientException | JacksonException exception) {
             log.warn("Could not list the commits of {}/{}#{}.", owner, repository, number);
             return Optional.empty();
+        }
+    }
+
+    /**
+     * The repository's release for a tag, if it has one. A GET changes nothing, so a
+     * GitHub that cannot be reached is a plain failure rather than an unknown outcome.
+     */
+    public GitHubReleaseResult releaseByTag(String owner, String repository, String tag, String token) {
+        requireNoTransaction();
+        try {
+            String body = restClient.get()
+                    .uri("/repos/{owner}/{repository}/releases/tags/{tag}", owner, repository, tag)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .retrieve()
+                    .body(String.class);
+            return release(body);
+        } catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 404) {
+                return new GitHubReleaseResult(GitHubReleaseResult.Status.ABSENT, null);
+            }
+            log.warn("GitHub returned HTTP {} reading the release of {}/{} tagged {}.",
+                    exception.getStatusCode().value(), owner, repository, tag);
+            return new GitHubReleaseResult(
+                    isRejection(exception)
+                            ? GitHubReleaseResult.Status.REJECTED
+                            : GitHubReleaseResult.Status.UNAVAILABLE,
+                    null
+            );
+        } catch (RestClientException exception) {
+            log.warn("Could not reach GitHub to read the release of {}/{} tagged {}.", owner, repository, tag);
+            return new GitHubReleaseResult(GitHubReleaseResult.Status.UNAVAILABLE, null);
+        }
+    }
+
+    /**
+     * Publishes a release for a tag. GitHub answers 422 when one already exists, which
+     * is a race the caller settles by reading the tag again. A connection that fails
+     * after the request was sent is {@code UNAVAILABLE}: the release may exist.
+     */
+    public GitHubReleaseResult createRelease(
+            String owner,
+            String repository,
+            String tag,
+            String releaseBody,
+            String token
+    ) {
+        requireNoTransaction();
+        try {
+            String body = restClient.post()
+                    .uri("/repos/{owner}/{repository}/releases", owner, repository)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .body(Map.of(
+                            "tag_name", tag,
+                            "name", tag,
+                            "body", releaseBody,
+                            "draft", false,
+                            "prerelease", false,
+                            "generate_release_notes", false
+                    ))
+                    .retrieve()
+                    .body(String.class);
+            return release(body);
+        } catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 422) {
+                return new GitHubReleaseResult(GitHubReleaseResult.Status.EXISTS, null);
+            }
+            log.warn("GitHub returned HTTP {} creating the release of {}/{} tagged {}.",
+                    exception.getStatusCode().value(), owner, repository, tag);
+            return new GitHubReleaseResult(
+                    isRejection(exception)
+                            ? GitHubReleaseResult.Status.REJECTED
+                            : GitHubReleaseResult.Status.UNAVAILABLE,
+                    null
+            );
+        } catch (RestClientException exception) {
+            log.warn("Could not reach GitHub to create the release of {}/{} tagged {}.", owner, repository, tag);
+            return new GitHubReleaseResult(GitHubReleaseResult.Status.UNAVAILABLE, null);
+        }
+    }
+
+    private GitHubReleaseResult release(String body) {
+        try {
+            JsonNode release = objectMapper.readTree(body == null ? "" : body);
+            if (release == null || !release.isObject()) {
+                return new GitHubReleaseResult(GitHubReleaseResult.Status.INVALID_RESPONSE, null);
+            }
+            return new GitHubReleaseResult(
+                    GitHubReleaseResult.Status.FOUND,
+                    new GitHubRelease(release.path("html_url").asString(""), release.path("body").asString(""))
+            );
+        } catch (JacksonException exception) {
+            return new GitHubReleaseResult(GitHubReleaseResult.Status.INVALID_RESPONSE, null);
         }
     }
 

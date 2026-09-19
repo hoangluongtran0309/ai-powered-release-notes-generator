@@ -53,7 +53,7 @@ class AudienceIntegrationTest extends PostgreSqlIntegrationTest {
     @BeforeEach
     @AfterEach
     void clearDatabase() {
-        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs, release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();

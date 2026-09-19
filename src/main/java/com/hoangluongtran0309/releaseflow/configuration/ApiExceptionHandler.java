@@ -17,6 +17,13 @@ import com.hoangluongtran0309.releaseflow.audience.AudienceNotFoundException;
 import com.hoangluongtran0309.releaseflow.audience.InvalidAudienceTemplateException;
 import com.hoangluongtran0309.releaseflow.audience.InvalidReleaseLanguagesException;
 import com.hoangluongtran0309.releaseflow.audience.ReleaseLanguageApiController;
+import com.hoangluongtran0309.releaseflow.automation.AutomationActionInvalidException;
+import com.hoangluongtran0309.releaseflow.automation.AutomationConflictException;
+import com.hoangluongtran0309.releaseflow.automation.AutomationRuleApiController;
+import com.hoangluongtran0309.releaseflow.automation.AutomationRuleNotFoundException;
+import com.hoangluongtran0309.releaseflow.automation.AutomationRunApiController;
+import com.hoangluongtran0309.releaseflow.automation.AutomationRunNotFoundException;
+import com.hoangluongtran0309.releaseflow.automation.InvalidAutomationRunPageException;
 import com.hoangluongtran0309.releaseflow.category.CategoryApiController;
 import com.hoangluongtran0309.releaseflow.category.CategoryConflictException;
 import com.hoangluongtran0309.releaseflow.category.CategoryNotFoundException;
@@ -98,7 +105,9 @@ import java.util.Map;
         CategoryApiController.class,
         SensitivePathApiController.class,
         ReleaseLanguageApiController.class,
-        SourceImportApiController.class
+        SourceImportApiController.class,
+        AutomationRuleApiController.class,
+        AutomationRunApiController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
@@ -627,6 +636,56 @@ public class ApiExceptionHandler {
                 "Import not resumable",
                 exception.getMessage(),
                 "source_import_not_resumable"
+        ));
+    }
+
+    @ExceptionHandler(AutomationRuleNotFoundException.class)
+    ResponseEntity<ProblemDetail> automationRuleNotFound(AutomationRuleNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Automation rule not found",
+                exception.getMessage(),
+                "automation_rule_not_found"
+        ));
+    }
+
+    @ExceptionHandler(AutomationRunNotFoundException.class)
+    ResponseEntity<ProblemDetail> automationRunNotFound(AutomationRunNotFoundException exception) {
+        return response(problem(
+                HttpStatus.NOT_FOUND,
+                "Automation run not found",
+                exception.getMessage(),
+                "automation_run_not_found"
+        ));
+    }
+
+    @ExceptionHandler(AutomationConflictException.class)
+    ResponseEntity<ProblemDetail> automationConflict(AutomationConflictException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Automation conflict",
+                exception.getMessage(),
+                exception.code()
+        ));
+    }
+
+    @ExceptionHandler(AutomationActionInvalidException.class)
+    ResponseEntity<ProblemDetail> automationActionInvalid(AutomationActionInvalidException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid automation rule",
+                exception.getMessage(),
+                exception.code()
+        ));
+    }
+
+    @ExceptionHandler(InvalidAutomationRunPageException.class)
+    ResponseEntity<ProblemDetail> invalidAutomationRunPage(InvalidAutomationRunPageException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Invalid run page",
+                exception.getMessage(),
+                "invalid_automation_run_page"
         ));
     }
 

@@ -78,7 +78,7 @@ class MultilingualReleaseNoteIntegrationTest extends PostgreSqlIntegrationTest {
     void clearDatabase() {
         DEEPL.reset();
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs, release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM changes");
         jdbcTemplate.update("DELETE FROM projects");
         jdbcTemplate.update("DELETE FROM organization_translation_settings");
@@ -304,7 +304,7 @@ class MultilingualReleaseNoteIntegrationTest extends PostgreSqlIntegrationTest {
                 "UPDATE organization_translation_settings SET target_languages = '[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\"]'"))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
-        jdbcTemplate.execute("TRUNCATE release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs, release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM changes WHERE id = ?", change);
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM translation_jobs", Long.class)).isZero();
     }

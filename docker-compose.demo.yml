@@ -32,6 +32,14 @@ services:
       RELEASEFLOW_TRANSLATION_PROVIDER: ${RELEASEFLOW_TRANSLATION_PROVIDER:-disabled}
       RELEASEFLOW_DEEPL_API_KEY: ${RELEASEFLOW_DEEPL_API_KEY:-}
       RELEASEFLOW_DEEPL_BASE_URL: ${RELEASEFLOW_DEEPL_BASE_URL:-}
+      # Optional email automation; an email action cannot be enabled without both.
+      RELEASEFLOW_SMTP_HOST: ${RELEASEFLOW_SMTP_HOST:-}
+      RELEASEFLOW_SMTP_PORT: ${RELEASEFLOW_SMTP_PORT:-587}
+      RELEASEFLOW_SMTP_USERNAME: ${RELEASEFLOW_SMTP_USERNAME:-}
+      RELEASEFLOW_SMTP_PASSWORD: ${RELEASEFLOW_SMTP_PASSWORD:-}
+      RELEASEFLOW_SMTP_AUTH: ${RELEASEFLOW_SMTP_AUTH:-false}
+      RELEASEFLOW_SMTP_STARTTLS: ${RELEASEFLOW_SMTP_STARTTLS:-false}
+      RELEASEFLOW_AUTOMATION_EMAIL_FROM: ${RELEASEFLOW_AUTOMATION_EMAIL_FROM:-}
       # Other optional settings, including RELEASEFLOW_SENSITIVE_PATHS, are
       # deliberately not forwarded: Compose turns an unset variable into an empty
       # string, which would replace the default in application.properties (an

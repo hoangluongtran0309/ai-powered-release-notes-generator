@@ -25,7 +25,8 @@ import java.util.regex.Pattern;
 
 /**
  * A local HTTP server standing in for the GitHub REST API: the pull request access
- * check, the paginated pull request file list, and a pull request's commits.
+ * check, the paginated pull request file list, a pull request's commits, and the
+ * releases automation publishes.
  */
 public final class GitHubStub implements AutoCloseable {
 
@@ -33,6 +34,8 @@ public final class GitHubStub implements AutoCloseable {
     private static final Pattern FILES = Pattern.compile("/repos/[^/]+/[^/]+/pulls/\\d+/files");
     private static final Pattern COMMITS = Pattern.compile("/repos/[^/]+/[^/]+/pulls/\\d+/commits");
     private static final Pattern PULLS = Pattern.compile("/repos/[^/]+/[^/]+/pulls");
+    private static final Pattern RELEASE_BY_TAG = Pattern.compile("/repos/[^/]+/[^/]+/releases/tags/(.+)");
+    private static final Pattern RELEASES = Pattern.compile("/repos/[^/]+/[^/]+/releases");
     private static final Pattern PAGE = Pattern.compile("(?:^|&)page=(\\d+)");
     private static final int PAGE_SIZE = 100;
 
@@ -47,6 +50,9 @@ public final class GitHubStub implements AutoCloseable {
     private volatile List<Map<String, Object>> pullRequests = List.of();
     private volatile Failure listFailure;
     private final AtomicInteger listFailuresLeft = new AtomicInteger();
+    private final Map<String, String> releases = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile Failure releaseLookupFailure;
+    private volatile Failure releaseCreationFailure;
     private volatile Duration delay = Duration.ZERO;
 
     private GitHubStub() {
@@ -155,6 +161,28 @@ public final class GitHubStub implements AutoCloseable {
         return requests.stream().filter(request -> request.query().contains("sort=updated")).toList();
     }
 
+    /** A release that already exists for a tag, with the body it carries. */
+    public void publishedRelease(String tag, String body) {
+        releases.put(tag, body);
+    }
+
+    /** The body of the release the stub holds for a tag, or null when it has none. */
+    public String releaseBody(String tag) {
+        return releases.get(tag);
+    }
+
+    public void failReleaseLookup(int status) {
+        releaseLookupFailure = new Failure(status, Map.of());
+    }
+
+    public void failReleaseCreation(int status) {
+        releaseCreationFailure = new Failure(status, Map.of());
+    }
+
+    public List<RecordedRequest> releaseRequests() {
+        return requests.stream().filter(request -> request.path().contains("/releases")).toList();
+    }
+
     public void delay(Duration delay) {
         this.delay = delay;
     }
@@ -172,6 +200,9 @@ public final class GitHubStub implements AutoCloseable {
         files = List.of();
         filesFailure = null;
         accessFailure = null;
+        releases.clear();
+        releaseLookupFailure = null;
+        releaseCreationFailure = null;
         commits = List.of();
         commitsFailure = null;
         pullRequests = List.of();
@@ -201,6 +232,40 @@ public final class GitHubStub implements AutoCloseable {
             Thread.sleep(delay);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            return;
+        }
+
+        Matcher releaseTag = RELEASE_BY_TAG.matcher(path);
+        if (releaseTag.matches()) {
+            Failure failure = releaseLookupFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            String tag = java.net.URLDecoder.decode(releaseTag.group(1), StandardCharsets.UTF_8);
+            String body = releases.get(tag);
+            if (body == null) {
+                send(exchange, 404, Map.of(), "{\"message\":\"Not Found\"}");
+                return;
+            }
+            send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(release(tag, body)));
+            return;
+        }
+        if (RELEASES.matcher(path).matches() && "POST".equals(exchange.getRequestMethod())) {
+            Failure failure = releaseCreationFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            Map<String, Object> request = OBJECT_MAPPER.readValue(
+                    new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8), Map.class);
+            String tag = String.valueOf(request.get("tag_name"));
+            String body = String.valueOf(request.get("body"));
+            if (releases.putIfAbsent(tag, body) != null) {
+                send(exchange, 422, Map.of(), "{\"message\":\"already_exists\"}");
+                return;
+            }
+            send(exchange, 201, Map.of(), OBJECT_MAPPER.writeValueAsString(release(tag, body)));
             return;
         }
 
@@ -245,6 +310,15 @@ public final class GitHubStub implements AutoCloseable {
         } else {
             send(exchange, 404, Map.of(), "{\"message\":\"Not Found\"}");
         }
+    }
+
+    private static Map<String, Object> release(String tag, String body) {
+        return Map.of(
+                "tag_name", tag,
+                "name", tag,
+                "body", body,
+                "html_url", "https://github.com/acme/releaseflow/releases/tag/" + tag
+        );
     }
 
     private List<Map<String, Object>> page(String query) {

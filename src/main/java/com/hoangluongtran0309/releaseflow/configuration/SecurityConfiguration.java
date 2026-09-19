@@ -90,6 +90,10 @@ public class SecurityConfiguration {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/organization/output-language")
                         .hasRole("ADMIN")
+                        // An automation rule delivers release notes outside ReleaseFlow and holds
+                        // the credentials to do it.
+                        .requestMatchers("/automation", "/automation/**", "/api/automation", "/api/automation/**")
+                        .hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
