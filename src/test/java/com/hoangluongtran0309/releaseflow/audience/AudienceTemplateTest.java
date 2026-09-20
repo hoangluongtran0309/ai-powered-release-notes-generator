@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AudienceTemplateTest {
@@ -74,6 +75,34 @@ class AudienceTemplateTest {
         assertThatThrownBy(() -> AudienceTemplate.validate(body))
                 .isInstanceOf(InvalidAudienceTemplateException.class)
                 .extracting("code").isEqualTo(InvalidAudienceTemplateException.NARRATIVES_PATH);
+    }
+
+    @Test
+    void readsATemplateOnceHoweverItIsPunctuated() {
+        // The check for another audience's narrative is a scan, not a search: a template
+        // full of braces and spaces costs time in proportion to its length, and the
+        // length is capped before the scan begins.
+        String braces = "{{{{" + " ".repeat(AudienceTemplate.MAX_LENGTH - 8) + "}}}}";
+
+        assertThatCode(() -> AudienceTemplate.validate(braces)).doesNotThrowAnyException();
+
+        // A narrative named after all that punctuation is still caught, whichever
+        // spelling of the tag it hides behind.
+        assertThatThrownBy(() -> AudienceTemplate.validate("{{ {  narratives.operator }}"))
+                .isInstanceOf(InvalidAudienceTemplateException.class)
+                .extracting("code").isEqualTo(InvalidAudienceTemplateException.NARRATIVES_PATH);
+        assertThatThrownBy(() -> AudienceTemplate.validate("{{  &  narratives  . x }}"))
+                .isInstanceOf(InvalidAudienceTemplateException.class)
+                .extracting("code").isEqualTo(InvalidAudienceTemplateException.NARRATIVES_PATH);
+
+        // The word on its own is not a path into another audience, and neither is one
+        // that no tag opens.
+        assertThatCode(() -> AudienceTemplate.validate("These are the narratives. {{whatChanged}}"))
+                .doesNotThrowAnyException();
+
+        // And the audience's own narrative is not what the rule is about.
+        assertThatCode(() -> AudienceTemplate.validate("- {{whatChanged}}{{#narrative}} — {{.}}{{/narrative}}"))
+                .doesNotThrowAnyException();
     }
 
     @ParameterizedTest

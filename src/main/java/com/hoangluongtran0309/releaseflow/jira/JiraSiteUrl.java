@@ -43,6 +43,17 @@ public class JiraSiteUrl {
         if (!host.equals(CLOUD_DOMAIN) && !host.endsWith("." + CLOUD_DOMAIN)) {
             throw new InvalidJiraSiteException("The Jira site must be an " + CLOUD_DOMAIN + " address.");
         }
-        return uri.toString().replaceAll("/+$", "");
+        return withoutTrailingSlashes(uri.toString());
+    }
+
+    // Walked rather than matched: a regular expression anchored at the end of a string
+    // of slashes is retried from every position, which costs time proportional to the
+    // square of the address's length.
+    private static String withoutTrailingSlashes(String value) {
+        int end = value.length();
+        while (end > 0 && value.charAt(end - 1) == '/') {
+            end--;
+        }
+        return value.substring(0, end);
     }
 }
