@@ -22,7 +22,10 @@ public final class AudienceTemplate {
             .strictSections(true)
             .emptyStringIsFalse(true)
             .withEscaper(Escapers.NONE);
-    private static final Pattern NARRATIVES_PATH = Pattern.compile("\\{\\{\\s*[&{]?\\s*narratives\\s*\\.");
+    // One character class rather than two runs of whitespace around an optional sigil:
+    // with two, a long run of spaces can be split between them in many ways and the
+    // scan costs time proportional to the square of the template's length.
+    private static final Pattern NARRATIVES_PATH = Pattern.compile("\\{\\{[\\s&{]*narratives\\s*\\.");
     private static final int MESSAGE_LIMIT = 300;
 
     private AudienceTemplate() {

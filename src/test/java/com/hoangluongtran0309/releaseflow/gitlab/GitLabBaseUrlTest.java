@@ -17,6 +17,10 @@ class GitLabBaseUrlTest {
         assertThat(defaults.validated("https://gitlab.com")).isEqualTo("https://gitlab.com");
         assertThat(defaults.validated("https://gitlab.com//")).isEqualTo("https://gitlab.com");
         assertThat(defaults.validated("  https://GitLab.com/  ")).isEqualTo("https://GitLab.com");
+        // However many there are, and whatever is in front of them, they come off in one
+        // walk down the address rather than a search that restarts at every slash.
+        assertThat(defaults.validated("https://gitlab.com/gitlab" + "/".repeat(200)))
+                .isEqualTo("https://gitlab.com/gitlab");
     }
 
     @ParameterizedTest

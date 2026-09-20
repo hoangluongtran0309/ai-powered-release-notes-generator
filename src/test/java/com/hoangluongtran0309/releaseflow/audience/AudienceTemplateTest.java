@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AudienceTemplateTest {
@@ -74,6 +75,25 @@ class AudienceTemplateTest {
         assertThatThrownBy(() -> AudienceTemplate.validate(body))
                 .isInstanceOf(InvalidAudienceTemplateException.class)
                 .extracting("code").isEqualTo(InvalidAudienceTemplateException.NARRATIVES_PATH);
+    }
+
+    @Test
+    void readsATemplateOnceHoweverItIsPunctuated() {
+        // The check for another audience's narrative is a scan, not a search: a template
+        // full of braces and spaces costs time in proportion to its length, and the
+        // length is capped before the scan begins.
+        String braces = "{{{{" + " ".repeat(AudienceTemplate.MAX_LENGTH - 8) + "}}}}";
+
+        assertThatCode(() -> AudienceTemplate.validate(braces)).doesNotThrowAnyException();
+
+        // A narrative named after all that punctuation is still caught.
+        assertThatThrownBy(() -> AudienceTemplate.validate("{{ {  narratives.operator }}"))
+                .isInstanceOf(InvalidAudienceTemplateException.class)
+                .extracting("code").isEqualTo(InvalidAudienceTemplateException.NARRATIVES_PATH);
+
+        // And the audience's own narrative is not what the rule is about.
+        assertThatCode(() -> AudienceTemplate.validate("- {{whatChanged}}{{#narrative}} — {{.}}{{/narrative}}"))
+                .doesNotThrowAnyException();
     }
 
     @ParameterizedTest

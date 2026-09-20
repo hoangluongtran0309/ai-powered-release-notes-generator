@@ -64,7 +64,7 @@ public class GitLabBaseUrl {
         if (!allowedOrigins.contains(origin)) {
             throw new GitLabHostNotAllowedException("This deployment does not allow the GitLab instance " + origin + ".");
         }
-        return uri.toString().replaceAll("/+$", "");
+        return withoutTrailingSlashes(uri.toString());
     }
 
     private static String allowedOrigin(String entry) {
@@ -83,5 +83,16 @@ public class GitLabBaseUrl {
 
     private static String origin(String scheme, String host, int port) {
         return scheme + "://" + host.toLowerCase(Locale.ROOT) + (port == -1 ? "" : ":" + port);
+    }
+
+    // Walked rather than matched: a regular expression anchored at the end of a string
+    // of slashes is retried from every position, which costs time proportional to the
+    // square of the address's length.
+    private static String withoutTrailingSlashes(String value) {
+        int end = value.length();
+        while (end > 0 && value.charAt(end - 1) == '/') {
+            end--;
+        }
+        return value.substring(0, end);
     }
 }
