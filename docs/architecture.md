@@ -1137,6 +1137,14 @@ writes, including registration, login, and logout. Thymeleaf inserts hidden
 tokens into forms; REST clients obtain a token from `GET /api/csrf`. Anonymous
 API requests receive a 401 problem response instead of an HTML redirect.
 
+Neither filter chain disables CSRF ([ADR-0023](adr/0023-scoped-csrf-exemptions.md)).
+`/webhooks/**` is stateless and answers strangers, so it names its exemption —
+`ignoringRequestMatchers("/webhooks/**")` — rather than switching protection off: every
+delivery there is proven by an HMAC over the request itself and reads no cookie, and the
+chain permits only the five endpoints that exist (`POST` for the three providers and the
+automation trigger, and the signed `GET` that reads a run back). Anything else beneath
+`/webhooks/` is denied.
+
 REST failures use `application/problem+json` and a stable `code`, while
 UI validation displays the same application errors next to the relevant field.
 Session cookies are HttpOnly and SameSite=Lax; deployments using HTTPS must set

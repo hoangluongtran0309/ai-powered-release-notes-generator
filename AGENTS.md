@@ -41,7 +41,7 @@ an IANA time zone, the approach of a planned release, or another system's signed
 call,
 REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
-The decisions behind all of it are ADR-0001 through ADR-0021. Read `README.md`,
+The decisions behind all of it are ADR-0001 through ADR-0023. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -164,6 +164,9 @@ behavior.
   Organization comes from the rule; a body names only a release. Every refusal
   looks the same. A webhook secret is bound to its rule and path, shown once, and
   rotating it keeps the path and stops the old secret at once.
+- CSRF protection is never disabled. A path that proves itself by signature is
+  listed as a scoped exemption, a path that relies on a cookie never is, and
+  anything else under `/webhooks/**` is denied rather than reachable by default.
 - Publishing a release records that it happened and nothing else. Automation runs
   are created after that transaction commits, from the outbox row the publication
   left, so no rule can hold up or undo a release. A rule with nothing to deliver

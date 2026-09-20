@@ -139,7 +139,11 @@ Set `RELEASEFLOW_SESSION_COOKIE_SECURE=true` whenever the application is served
 over HTTPS. Open `http://localhost:8080/register` to create the first
 organization administrator.
 
-REST clients use the same session and CSRF policy as the server-rendered UI:
+REST clients use the same session and CSRF policy as the server-rendered UI.
+Every write needs a token, and CSRF protection is never turned off: the only
+paths excused are the signed webhook endpoints under `/webhooks/`, which carry
+no cookie and prove themselves with an HMAC over the request instead. See
+[ADR-0023](docs/adr/0023-scoped-csrf-exemptions.md).
 
 1. `GET /api/csrf` and retain the session cookie.
 2. Send the returned token in the returned header when calling

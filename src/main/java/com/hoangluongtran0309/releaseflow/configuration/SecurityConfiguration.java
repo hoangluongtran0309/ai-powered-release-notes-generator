@@ -17,15 +17,33 @@ import java.time.Clock;
 @Configuration
 public class SecurityConfiguration {
 
-    // Provider deliveries carry no session or CSRF token; each provider's own verifier
-    // establishes trust from the source's secret before anything is read.
+    /**
+     * Deliveries from a provider, and calls to an Organization's own automation webhook.
+     * Each one is proven by a signature over the request itself, and none of them reads
+     * a session or a cookie, so a cross-site request has no ambient authority to borrow
+     * and a CSRF token is something the callers could never send.
+     *
+     * <p>The exemption is therefore named rather than switched off: protection stays
+     * configured and only these paths are excused, so a path added here later has to be
+     * excused deliberately. Only the five endpoints that exist are reachable at all;
+     * anything else under {@code /webhooks/} is refused rather than published by accident.
+     */
     @Bean
     @Order(1)
     SecurityFilterChain webhookSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/webhooks/**")
-                .authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
-                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/webhooks/github/*",
+                                "/webhooks/gitlab/*",
+                                "/webhooks/linear/*",
+                                "/webhooks/automation/*"
+                        ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/webhooks/automation/*/runs/*").permitAll()
+                        .anyRequest().denyAll())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/webhooks/**"))
                 .requestCache(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         return http.build();
