@@ -9,6 +9,7 @@ public record RegistrationResult(
         String email,
         String displayName,
         AppUserRole role,
-        String outputLanguage
+        String outputLanguage,
+        String changelogSlug
 ) {
 }

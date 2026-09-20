@@ -23,9 +23,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** A rule another system sets off, proving itself with the secret and nothing else. */
 class AutomationWebhookIntegrationTest extends AutomationIntegrationTestBase {
 
-    @Autowired
-    private AutomationWorker worker;
-
     @Test
     void carriesOutASignedCallOnceHoweverOftenItIsRepeated() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
@@ -236,14 +233,6 @@ class AutomationWebhookIntegrationTest extends AutomationIntegrationTestBase {
                 .header("X-ReleaseFlow-Delivery", delivery.toString())
                 .header("X-ReleaseFlow-Signature-256",
                         sign(webhook.secret(), timestamp, delivery.toString(), "GET", path, ""));
-    }
-
-    // Publishing a release also left an outbox row; working everything dry leaves only
-    // the deliveries this test means to count.
-    private void deliverEverything() {
-        while (worker.processOne()) {
-            // Keep going until nothing is left.
-        }
     }
 
     private Integer runCount() {

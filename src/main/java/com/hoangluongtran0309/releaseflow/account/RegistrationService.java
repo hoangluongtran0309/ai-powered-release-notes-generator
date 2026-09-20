@@ -9,9 +9,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class RegistrationService {
+
+    private static final int MAX_SLUG_ATTEMPTS = 50;
 
     private final OrganizationRepository organizationRepository;
     private final AppUserRepository appUserRepository;
@@ -44,9 +47,11 @@ public class RegistrationService {
                 ? OutputLanguage.DEFAULT
                 : OutputLanguage.parse(request.getOutputLanguage());
         Instant createdAt = clock.instant();
+        String organizationName = request.getOrganizationName().strip();
         Organization organization = new Organization(
                 UUID.randomUUID(),
-                request.getOrganizationName().strip(),
+                organizationName,
+                availableSlug(organizationName),
                 outputLanguage,
                 createdAt
         );
@@ -75,7 +80,28 @@ public class RegistrationService {
                 admin.getEmail(),
                 admin.getDisplayName(),
                 admin.getRole(),
-                outputLanguage.tag()
+                outputLanguage.tag(),
+                organization.getSlug().value()
         );
+    }
+
+    /**
+     * A public address made from the Organization's name. Whoever registers a name first
+     * keeps the plain address and the next one is numbered, because two Organizations
+     * cannot answer the same URL. An administrator can change it afterwards.
+     */
+    private OrganizationSlug availableSlug(String organizationName) {
+        OrganizationSlug candidate = OrganizationSlug.fromName(organizationName);
+        if (!organizationRepository.existsBySlug(candidate.value())) {
+            return candidate;
+        }
+        for (int attempt = 2; attempt <= MAX_SLUG_ATTEMPTS; attempt++) {
+            OrganizationSlug numbered = candidate.numbered(attempt);
+            if (!organizationRepository.existsBySlug(numbered.value())) {
+                return numbered;
+            }
+        }
+        // A popular name, or a race: take one nobody is likely to hold and move on.
+        return candidate.numbered(ThreadLocalRandom.current().nextInt(100_000, 1_000_000));
     }
 }

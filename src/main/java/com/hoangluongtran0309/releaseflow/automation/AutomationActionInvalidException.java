@@ -45,6 +45,7 @@ public class AutomationActionInvalidException extends RuntimeException {
                     case GITHUB_RELEASE -> "A GitHub Release action uses the project's own source token.";
                     case EMAIL -> "An email action uses the deployment's SMTP credentials.";
                     case SLACK -> "A Slack action takes its webhook URL as its secret.";
+                    case PUBLIC_CHANGELOG -> "A public changelog action publishes inside ReleaseFlow itself.";
                 }
         );
     }

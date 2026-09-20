@@ -407,7 +407,7 @@ class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest 
     private UUID insertOrganization(String name) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
-                "INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, ?, ?, 'en')",
+                "INSERT INTO organizations (id, name, slug, created_at, output_language) VALUES (?, ?, 'org-' || SUBSTRING(gen_random_uuid()::text, 1, 8), ?, 'en')",
                 id,
                 name,
                 Timestamp.from(Instant.now())

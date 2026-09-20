@@ -426,6 +426,30 @@ version has been released.
   collapsed missed firings, concurrent trigger workers, a rescheduled release,
   signatures, clock skew, replayed deliveries, secret rotation, and tenant
   isolation.
+- A public changelog (ADR-0022): a `PUBLIC_CHANGELOG` automation action copies one
+  audience's note, in one language, into an immutable public entry, and
+  `/changelog/{slug}`, `/changelog/{slug}/releases/{entry}`, and
+  `/changelog/{slug}/rss.xml` serve it to anybody, with no session and no cookie.
+- An Organization address of one DNS label, unique across the deployment, made from
+  its name at registration and moved by `PUT /api/organization/slug` or the Public
+  changelog card on the Projects page, which says that links already shared stop
+  working.
+- Publishing the same note again succeeds on the entry that already exists, while
+  different words for the same release, audience, and language fail as
+  `public_changelog_conflict` instead of overwriting published material; the entry is
+  unique per release, audience, and language and per action run, and the database
+  refuses every update and delete.
+- Notes on public pages and in RSS descriptions rendered by the existing
+  `MarkdownHtml`, so raw HTML is escaped, link targets sanitized, and images become
+  plain links; the feed is RSS 2.0 with the 50 newest entries, and an entry carries an
+  ETag and answers `304`.
+- `RELEASEFLOW_PUBLIC_BASE_URL` for every absolute public link, and
+  `RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN` to additionally serve each Organization at
+  `{slug}.{domain}` for GET and one label only.
+- Flyway migration `V24` for `organizations.slug` with a backfill from each name,
+  `public_changelog_entries` with its immutability trigger, and the widened action-type
+  constraints, with Testcontainers coverage of anonymous reading, cache headers and the
+  ETag, RSS, host routing, XSS, immutability, conflicts, and tenant isolation.
 
 ### Changed
 

@@ -2,7 +2,12 @@ package com.hoangluongtran0309.releaseflow.project;
 
 import com.hoangluongtran0309.releaseflow.account.InvalidOutputLanguageException;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageRequest;
+import com.hoangluongtran0309.releaseflow.account.InvalidOrganizationSlugException;
+import com.hoangluongtran0309.releaseflow.account.OrganizationSlugRequest;
+import com.hoangluongtran0309.releaseflow.account.OrganizationSlugService;
+import com.hoangluongtran0309.releaseflow.account.OrganizationSlugTakenException;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
+import com.hoangluongtran0309.releaseflow.changelog.PublicChangelogUrls;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabHostNotAllowedException;
 import com.hoangluongtran0309.releaseflow.gitlab.InvalidGitLabBaseUrlException;
@@ -28,15 +33,21 @@ public class ProjectPageController {
     private final ProjectService projectService;
     private final IntegrationSourceService sourceService;
     private final OutputLanguageService outputLanguageService;
+    private final OrganizationSlugService slugService;
+    private final PublicChangelogUrls changelogUrls;
 
     ProjectPageController(
             ProjectService projectService,
             IntegrationSourceService sourceService,
-            OutputLanguageService outputLanguageService
+            OutputLanguageService outputLanguageService,
+            OrganizationSlugService slugService,
+            PublicChangelogUrls changelogUrls
     ) {
         this.projectService = projectService;
         this.sourceService = sourceService;
         this.outputLanguageService = outputLanguageService;
+        this.slugService = slugService;
+        this.changelogUrls = changelogUrls;
     }
 
     @GetMapping("/projects")
@@ -168,6 +179,34 @@ public class ProjectPageController {
         return "projects";
     }
 
+    /**
+     * The address the Organization's public changelog answers on. Changing it moves the
+     * changelog, so the page says as much and only administrators reach this path.
+     */
+    @PostMapping("/organization/slug")
+    String changeSlug(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @Valid @ModelAttribute("organizationSlugRequest") OrganizationSlugRequest request,
+            BindingResult bindingResult,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (!bindingResult.hasErrors()) {
+            try {
+                slugService.change(principal.organizationId(), request.getSlug());
+                return "redirect:/projects?changelogSaved";
+            } catch (InvalidOrganizationSlugException exception) {
+                response.setStatus(HttpStatus.BAD_REQUEST.value());
+                bindingResult.rejectValue("slug", "slug.invalid", exception.getMessage());
+            } catch (OrganizationSlugTakenException exception) {
+                response.setStatus(HttpStatus.CONFLICT.value());
+                bindingResult.rejectValue("slug", "slug.taken", exception.getMessage());
+            }
+        }
+        addPageModel(principal, model);
+        return "projects";
+    }
+
     private void addPageModel(ReleaseFlowPrincipal principal, Model model) {
         if (!model.containsAttribute("projectRequest")) {
             model.addAttribute("projectRequest", new ProjectRequest());
@@ -183,6 +222,14 @@ public class ProjectPageController {
             OutputLanguageRequest languageRequest = new OutputLanguageRequest();
             languageRequest.setOutputLanguage(outputLanguageService.outputLanguage(principal.organizationId()).tag());
             model.addAttribute("outputLanguageRequest", languageRequest);
+        }
+        String slug = slugService.slug(principal.organizationId()).value();
+        model.addAttribute("changelogSlug", slug);
+        model.addAttribute("changelogUrl", changelogUrls.rootUrl(slug));
+        if (!model.containsAttribute("organizationSlugRequest")) {
+            OrganizationSlugRequest slugRequest = new OrganizationSlugRequest();
+            slugRequest.setSlug(slug);
+            model.addAttribute("organizationSlugRequest", slugRequest);
         }
         model.addAttribute("projects", projectService.list(principal.organizationId()));
     }

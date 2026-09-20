@@ -1098,6 +1098,7 @@ Three kinds of action exist:
 | GitHub Release | The project's own GitHub source and its access token | Publishes the note as the release of the version's tag, marking the body so a repeat knows its own work |
 | Slack | An incoming webhook URL, which is the action's secret | Posts the note to the channel, up to 39,000 characters |
 | Email | `RELEASEFLOW_AUTOMATION_EMAIL_FROM` and an SMTP server | Sends the note to between 1 and 100 addresses |
+| Public changelog | Nothing | Publishes the note on your own changelog page and RSS feed |
 
 A Slack webhook URL must name an origin the deployment allows —
 `hooks.slack.com` or `hooks.slack-gov.com` unless `RELEASEFLOW_SLACK_ALLOWED_HOSTS`
@@ -1175,6 +1176,9 @@ delivery. `DELETE /api/automation/rules/{id}` archives a rule, which cancels the
 runs it had not finished and frees its name. `GET /api/automation/runs` answers
 `{"items", "page", "size", "total"}`, with `size` between 1 and 100.
 
+A public changelog action's refusal is `public_changelog_conflict`, recorded on the
+action rather than returned to anybody; see [Public changelog](#public-changelog).
+
 Refusals carry a stable code: `automation_rule_name_taken`,
 `automation_github_source_missing`, `automation_email_not_configured`,
 `automation_run_not_retryable`, `automation_unknown_needs_confirmation`,
@@ -1191,6 +1195,41 @@ webhook paths are the exception: they take no session, and refuse with
 `webhook_payload_malformed` (`400`). See
 [ADR-0020](docs/adr/0020-automation-rules-and-runs.md) and
 [ADR-0021](docs/adr/0021-scheduled-and-signed-automation-triggers.md).
+
+## Public changelog
+
+A rule with a **Public changelog** action publishes the note on pages ReleaseFlow
+serves itself, for people who have no account:
+
+| Address | What it is |
+| --- | --- |
+| `/changelog/{slug}` | The Organization's release notes, newest first, cached for five minutes |
+| `/changelog/{slug}/releases/{entry}` | One note, permanent, cached for a day with an ETag |
+| `/changelog/{slug}/rss.xml` | RSS 2.0 with the 50 newest notes |
+
+The `{slug}` is your Organization's address: one DNS label, made from its name when you
+register. The **Public changelog** card on the Projects page shows it and lets an
+administrator change it — which moves the changelog, so links already shared stop
+working. `GET`/`PUT /api/organization/slug` does the same thing, and answers
+`400 organization_slug_invalid` or `409 organization_slug_taken`.
+
+An entry is a snapshot: the Organization's name, the project, the version, the audience,
+and the note as they read when it was published. Nothing edits or removes it afterwards,
+not even direct SQL. Publishing the same note again is free — the action finds its own
+entry and succeeds — while a rule that would publish *different* words for a release,
+audience, and language that are already public fails as
+`public_changelog_conflict` rather than rewriting what somebody may have read. A
+public changelog action takes no secret and no configuration, and cannot be used by a
+rule that fires on a schedule.
+
+Set `RELEASEFLOW_PUBLIC_BASE_URL` to the address this deployment is reached at (default
+`http://localhost:8080`); every public link — the canonical URL, the RSS items, the
+address a run reports — is built from it and never from a request's `Host` header.
+
+Setting `RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN` additionally serves each Organization
+at `https://{slug}.{that domain}/`, with `/releases/{entry}` and `/rss.xml` beneath it.
+Only GET is routed that way, only for exactly one label beneath the domain, and wildcard
+DNS and TLS are yours to provision. Leave it empty and changelogs answer by path only.
 
 ## Verify
 

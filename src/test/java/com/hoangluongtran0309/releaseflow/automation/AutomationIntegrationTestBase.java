@@ -47,7 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Organization with a project, a published release, and its notes. The stubs are shared
  * so the tests share one application context.
  */
-abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
+public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
 
     protected static final GitHubStub GITHUB = GitHubStub.start();
     protected static final SlackStub SLACK = SlackStub.start();
@@ -66,6 +66,9 @@ abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
 
     @Autowired
     protected PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private AutomationWorker automationWorker;
 
     @DynamicPropertySource
     static void automationProperties(DynamicPropertyRegistry registry) {
@@ -94,7 +97,7 @@ abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
         SLACK.reset();
         SMTP.reset();
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
+        jdbcTemplate.execute("TRUNCATE public_changelog_entries, automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
                 + " release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM automation_rule_actions");
         jdbcTemplate.update("DELETE FROM automation_rules");
@@ -106,6 +109,13 @@ abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM app_users");
         deleteOrganizationSettings();
         jdbcTemplate.update("DELETE FROM organizations");
+    }
+
+    /** Works everything the worker has waiting, deliveries and outbox rows alike. */
+    protected void deliverEverything() {
+        while (automationWorker.processOne()) {
+            // Keep going until nothing is left.
+        }
     }
 
     protected String slackWebhook() {
