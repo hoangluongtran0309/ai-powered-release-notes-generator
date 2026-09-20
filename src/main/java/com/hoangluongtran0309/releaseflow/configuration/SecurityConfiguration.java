@@ -49,8 +49,28 @@ public class SecurityConfiguration {
         return http.build();
     }
 
+    /**
+     * A public changelog is read by people who have no account and must never be given a
+     * session for looking: no request cache, no cookie, nothing but what was published.
+     *
+     * <p>Nothing here is excused from CSRF, and nothing needs to be: only GET is allowed,
+     * and a token is required of exactly the methods this chain already refuses.
+     */
     @Bean
     @Order(2)
+    SecurityFilterChain publicChangelogSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/changelog/**")
+                .authorizeHttpRequests(authorize -> authorize.requestMatchers(HttpMethod.GET, "/changelog/**")
+                        .permitAll()
+                        .anyRequest().denyAll())
+                .requestCache(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        return http.build();
+    }
+
+    @Bean
+    @Order(3)
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             ApiAuthenticationEntryPoint authenticationEntryPoint,
@@ -107,6 +127,11 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.PUT, "/api/organization/output-language")
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/organization/output-language")
+                        .hasRole("ADMIN")
+                        // Moving the public changelog breaks every link already shared.
+                        .requestMatchers(HttpMethod.PUT, "/api/organization/slug")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/organization/slug")
                         .hasRole("ADMIN")
                         // An automation rule delivers release notes outside ReleaseFlow and holds
                         // the credentials to do it.

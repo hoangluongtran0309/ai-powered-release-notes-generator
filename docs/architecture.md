@@ -1099,7 +1099,9 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   a person repeating it confirms the duplicate. A retry resets only the first action that
   did not succeed. Cancelling lets the action already running record its result and stops
   the rest. Only an error code is stored, never a provider's words.
-- **Actions.** A GitHub Release action borrows the project's own source token, publishes
+- **Actions.** A public changelog action publishes the note on ReleaseFlow's own pages
+  and is the only one that reaches no provider; it is described under Public changelog
+  below. A GitHub Release action borrows the project's own source token, publishes
   the note as the release of the version's tag, and marks the body with
   `<!-- releaseflow-action:{id} -->` so a repeat knows its own work from somebody else's.
   A Slack action posts through an incoming webhook whose origin the deployment allows,
@@ -1116,6 +1118,46 @@ administrator-only by URL rule. `POST /api/automation/rules/cron-preview` answer
 schedule would next run, and the page has the same button. The webhook paths are the
 exception: they live under `/webhooks/**`, where the signature is the identity. The run history pages with `AutomationRunPage`
 (`items`, `page`, `size`, `total`), which is the only paged list in ReleaseFlow.
+
+## Public changelog
+
+An Organization's changelog is the one destination ReleaseFlow serves itself, for people
+who have no account. See [ADR-0022](adr/0022-public-changelog.md).
+
+- **A slug names an Organization in a URL.** One DNS label, unique across the
+  deployment, checked by `OrganizationSlug.parse` and by a CHECK constraint. `V24` gives
+  every Organization one made from its name, numbering collisions by age; registration
+  derives one the same way. `PUT /api/organization/slug` and the card on `/projects` move
+  it, which is an administrator's decision because links already shared stop working.
+- **An entry is written only by a `PUBLIC_CHANGELOG` action**, for one audience and
+  language, and copies the Organization's name and slug, the project's name, the version,
+  the audience, and the note. Renaming any of those later never rewrites it, and a
+  trigger refuses every update and delete, exactly as `release_notes` does.
+- **A repeat is free; different words are refused.** An entry is unique per Organization,
+  release, audience, and language, and per action run, so retrying an action finds its own
+  entry and succeeds. A second rule offering different content for the same release,
+  audience, and language fails as `public_changelog_conflict`. This is the only action a
+  repeat is safe for, because the destination is ReleaseFlow's own database — which is
+  also why it is the only executor that opens a transaction rather than calling out.
+- **Reading is anonymous, and nothing there is excused from CSRF.** The chain permits
+  GET and denies every other method, which is exactly what a token would have refused.
+- **Reading is anonymous and cached.** `PublicChangelogController` serves
+  `GET /changelog/{slug}` (`public, max-age=300`),
+  `GET /changelog/{slug}/releases/{entryId}` (`public, max-age=86400, immutable`, with the
+  entry's identifier as its ETag and `304` for a reader who has it), and
+  `GET /changelog/{slug}/rss.xml` (RSS 2.0, at most 50 entries). `/changelog/**` has its
+  own security chain: GET only, no request cache, and no session, so looking never earns a
+  cookie. An address nobody answers is `404`, and an Organization with nothing published
+  looks the same as one that does not exist.
+- **The note is rendered by `MarkdownHtml`**, the same renderer the application's own
+  pages use: raw HTML escaped, link targets sanitized, images turned into plain links. The
+  RSS `description` carries that HTML, escaped into the document by the JDK's XML writer.
+- **Links come from configuration.** `releaseflow.public.base-url` is where this
+  deployment is reached; `releaseflow.public.changelog-base-domain`, when set, serves each
+  Organization at `{slug}.{domain}` through `PublicChangelogHostRoutingFilter`, which
+  rewrites exactly three paths for exactly one label, for GET only, before Spring Security
+  sees the request. A `Host` header chooses which slug to look up and decides nothing
+  else; no link ReleaseFlow writes ever comes from a request.
 
 ## User interface
 

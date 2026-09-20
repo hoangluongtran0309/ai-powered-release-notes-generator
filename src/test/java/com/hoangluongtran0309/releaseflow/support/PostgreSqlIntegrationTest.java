@@ -33,6 +33,8 @@ public abstract class PostgreSqlIntegrationTest {
 
     /** Every Organization owns audiences and categories, which must go before the Organization itself. */
     protected void deleteOrganizationSettings() {
+        // A public entry points at the Action run that published it, and outlives it.
+        supportJdbcTemplate.update("DELETE FROM public_changelog_entries");
         supportJdbcTemplate.update("DELETE FROM automation_action_runs");
         supportJdbcTemplate.update("DELETE FROM automation_runs");
         supportJdbcTemplate.update("DELETE FROM automation_publish_jobs");

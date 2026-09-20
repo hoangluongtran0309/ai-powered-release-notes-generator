@@ -21,6 +21,7 @@
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
     <div class="alert alert-success mb-6" role="status" th:if="${param.tokenSaved}"><span>Access token saved. New changes will be checked for sensitive files.</span></div>
     <div class="alert alert-success mb-6" role="status" th:if="${param.languageSaved}"><span>Output language saved. New changes will be summarized in it.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.changelogSaved}"><span>Changelog address saved. Links shared under the old address no longer work.</span></div>
 
     <ol class="grid gap-3 md:grid-cols-3" aria-label="Setup progress">
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasProjects} ? 'border-emerald-200' : 'border-indigo-300'">
@@ -85,6 +86,29 @@
                     <span class="field-error" th:if="${#fields.hasErrors('outputLanguage')}" th:errors="*{outputLanguage}"></span>
                 </label>
                 <button type="submit" class="btn btn-outline">Save language</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="surface-card mt-6 p-6" id="public-changelog">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <h2 class="section-heading">Public changelog</h2>
+                <p class="section-copy">
+                    Release notes a rule publishes are readable by anybody at
+                    <a class="link" th:href="${changelogUrl}" th:text="${changelogUrl}">http://localhost:8080/changelog/acme</a>.
+                    Changing the address moves the changelog: links shared under the old one stop working.
+                </p>
+            </div>
+            <form class="flex flex-col gap-2 sm:flex-row sm:items-start" th:if="${viewer.admin}"
+                  th:action="@{/organization/slug}" th:object="${organizationSlugRequest}" method="post">
+                <label class="form-control">
+                    <span class="sr-only">Changelog address</span>
+                    <input type="text" th:field="*{slug}" maxlength="63" autocomplete="off" spellcheck="false" required
+                           class="input input-bordered w-full sm:w-56" th:errorclass="input-error">
+                    <span class="field-error" th:if="${#fields.hasErrors('slug')}" th:errors="*{slug}"></span>
+                </label>
+                <button type="submit" class="btn btn-outline">Save address</button>
             </form>
         </div>
     </section>

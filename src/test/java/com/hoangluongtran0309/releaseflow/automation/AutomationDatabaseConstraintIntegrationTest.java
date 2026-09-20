@@ -22,7 +22,7 @@ class AutomationDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationT
     @BeforeEach
     @AfterEach
     void clearDatabase() {
-        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
+        jdbcTemplate.execute("TRUNCATE public_changelog_entries, automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
                 + " release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM automation_rule_actions");
         jdbcTemplate.update("DELETE FROM automation_rules");
@@ -414,7 +414,7 @@ class AutomationDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationT
     private UUID insertOrganization() {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
-                "INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, 'Organization', now(), 'en')",
+                "INSERT INTO organizations (id, name, slug, created_at, output_language) VALUES (?, 'Organization', 'org-' || SUBSTRING(gen_random_uuid()::text, 1, 8), now(), 'en')",
                 id
         );
         return id;

@@ -18,6 +18,10 @@ public class Organization {
     @Column(nullable = false, length = 120)
     private String name;
 
+    /** How this Organization is named in a public URL. */
+    @Column(nullable = false, length = OrganizationSlug.MAX_LENGTH)
+    private String slug;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -27,15 +31,21 @@ public class Organization {
     protected Organization() {
     }
 
-    Organization(UUID id, String name, OutputLanguage outputLanguage, Instant createdAt) {
+    Organization(UUID id, String name, OrganizationSlug slug, OutputLanguage outputLanguage, Instant createdAt) {
         this.id = id;
         this.name = name;
+        this.slug = slug.value();
         this.outputLanguage = outputLanguage.tag();
         this.createdAt = createdAt;
     }
 
     void changeOutputLanguage(OutputLanguage outputLanguage) {
         this.outputLanguage = outputLanguage.tag();
+    }
+
+    /** Moves the public changelog to another address; the old one stops answering. */
+    void changeSlug(OrganizationSlug slug) {
+        this.slug = slug.value();
     }
 
     public UUID getId() {
@@ -52,5 +62,9 @@ public class Organization {
 
     public OutputLanguage getOutputLanguage() {
         return new OutputLanguage(outputLanguage);
+    }
+
+    public OrganizationSlug getSlug() {
+        return new OrganizationSlug(slug);
     }
 }

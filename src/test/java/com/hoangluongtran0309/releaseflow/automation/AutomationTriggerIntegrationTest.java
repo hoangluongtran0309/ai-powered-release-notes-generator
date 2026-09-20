@@ -29,9 +29,6 @@ class AutomationTriggerIntegrationTest extends AutomationIntegrationTestBase {
     @Autowired
     private AutomationTriggerWorker triggerWorker;
 
-    @Autowired
-    private AutomationWorker worker;
-
     @Test
     void firesAScheduleThatHasComeRoundAndBooksTheNextOne() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
@@ -152,14 +149,6 @@ class AutomationTriggerIntegrationTest extends AutomationIntegrationTestBase {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("automation_cron_release_required"));
         assertThat(runCount()).isZero();
-    }
-
-    // Publishing a release also left an outbox row; working everything dry leaves only
-    // the deliveries this test means to count.
-    private void deliverEverything() {
-        while (worker.processOne()) {
-            // Keep going until nothing is left.
-        }
     }
 
     private Callable<Void> tick(CountDownLatch start) {

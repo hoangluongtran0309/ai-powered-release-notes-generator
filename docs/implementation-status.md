@@ -244,9 +244,30 @@
     written and once more when it is rotated, which keeps the path and stops the
     old secret at once.
 
+- A public changelog (ADR-0022), with Flyway `V24`:
+  - an Organization address of one DNS label, unique across the deployment, made from
+    its name when it registers and moved only by an administrator, who is told that
+    links already shared stop working;
+  - a `PUBLIC_CHANGELOG` automation action that copies one audience's note, in one
+    language, into an immutable public entry with the Organization, project, version,
+    and audience as they read then;
+  - a repeat that is free and a rewrite that is refused: one entry per release,
+    audience, and language, and per action run, so retrying an action succeeds while
+    different words for the same publication fail as `public_changelog_conflict`;
+  - the only action that reaches no provider, and so the only one that opens a
+    transaction of its own; it is refused on scheduled triggers like every action that
+    is not Slack or email;
+  - anonymous pages at `/changelog/{slug}`, a permanent entry with an ETag and a day's
+    caching, and an RSS 2.0 feed of the 50 newest entries, all on their own security
+    chain that creates no session and permits nothing but GET;
+  - notes rendered by the same `MarkdownHtml` the application's own pages use, so raw
+    HTML is escaped, link targets sanitized, and images become plain links;
+  - absolute links built from `RELEASEFLOW_PUBLIC_BASE_URL`, never from a request, and
+    optional `{slug}.{domain}` routing for deployments that provision wildcard DNS.
+
 ## In progress
 
-- Nothing. The trigger slice is complete and awaiting review.
+- Nothing. The public changelog slice is complete and awaiting review.
 
 ## Planned
 
@@ -267,8 +288,8 @@ deliberately deferred list below, one reviewed slice at a time.
   secret or token rotation reminders.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
-- Automation actions other than GitHub Releases, Slack, and email, distribution
-  integrations, and a public changelog.
+- Automation actions other than GitHub Releases, Slack, email, and the public
+  changelog, and distribution integrations.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
   tests, production observability (Actuator, metrics, Prometheus, Grafana),
   image publication, release automation, and an open-core/enterprise module

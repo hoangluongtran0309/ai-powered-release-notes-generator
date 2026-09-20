@@ -218,6 +218,8 @@ class AutomationWorker {
                     run.getReleaseId(),
                     run.getReleaseVersionSnapshot(),
                     action.getActionType(),
+                    action.getAudienceNameSnapshot(),
+                    action.getLanguageSnapshot(),
                     action.getNoteContentSnapshot(),
                     action.getConfigurationSnapshot(),
                     secrets.decrypt(
@@ -247,6 +249,8 @@ class AutomationWorker {
                     claim.projectId(),
                     claim.releaseId(),
                     claim.releaseVersion(),
+                    claim.audienceName(),
+                    claim.language(),
                     claim.noteContent(),
                     claim.configuration(),
                     claim.rawSecret()
@@ -297,6 +301,8 @@ class AutomationWorker {
             UUID releaseId,
             String releaseVersion,
             ActionType actionType,
+            String audienceName,
+            String language,
             String noteContent,
             Map<String, String> configuration,
             String rawSecret,

@@ -181,7 +181,7 @@ class CategoryDatabaseIntegrationTest extends PostgreSqlIntegrationTest {
 
     private UUID insertOrganization() {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, 'Org', now(), 'en')", id);
+        jdbcTemplate.update("INSERT INTO organizations (id, name, slug, created_at, output_language) VALUES (?, 'Org', 'org-' || SUBSTRING(gen_random_uuid()::text, 1, 8), now(), 'en')", id);
         return id;
     }
 

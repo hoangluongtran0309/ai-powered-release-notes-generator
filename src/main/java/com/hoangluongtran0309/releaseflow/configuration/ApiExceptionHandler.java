@@ -7,6 +7,9 @@ import com.hoangluongtran0309.releaseflow.account.InvitationAlreadyPendingExcept
 import com.hoangluongtran0309.releaseflow.account.InvitationEmailUnavailableException;
 import com.hoangluongtran0309.releaseflow.account.InvitationNotFoundException;
 import com.hoangluongtran0309.releaseflow.account.OrganizationMemberApiController;
+import com.hoangluongtran0309.releaseflow.account.InvalidOrganizationSlugException;
+import com.hoangluongtran0309.releaseflow.account.OrganizationSlugApiController;
+import com.hoangluongtran0309.releaseflow.account.OrganizationSlugTakenException;
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageApiController;
 import com.hoangluongtran0309.releaseflow.account.PublicInvitationApiController;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
@@ -95,6 +98,7 @@ import java.util.Map;
         SessionApiController.class,
         OrganizationMemberApiController.class,
         OutputLanguageApiController.class,
+        OrganizationSlugApiController.class,
         PublicInvitationApiController.class,
         ProjectApiController.class,
         GitHubWebhookController.class,
@@ -438,6 +442,26 @@ public class ApiExceptionHandler {
                 "Invalid change filter",
                 exception.getMessage(),
                 "invalid_change_filter"
+        ));
+    }
+
+    @ExceptionHandler(InvalidOrganizationSlugException.class)
+    ResponseEntity<ProblemDetail> invalidOrganizationSlug(InvalidOrganizationSlugException exception) {
+        return response(problem(
+                HttpStatus.BAD_REQUEST,
+                "Changelog address invalid",
+                exception.getMessage(),
+                "organization_slug_invalid"
+        ));
+    }
+
+    @ExceptionHandler(OrganizationSlugTakenException.class)
+    ResponseEntity<ProblemDetail> organizationSlugTaken(OrganizationSlugTakenException exception) {
+        return response(problem(
+                HttpStatus.CONFLICT,
+                "Changelog address taken",
+                exception.getMessage(),
+                "organization_slug_taken"
         ));
     }
 

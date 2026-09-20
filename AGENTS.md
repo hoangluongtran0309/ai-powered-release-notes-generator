@@ -9,9 +9,9 @@ classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
-source, GitLab source, Linear source, Jira source, automation, and automation
-trigger slices: one
-Spring Boot application, PostgreSQL/Flyway V1-V23,
+source, GitLab source, Linear source, Jira source, automation, automation
+trigger, and public changelog slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V24,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -38,7 +38,7 @@ administrator-written automation rules that deliver a published note to a GitHub
 Release, a Slack channel, or a list of addresses through a durable run its worker
 walks one action at a time, fired by a publication, a person, a cron schedule in
 an IANA time zone, the approach of a planned release, or another system's signed
-call,
+call, a public changelog of immutable entries with an RSS feed that anybody may read,
 REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
 The decisions behind all of it are ADR-0001 through ADR-0023. Read `README.md`,
@@ -167,6 +167,13 @@ behavior.
 - CSRF protection is never disabled. A path that proves itself by signature is
   listed as a scoped exemption, a path that relies on a cookie never is, and
   anything else under `/webhooks/**` is denied rather than reachable by default.
+- An Organization's public address is one DNS label, unique across the deployment and
+  checked on the server. A public changelog entry is an immutable snapshot made only by
+  an Action from a published note; the same note published again is that entry, and
+  different words for a publication that exists are refused, never written over. Public
+  reading is anonymous, creates no session, and takes its Organization from the slug in
+  the path; a `Host` only chooses which slug to look up. Every absolute public link
+  comes from deployment configuration, never from a request.
 - Publishing a release records that it happened and nothing else. Automation runs
   are created after that transaction commits, from the outbox row the publication
   left, so no rule can hold up or undo a release. A rule with nothing to deliver

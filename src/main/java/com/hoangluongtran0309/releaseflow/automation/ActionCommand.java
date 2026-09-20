@@ -14,6 +14,8 @@ record ActionCommand(
         UUID projectId,
         UUID releaseId,
         String releaseVersion,
+        String audienceName,
+        String language,
         String noteContent,
         Map<String, String> configuration,
         String rawSecret

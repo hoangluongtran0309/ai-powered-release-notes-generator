@@ -32,7 +32,7 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
         clearDatabase();
         organization = UUID.randomUUID();
         project = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, 'Acme', now(), 'en')", organization);
+        jdbcTemplate.update("INSERT INTO organizations (id, name, slug, created_at, output_language) VALUES (?, 'Acme', 'org-' || SUBSTRING(gen_random_uuid()::text, 1, 8), now(), 'en')", organization);
         jdbcTemplate.update(
                 "INSERT INTO projects (id, organization_id, name, created_at) VALUES (?, ?, 'Project', now())",
                 project,
@@ -101,7 +101,7 @@ class ChangeProcessingDatabaseConstraintIntegrationTest extends PostgreSqlIntegr
     void processingJobsStayInsideTheirChangesTenantAndState() {
         UUID change = insertChange(1, "PROCESSING", "UNKNOWN", true, null, null, "[]");
         UUID otherOrganization = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO organizations (id, name, created_at, output_language) VALUES (?, 'Other', now(), 'en')", otherOrganization);
+        jdbcTemplate.update("INSERT INTO organizations (id, name, slug, created_at, output_language) VALUES (?, 'Other', 'org-' || SUBSTRING(gen_random_uuid()::text, 1, 8), now(), 'en')", otherOrganization);
 
         assertThatThrownBy(() -> insertJob(change, otherOrganization, "PENDING", null, null))
                 .isInstanceOf(DataIntegrityViolationException.class);
