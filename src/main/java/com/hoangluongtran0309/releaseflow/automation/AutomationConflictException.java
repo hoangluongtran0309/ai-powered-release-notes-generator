@@ -52,6 +52,21 @@ public class AutomationConflictException extends RuntimeException {
         );
     }
 
+    static AutomationConflictException scheduledActionUnsupported() {
+        return new AutomationConflictException(
+                "automation_scheduled_action_unsupported",
+                "A rule that fires on a schedule or before a planned release may only tell people: "
+                        + "use a Slack or an email action."
+        );
+    }
+
+    static AutomationConflictException webhookRuleRequired() {
+        return new AutomationConflictException(
+                "automation_webhook_rule_required",
+                "Only a rule called by another system has a webhook secret."
+        );
+    }
+
     static AutomationConflictException runNotRetryable() {
         return new AutomationConflictException(
                 "automation_run_not_retryable",

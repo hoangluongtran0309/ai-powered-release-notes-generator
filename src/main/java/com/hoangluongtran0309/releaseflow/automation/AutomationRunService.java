@@ -93,7 +93,8 @@ public class AutomationRunService {
                             TriggerType.MANUAL,
                             request.getRequestId(),
                             principal.userId(),
-                            principal.displayName()
+                            principal.displayName(),
+                            null
                     );
                     return views(List.of(run)).getFirst();
                 });

@@ -55,8 +55,32 @@ public class ReleaseAccess {
                 .toList();
     }
 
+    /**
+     * The approved releases whose planned time falls in {@code (after, until]}, oldest
+     * first, for a rule that reminds people before one goes out. A null project means
+     * every project of the Organization. A release with no planned time is not upcoming.
+     */
+    @Transactional(readOnly = true)
+    public List<UpcomingRelease> upcomingApproved(UUID organizationId, UUID projectId, Instant after, Instant until) {
+        if (!until.isAfter(after)) {
+            return List.of();
+        }
+        return releaseRepository
+                .findAllByOrganizationIdAndStatusAndPlannedReleaseAtGreaterThanAndPlannedReleaseAtLessThanEqualOrderByPlannedReleaseAtAscIdAsc(
+                        organizationId, ReleaseStatus.APPROVED, after, until)
+                .stream()
+                .filter(release -> projectId == null || projectId.equals(release.getProjectId()))
+                .map(release -> new UpcomingRelease(
+                        release.getId(), release.getProjectId(), release.getVersion(), release.getPlannedReleaseAt()))
+                .toList();
+    }
+
     /** One published release, named the way a person picks it. */
     public record PublishedRelease(UUID id, UUID projectId, String version, Instant publishedAt) {
+    }
+
+    /** An approved release that has not gone out yet, and the moment it is planned for. */
+    public record UpcomingRelease(UUID id, UUID projectId, String version, Instant plannedReleaseAt) {
     }
 
     /** A release and the notes it holds, at the moment it was read. */

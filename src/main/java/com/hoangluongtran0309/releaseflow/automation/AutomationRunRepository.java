@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.automation;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -21,4 +22,18 @@ interface AutomationRunRepository extends JpaRepository<AutomationRun, UUID> {
     Optional<AutomationRun> findByRuleIdAndRequestId(UUID ruleId, UUID requestId);
 
     List<AutomationRun> findAllByRuleIdAndStatusIn(UUID ruleId, Collection<ExecutionStatus> statuses);
+
+    /** Whether this Rule already answered that occurrence; a scan is repeated freely. */
+    boolean existsByRuleIdAndTriggerTypeAndScheduledFor(
+            UUID ruleId,
+            TriggerType triggerType,
+            Instant scheduledFor
+    );
+
+    boolean existsByRuleIdAndReleaseIdAndTriggerTypeAndScheduledFor(
+            UUID ruleId,
+            UUID releaseId,
+            TriggerType triggerType,
+            Instant scheduledFor
+    );
 }

@@ -1045,6 +1045,12 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   every audience's ownership and language, a single GitHub source for a GitHub Release
   action on a project-scoped rule, whether the deployment can carry the action out at
   all, and the action's own configuration and decrypted secret.
+- **Triggers.** A rule fires when a release is published, when an administrator runs it,
+  on a cron schedule, before a planned release, or when another system calls its own
+  signed webhook. See [ADR-0021](adr/0021-scheduled-and-signed-automation-triggers.md).
+  What each trigger needs is columns on `automation_rules`, with a CHECK per trigger, so
+  a rule carries exactly what its own trigger uses and changing the trigger forgets the
+  rest.
 - **From publication to runs.** `ReleaseService.publish` publishes `ReleasePublished`
   inside its own transaction. `ReleasePublishedListener` writes one
   `automation_publish_jobs` row and does nothing else, so no rule can undo a publication.
@@ -1052,6 +1058,36 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   `automation_runs` row per matching enabled rule, with an `automation_action_runs` row
   per action carrying the note, configuration, and encrypted secret as they were. A
   publication fires each rule once, and a repeated manual request returns the same run.
+- **Schedules and reminders.** `AutomationTriggerWorker` ticks every fifteen seconds and
+  only writes runs; it never calls a provider. A cron rule repeats one `PUBLISHED`
+  release on a six-field expression in an IANA time zone, and takes that release's
+  project as its own. The worker claims a due rule with `FOR UPDATE SKIP LOCKED`, writes
+  at most one run for the occurrence it found, and books the next firing from *now*, so
+  a deployment that was down owes one catch-up run rather than a queue of them. A
+  reminder rule watches `APPROVED` releases whose `planned_release_at` is within its
+  notice; the run answers the moment `planned_release_at` less that notice, so moving a
+  release earns exactly one more reminder and scanning again earns none. A rule with no
+  notice at all is answered within a short lookahead (`PT15S`). `automation_runs`
+  records that moment in `scheduled_for`, unique per rule and occurrence for a schedule
+  and per rule, release, and occurrence for a reminder. Both triggers accept Slack and
+  email actions only: nobody is watching when a schedule goes off. Disabling or archiving
+  a rule clears `next_fire_at`, which the database also requires, so a rule that is off
+  is never claimed.
+- **Called by another system.** `AutomationWebhookController` answers
+  `POST /webhooks/automation/{webhookId}` with `202` and `{runId, status, statusPath}`,
+  and `GET …/runs/{runId}` with the run's state; both are signed and neither is
+  authenticated. The signature is HMAC-SHA256, keyed by the rule's own 256-bit secret,
+  over the timestamp, the delivery UUID, the uppercase method, the request path, and the
+  hex SHA-256 of the raw body, one per line, compared in constant time within five
+  minutes of clock skew. A body over 64 KiB is refused before any rule is looked up. The
+  Organization is the rule's; the body names only a release, which must be published and
+  in the rule's project. The delivery UUID becomes the run's `request_id`, so a caller
+  that retries after a timeout is given its first run back. An unknown path, a disabled
+  rule, a stale moment, and a wrong signature all answer `401`. The secret is bound to
+  the rule and its path by `AutomationSecrets` with its own purpose, shown once when the
+  rule is created and once more whenever
+  `POST /api/automation/rules/{id}/webhook-secret/rotate` replaces it, which keeps the
+  path and stops the old secret at once.
 - **Worker.** It ticks every second and drains what it finds. A claim takes the next
   pending action of a run that is neither finished nor being cancelled, and only once
   every earlier action has succeeded, with `FOR UPDATE OF action_run SKIP LOCKED`. The
@@ -1076,7 +1112,9 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
 
 `AutomationRuleApiController` and `AutomationRunApiController` serve
 `/api/automation/**`, and `AutomationPageController` serves `/automation`; both are
-administrator-only by URL rule. The run history pages with `AutomationRunPage`
+administrator-only by URL rule. `POST /api/automation/rules/cron-preview` answers when a
+schedule would next run, and the page has the same button. The webhook paths are the
+exception: they live under `/webhooks/**`, where the signature is the identity. The run history pages with `AutomationRunPage`
 (`items`, `page`, `size`, `total`), which is the only paged list in ReleaseFlow.
 
 ## User interface

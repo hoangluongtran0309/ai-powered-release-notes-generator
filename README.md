@@ -124,6 +124,17 @@ delivery, and `RELEASEFLOW_SLACK_ALLOWED_HOSTS` (default
 `hooks.slack.com,hooks.slack-gov.com`) is the only set of origins a Slack webhook
 URL may name.
 
+Rules that fire on their own, and rules other systems call, have their own
+settings:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `RELEASEFLOW_AUTOMATION_TRIGGER_DELAY` | `PT15S` | How often ReleaseFlow looks for a schedule or a reminder that has come due |
+| `RELEASEFLOW_AUTOMATION_TRIGGER_BATCH_SIZE` | `20` | How many firings one of those passes may book |
+| `RELEASEFLOW_AUTOMATION_REMINDER_LOOKAHEAD` | `PT15S` | How far ahead a reminder with no notice at all looks |
+| `RELEASEFLOW_AUTOMATION_WEBHOOK_CLOCK_SKEW` | `PT5M` | How far a signed call's timestamp may be from now |
+| `RELEASEFLOW_AUTOMATION_WEBHOOK_MAX_BODY_BYTES` | `65536` | The largest signed call body, deliberately far below the limit a provider's own delivery gets |
+
 Set `RELEASEFLOW_SESSION_COOKIE_SECURE=true` whenever the application is served
 over HTTPS. Open `http://localhost:8080/register` to create the first
 organization administrator.
@@ -1050,9 +1061,24 @@ release returns `409 release_published`.
 
 A rule delivers a published release note where its readers already are. Open
 **Automation** in the sidebar, which administrators alone can see. A rule names
-what makes it run — a release being published, or an administrator running it by
-hand — the project it watches (or every project), and the actions it carries out,
-in order. Each action names the audience and language whose note it delivers.
+what makes it run, the project it watches (or every project), and the actions it
+carries out, in order. Each action names the audience and language whose note it
+delivers.
+
+Five things can make a rule run:
+
+| Runs when | What it needs | What happens |
+| --- | --- | --- |
+| Release published | Nothing | Every matching rule fires once per release |
+| Run by hand | A published release and a request ID | The same request ID is the same run, never a second delivery |
+| On a schedule | One published release, a six-field cron expression, and an IANA time zone | The release is delivered again on that schedule. Firings missed while ReleaseFlow was down become one catch-up run |
+| Before a planned release | A notice of 0 to 365 days | An approved release with a planned time is announced that long before it. Moving the release earns one more reminder |
+| Called by another system | Nothing; ReleaseFlow mints the path and the secret | A signed call names a published release and starts a run |
+
+A schedule and a reminder take Slack and email actions only: nobody is watching
+when they go off. A schedule takes its project from the release it repeats.
+**Preview next run** on the page, or `POST /api/automation/rules/cron-preview`,
+says when an expression would next fire before any rule keeps it.
 
 Write the rule first; it starts disabled. Enabling it is the moment ReleaseFlow
 checks that the deliveries can be made: the project and every audience belong to
@@ -1074,6 +1100,43 @@ A Slack webhook URL must name an origin the deployment allows —
 says otherwise — and is checked again before every delivery. A secret is
 write-only: once stored, no response, page, or log ever repeats it, and leaving
 the field empty while editing keeps the one already there.
+
+### A rule another system calls
+
+Saving a rule that runs when another system calls it gives it a path and a
+256-bit secret, both shown once. **Rotate secret** replaces the secret and keeps
+the path; the old secret stops working at once.
+
+A call is a `POST` to that path with `{"releaseId": "…"}` and three headers:
+
+| Header | What it holds |
+| --- | --- |
+| `X-ReleaseFlow-Timestamp` | Seconds since the epoch, within five minutes of now |
+| `X-ReleaseFlow-Delivery` | A UUID, repeated on a retry so nothing is delivered twice |
+| `X-ReleaseFlow-Signature-256` | `sha256=` and the hex HMAC-SHA256 below |
+
+The signature covers the timestamp, the delivery, the uppercase method, the
+request path, and the hex SHA-256 of the body, each on its own line:
+
+```bash
+BODY='{"releaseId":"<release>"}'
+TS=$(date +%s)
+DELIVERY=$(uuidgen)
+PATH_='/webhooks/automation/<webhook>'
+DIGEST=$(printf '%s' "$BODY" | openssl dgst -sha256 -hex | cut -d' ' -f2)
+SIGNATURE=$(printf '%s\n%s\nPOST\n%s\n%s' "$TS" "$DELIVERY" "$PATH_" "$DIGEST" \
+  | openssl dgst -sha256 -hmac "$SECRET" -hex | cut -d' ' -f2)
+curl -X POST "http://localhost:8080$PATH_" \
+  -H "X-ReleaseFlow-Timestamp: $TS" \
+  -H "X-ReleaseFlow-Delivery: $DELIVERY" \
+  -H "X-ReleaseFlow-Signature-256: sha256=$SIGNATURE" \
+  -H 'Content-Type: application/json' -d "$BODY"
+```
+
+The answer is `202` with `{"runId", "status", "statusPath"}`. A signed `GET` of
+that `statusPath` says how the run ended. The Organization is the rule's, never
+the body's. A body over 64 KiB is `413`; an unknown path, a rule that is turned
+off, a moment more than five minutes out, and a wrong signature are all `401`.
 
 Publishing a release records that it happened and nothing more, so a rule nobody
 can carry out never holds up a release. Within a second the worker creates one
@@ -1110,12 +1173,20 @@ runs it had not finished and frees its name. `GET /api/automation/runs` answers
 
 Refusals carry a stable code: `automation_rule_name_taken`,
 `automation_github_source_missing`, `automation_email_not_configured`,
-`automation_run_not_retryable`, and `automation_unknown_needs_confirmation` are
-`409`; `automation_action_required`, `automation_audience_not_found`,
-`automation_language_not_configured`, `automation_slack_webhook_invalid`, and
+`automation_run_not_retryable`, `automation_unknown_needs_confirmation`,
+`automation_release_not_published`, `automation_scheduled_action_unsupported`,
+and `automation_webhook_rule_required` are `409`; `automation_action_required`,
+`automation_audience_not_found`, `automation_language_not_configured`,
+`automation_slack_webhook_invalid`, `automation_cron_invalid`,
+`automation_cron_time_zone_invalid`, `automation_cron_no_occurrence`,
+`automation_cron_release_required`, `automation_reminder_days_invalid`, and
 `invalid_automation_run_page` are `400`. Every automation path is administrator
-only, and a rule from another Organization is `404`, never `403`. See
-[ADR-0020](docs/adr/0020-automation-rules-and-runs.md).
+only, and a rule from another Organization is `404`, never `403`. The signed
+webhook paths are the exception: they take no session, and refuse with
+`webhook_signature_invalid` (`401`), `webhook_payload_too_large` (`413`), or
+`webhook_payload_malformed` (`400`). See
+[ADR-0020](docs/adr/0020-automation-rules-and-runs.md) and
+[ADR-0021](docs/adr/0021-scheduled-and-signed-automation-triggers.md).
 
 ## Verify
 

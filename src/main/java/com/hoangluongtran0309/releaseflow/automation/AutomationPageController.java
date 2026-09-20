@@ -7,6 +7,7 @@ import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.release.ReleaseAccess;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
@@ -26,6 +27,7 @@ import java.util.function.Supplier;
 public class AutomationPageController {
 
     private static final String FORM = "ruleForm";
+    private static final String SECRET_VIEW = "automation-webhook-secret";
     private static final int BLANK_ACTION_ROWS = 3;
 
     private final AutomationRuleService ruleService;
@@ -91,8 +93,7 @@ public class AutomationPageController {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
             return render(principal, null, 0, model);
         }
-        return act(principal, model, response, "/automation?saved",
-                () -> ruleService.create(principal.organizationId(), request));
+        return save(principal, model, response, () -> ruleService.create(principal.organizationId(), request));
     }
 
     @PostMapping("/automation/{ruleId}")
@@ -108,8 +109,46 @@ public class AutomationPageController {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
             return render(principal, null, 0, model);
         }
-        return act(principal, model, response, "/automation?saved",
+        return save(principal, model, response,
                 () -> ruleService.update(principal.organizationId(), ruleId, request));
+    }
+
+    /**
+     * A new secret for a rule another system calls. It is shown on its own page, once,
+     * because ReleaseFlow cannot show it again.
+     */
+    @PostMapping("/automation/{ruleId}/webhook-secret/rotate")
+    String rotateWebhookSecret(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @PathVariable UUID ruleId,
+            Model model,
+            HttpServletResponse response
+    ) {
+        return save(principal, model, response,
+                () -> ruleService.rotateWebhookSecret(principal.organizationId(), ruleId));
+    }
+
+    /** Answers what a schedule would do next, without keeping anything. */
+    @PostMapping("/automation/cron-preview")
+    String previewCron(
+            @AuthenticationPrincipal ReleaseFlowPrincipal principal,
+            @Valid @ModelAttribute("cronPreviewForm") CronPreviewRequest request,
+            BindingResult bindingResult,
+            Model model,
+            HttpServletResponse response
+    ) {
+        if (bindingResult.hasErrors()) {
+            return renderWithError(
+                    principal, HttpStatus.BAD_REQUEST, "A schedule needs an expression and a time zone.",
+                    model, response);
+        }
+        try {
+            model.addAttribute(
+                    "cronPreview", ruleService.previewCron(request.getCronExpression(), request.getCronTimeZone()));
+        } catch (AutomationActionInvalidException exception) {
+            return renderWithError(principal, HttpStatus.BAD_REQUEST, exception.getMessage(), model, response);
+        }
+        return render(principal, null, 0, model);
     }
 
     @PostMapping("/automation/{ruleId}/enable")
@@ -190,6 +229,34 @@ public class AutomationPageController {
                 () -> runService.cancel(principal.organizationId(), runId));
     }
 
+    /**
+     * Writes a rule and, when that minted a webhook secret, shows it instead of going
+     * back to the list. Every other save simply returns to the list.
+     */
+    private String save(
+            ReleaseFlowPrincipal principal,
+            Model model,
+            HttpServletResponse response,
+            Supplier<AutomationRuleView> action
+    ) {
+        final AutomationRuleView rule;
+        try {
+            rule = action.get();
+        } catch (AutomationRuleNotFoundException exception) {
+            return renderWithError(principal, HttpStatus.NOT_FOUND, exception.getMessage(), model, response);
+        } catch (AutomationConflictException exception) {
+            return renderWithError(principal, HttpStatus.CONFLICT, exception.getMessage(), model, response);
+        } catch (AutomationActionInvalidException exception) {
+            return renderWithError(principal, HttpStatus.BAD_REQUEST, exception.getMessage(), model, response);
+        }
+        if (rule.webhookSecret() == null) {
+            return "redirect:/automation?saved";
+        }
+        response.setHeader("Cache-Control", CacheControl.noStore().getHeaderValue());
+        model.addAttribute("rule", rule);
+        return SECRET_VIEW;
+    }
+
     private String act(
             ReleaseFlowPrincipal principal,
             Model model,
@@ -221,6 +288,9 @@ public class AutomationPageController {
         model.addAttribute("actionTypes", ActionType.values());
         model.addAttribute("editing", editing);
         model.addAttribute("requestId", UUID.randomUUID());
+        if (!model.containsAttribute("cronPreviewForm")) {
+            model.addAttribute("cronPreviewForm", new CronPreviewRequest());
+        }
         if (!model.containsAttribute(FORM)) {
             model.addAttribute(FORM, form(editing));
         }
@@ -234,6 +304,10 @@ public class AutomationPageController {
             request.setName(editing.name());
             request.setTriggerType(editing.triggerType());
             request.setProjectId(editing.projectId());
+            request.setReleaseId(editing.triggerReleaseId());
+            request.setCronExpression(editing.cronExpression());
+            request.setCronTimeZone(editing.cronTimeZone());
+            request.setDaysBefore(editing.reminderDaysBefore());
             editing.actions().forEach(action -> {
                 AutomationActionRequest row = new AutomationActionRequest();
                 row.setId(action.id());

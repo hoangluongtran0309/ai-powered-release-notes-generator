@@ -22,7 +22,7 @@ class AutomationDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationT
     @BeforeEach
     @AfterEach
     void clearDatabase() {
-        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs,"
+        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
                 + " release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM automation_rule_actions");
         jdbcTemplate.update("DELETE FROM automation_rules");
@@ -234,6 +234,140 @@ class AutomationDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationT
                         VALUES (?, ?, ?, ?, 'SLACK', ?, 'en', ?::jsonb)
                         """,
                 id, rule, organization, position, audience, configuration
+        );
+        return id;
+    }
+
+    @Test
+    void keepsEachTriggersConfigurationToItself() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID release = insertRelease(organization, project);
+        UUID rule = insertRule(organization, "Announce");
+
+        // A schedule without a release, an expression, or a zone is not a schedule.
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE automation_rules SET trigger_type = 'SCHEDULED_CRON' WHERE id = ?", rule))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // Nor is one that carries a reminder's notice instead.
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE automation_rules SET reminder_days_before = 3 WHERE id = ?", rule))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                        UPDATE automation_rules
+                        SET trigger_type = 'UPCOMING_RELEASE_REMINDER', reminder_days_before = 400
+                        WHERE id = ?
+                        """, rule))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // A webhook rule keeps both halves of its secret, or neither.
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                        UPDATE automation_rules
+                        SET trigger_type = 'EXTERNAL_WEBHOOK', webhook_id = ?
+                        WHERE id = ?
+                        """, UUID.randomUUID(), rule))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatCode(() -> jdbcTemplate.update(
+                """
+                        UPDATE automation_rules
+                        SET trigger_type = 'SCHEDULED_CRON', trigger_release_id = ?, project_id = ?,
+                            cron_expression = '0 0 9 * * *', cron_time_zone = 'Europe/Berlin'
+                        WHERE id = ?
+                        """, release, project, rule))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void booksAFiringOnlyForAScheduleThatIsRunning() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID release = insertRelease(organization, project);
+        UUID rule = insertRule(organization, "Announce");
+        jdbcTemplate.update(
+                """
+                        UPDATE automation_rules
+                        SET trigger_type = 'SCHEDULED_CRON', trigger_release_id = ?, project_id = ?,
+                            cron_expression = '0 0 9 * * *', cron_time_zone = 'Europe/Berlin'
+                        WHERE id = ?
+                        """, release, project, rule);
+
+        // A rule that is switched off cannot be waiting to fire.
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE automation_rules SET next_fire_at = now() WHERE id = ?", rule))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        jdbcTemplate.update("UPDATE automation_rules SET enabled = TRUE WHERE id = ?", rule);
+        assertThatCode(() -> jdbcTemplate.update(
+                "UPDATE automation_rules SET next_fire_at = now() WHERE id = ?", rule))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE automation_rules SET enabled = FALSE WHERE id = ?", rule))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void answersOneOccurrenceOnce() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID release = insertRelease(organization, project);
+        UUID rule = insertRule(organization, "Announce");
+
+        insertScheduledRun(organization, project, release, rule, "SCHEDULED_CRON", "2026-09-20T09:00:00Z");
+        assertThatThrownBy(() -> insertScheduledRun(
+                organization, project, release, rule, "SCHEDULED_CRON", "2026-09-20T09:00:00Z"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> insertScheduledRun(
+                organization, project, release, rule, "SCHEDULED_CRON", "2026-09-21T09:00:00Z"))
+                .doesNotThrowAnyException();
+
+        UUID reminder = insertRule(organization, "Warn");
+        insertScheduledRun(organization, project, release, reminder, "UPCOMING_RELEASE_REMINDER",
+                "2026-09-18T09:00:00Z");
+        assertThatThrownBy(() -> insertScheduledRun(
+                organization, project, release, reminder, "UPCOMING_RELEASE_REMINDER", "2026-09-18T09:00:00Z"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        // A schedule's run must say which occurrence it answers, and no other run may.
+        assertThatThrownBy(() -> insertRun(organization, project, release, rule, "SCHEDULED_CRON", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertScheduledRun(
+                organization, project, release, rule, "RELEASE_PUBLISHED", "2026-09-20T09:00:00Z"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void recordsADeliveryIdentifierForACallFromOutsideAndNobodyWhoAskedForIt() {
+        UUID organization = insertOrganization();
+        UUID project = insertProject(organization);
+        UUID release = insertRelease(organization, project);
+        UUID rule = insertRule(organization, "Announce");
+
+        assertThatCode(() -> insertRun(organization, project, release, rule, "EXTERNAL_WEBHOOK", UUID.randomUUID()))
+                .doesNotThrowAnyException();
+        // A call from outside always names its delivery.
+        assertThatThrownBy(() -> insertRun(organization, project, release, rule, "EXTERNAL_WEBHOOK", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private UUID insertScheduledRun(
+            UUID organization,
+            UUID project,
+            UUID release,
+            UUID rule,
+            String trigger,
+            String scheduledFor
+    ) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO automation_runs
+                            (id, rule_id, organization_id, project_id, release_id, rule_name_snapshot,
+                             release_version_snapshot, trigger_type, scheduled_for, status, created_at)
+                        VALUES (?, ?, ?, ?, ?, 'Announce', '1.4.0', ?, ?::timestamptz, 'PENDING', now())
+                        """,
+                id, rule, organization, project, release, trigger, scheduledFor
         );
         return id;
     }

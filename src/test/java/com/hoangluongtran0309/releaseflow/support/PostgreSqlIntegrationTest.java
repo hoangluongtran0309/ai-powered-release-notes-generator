@@ -28,6 +28,7 @@ public abstract class PostgreSqlIntegrationTest {
         registry.add("releaseflow.processing.enabled", () -> "false");
         registry.add("releaseflow.translation.worker-enabled", () -> "false");
         registry.add("releaseflow.automation.worker-enabled", () -> "false");
+        registry.add("releaseflow.automation.trigger-worker-enabled", () -> "false");
     }
 
     /** Every Organization owns audiences and categories, which must go before the Organization itself. */

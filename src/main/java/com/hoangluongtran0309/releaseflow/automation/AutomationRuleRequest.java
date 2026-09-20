@@ -23,6 +23,16 @@ public class AutomationRuleRequest {
 
     private UUID projectId;
 
+    /** The published release a schedule repeats. Only a cron rule has one. */
+    private UUID releaseId;
+
+    private String cronExpression;
+
+    private String cronTimeZone;
+
+    /** How many days before its planned time a release is announced, 0 through 365. */
+    private Integer daysBefore;
+
     private List<AutomationActionRequest> actions = new AutoPopulatingList<>(AutomationActionRequest.class);
 
     public String getName() {
@@ -47,6 +57,38 @@ public class AutomationRuleRequest {
 
     public void setProjectId(UUID projectId) {
         this.projectId = projectId;
+    }
+
+    public UUID getReleaseId() {
+        return releaseId;
+    }
+
+    public void setReleaseId(UUID releaseId) {
+        this.releaseId = releaseId;
+    }
+
+    public String getCronExpression() {
+        return cronExpression;
+    }
+
+    public void setCronExpression(String cronExpression) {
+        this.cronExpression = cronExpression == null || cronExpression.isBlank() ? null : cronExpression.strip();
+    }
+
+    public String getCronTimeZone() {
+        return cronTimeZone;
+    }
+
+    public void setCronTimeZone(String cronTimeZone) {
+        this.cronTimeZone = cronTimeZone == null || cronTimeZone.isBlank() ? null : cronTimeZone.strip();
+    }
+
+    public Integer getDaysBefore() {
+        return daysBefore;
+    }
+
+    public void setDaysBefore(Integer daysBefore) {
+        this.daysBefore = daysBefore;
     }
 
     public List<AutomationActionRequest> getActions() {

@@ -37,6 +37,30 @@ class AutomationRule {
     @Column(name = "trigger_type", nullable = false, length = 32)
     private TriggerType triggerType;
 
+    @Column(name = "trigger_release_id")
+    private UUID triggerReleaseId;
+
+    @Column(name = "cron_expression", length = 255)
+    private String cronExpression;
+
+    @Column(name = "cron_time_zone", length = 64)
+    private String cronTimeZone;
+
+    @Column(name = "reminder_days_before")
+    private Integer reminderDaysBefore;
+
+    @Column(name = "webhook_id")
+    private UUID webhookId;
+
+    @Column(name = "webhook_secret_nonce")
+    private byte[] webhookSecretNonce;
+
+    @Column(name = "webhook_secret_ciphertext")
+    private byte[] webhookSecretCiphertext;
+
+    @Column(name = "next_fire_at")
+    private Instant nextFireAt;
+
     @Column(nullable = false)
     private boolean enabled;
 
@@ -72,6 +96,64 @@ class AutomationRule {
         this.updatedAt = at;
     }
 
+    /** A trigger that fires on an event of its own needs nothing else remembered. */
+    void configureWithoutParameters(Instant at) {
+        requireActive();
+        clearTriggerConfiguration();
+        this.updatedAt = at;
+    }
+
+    /**
+     * The Release a cron Rule repeats, in the civil time zone the schedule is read in.
+     * The Project follows the Release, because that is the Project the Rule works on.
+     */
+    void configureCron(UUID releaseId, UUID projectId, String expression, String timeZone, Instant at) {
+        requireActive();
+        clearTriggerConfiguration();
+        this.triggerReleaseId = releaseId;
+        this.projectId = projectId;
+        this.cronExpression = expression;
+        this.cronTimeZone = timeZone;
+        this.updatedAt = at;
+    }
+
+    void configureReminder(int daysBefore, Instant at) {
+        requireActive();
+        clearTriggerConfiguration();
+        this.reminderDaysBefore = daysBefore;
+        this.updatedAt = at;
+    }
+
+    void configureWebhook(UUID webhookId, AutomationSecrets.Secret secret, Instant at) {
+        requireActive();
+        clearTriggerConfiguration();
+        this.webhookId = webhookId;
+        this.webhookSecretNonce = secret.nonce();
+        this.webhookSecretCiphertext = secret.ciphertext();
+        this.updatedAt = at;
+    }
+
+    /** A new secret over the same path: callers keep the URL, the old secret dies now. */
+    void rotateWebhookSecret(AutomationSecrets.Secret secret, Instant at) {
+        requireActive();
+        if (triggerType != TriggerType.EXTERNAL_WEBHOOK || webhookId == null) {
+            throw AutomationConflictException.webhookRuleRequired();
+        }
+        this.webhookSecretNonce = secret.nonce();
+        this.webhookSecretCiphertext = secret.ciphertext();
+        this.updatedAt = at;
+    }
+
+    /**
+     * Books the next firing. It is always computed from the present rather than from
+     * the occurrence just handled, so a Rule that was down for a week owes one catch-up
+     * Run and not a week of them.
+     */
+    void advanceNextFireAt(Instant nextFireAt, Instant at) {
+        this.nextFireAt = nextFireAt;
+        this.updatedAt = at;
+    }
+
     void enable(Instant at) {
         requireActive();
         this.enabled = true;
@@ -81,6 +163,7 @@ class AutomationRule {
     void disable(Instant at) {
         requireActive();
         this.enabled = false;
+        this.nextFireAt = null;
         this.updatedAt = at;
     }
 
@@ -90,6 +173,7 @@ class AutomationRule {
         }
         this.enabled = false;
         this.active = false;
+        this.nextFireAt = null;
         this.updatedAt = at;
     }
 
@@ -103,6 +187,19 @@ class AutomationRule {
         if (!active) {
             throw AutomationConflictException.ruleArchived();
         }
+    }
+
+    // Changing the trigger forgets what only the previous one meant, so no Rule ever
+    // carries a schedule or a webhook secret its trigger no longer uses.
+    private void clearTriggerConfiguration() {
+        this.triggerReleaseId = null;
+        this.cronExpression = null;
+        this.cronTimeZone = null;
+        this.reminderDaysBefore = null;
+        this.webhookId = null;
+        this.webhookSecretNonce = null;
+        this.webhookSecretCiphertext = null;
+        this.nextFireAt = null;
     }
 
     UUID getId() {
@@ -123,6 +220,37 @@ class AutomationRule {
 
     TriggerType getTriggerType() {
         return triggerType;
+    }
+
+    UUID getTriggerReleaseId() {
+        return triggerReleaseId;
+    }
+
+    String getCronExpression() {
+        return cronExpression;
+    }
+
+    String getCronTimeZone() {
+        return cronTimeZone;
+    }
+
+    Integer getReminderDaysBefore() {
+        return reminderDaysBefore;
+    }
+
+    UUID getWebhookId() {
+        return webhookId;
+    }
+
+    /** The encrypted webhook secret, or null when this Rule is not called from outside. */
+    AutomationSecrets.Secret getWebhookSecret() {
+        return webhookSecretNonce == null || webhookSecretCiphertext == null
+                ? null
+                : new AutomationSecrets.Secret(webhookSecretNonce, webhookSecretCiphertext);
+    }
+
+    Instant getNextFireAt() {
+        return nextFireAt;
     }
 
     boolean isEnabled() {

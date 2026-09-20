@@ -296,6 +296,108 @@ class AutomationIntegrationTest extends AutomationIntegrationTestBase {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
+    @Test
+    void refusesAScheduleItCannotKeep() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+
+        // A schedule repeats a release that has gone out, so it needs one.
+        createRule(owner, cronRule("Digest", projectId, endUser, UUID.randomUUID(), "0 0 9 * * MON", "Europe/Berlin"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_cron_release_required"));
+
+        UUID approved = approvedReleaseWithChange(owner, projectId, "1.4.0");
+        createRule(owner, cronRule("Digest", projectId, endUser, approved, "0 0 9 * * MON", "Europe/Berlin"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("automation_release_not_published"));
+
+        UUID published = publishedRelease(owner, projectId, "1.5.0");
+        createRule(owner, cronRule("Digest", projectId, endUser, published, "every morning", "Europe/Berlin"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_cron_invalid"));
+        createRule(owner, cronRule("Digest", projectId, endUser, published, "0 0 9 * * MON", "+01:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_cron_time_zone_invalid"));
+
+        createRule(owner, reminderRule("Warn", projectId, endUser, 400))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_reminder_days_invalid"));
+    }
+
+    @Test
+    void refusesToPublishAGitHubReleaseOnASchedule() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        connectGitHubSource(owner, projectId, "releaseflow");
+        UUID endUser = audienceId(owner, "end_user");
+        UUID published = publishedRelease(owner, projectId, "1.4.0");
+
+        String body = """
+                {"name":"Digest","triggerType":"SCHEDULED_CRON","projectId":"%s",
+                 "releaseId":"%s","cronExpression":"0 0 9 * * MON","cronTimeZone":"Europe/Berlin",
+                 "actions":[{"actionType":"GITHUB_RELEASE","audienceId":"%s","language":"en"}]}
+                """.formatted(projectId, published, endUser);
+        UUID ruleId = createdRuleId(createRule(owner, body).andExpect(status().isCreated()));
+
+        // Nobody is watching when a schedule goes off, so it may only tell people.
+        enable(owner, ruleId)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("automation_scheduled_action_unsupported"));
+    }
+
+    @Test
+    void saysWhenAScheduleWouldNextRun() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+
+        mockMvc.perform(post("/api/automation/rules/cron-preview")
+                        .session(owner.session()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cronExpression\":\"0 0 9 * * MON\",\"cronTimeZone\":\"Europe/Berlin\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextFireAt").exists());
+
+        mockMvc.perform(post("/api/automation/rules/cron-preview")
+                        .session(owner.session()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cronExpression\":\"whenever\",\"cronTimeZone\":\"Europe/Berlin\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_cron_invalid"));
+    }
+
+    @Test
+    void keepsAWebhookRulesPathAndSecretWhenItIsEdited() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+
+        String created = createRule(owner, webhookRule("Called from outside", projectId, endUser))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        UUID ruleId = UUID.fromString(JsonPath.read(created, "$.id"));
+        String path = JsonPath.read(created, "$.webhookPath");
+        String secret = JsonPath.read(created, "$.webhookSecret");
+
+        mockMvc.perform(put("/api/automation/rules/{ruleId}", ruleId)
+                        .session(owner.session()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(webhookRule("Called from outside", projectId, endUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.webhookPath").value(path))
+                // Editing a rule does not mint a secret, so none is shown again.
+                .andExpect(jsonPath("$.webhookSecret").doesNotExist())
+                .andExpect(jsonPath("$.webhookSecretConfigured").value(true))
+                .andExpect(content().string(not(containsString(secret))));
+
+        // Rotating a secret is for a rule another system calls, and no other.
+        UUID manual = createdRuleId(createRule(owner, slackRule("By hand", "MANUAL", projectId, endUser, "en"))
+                .andExpect(status().isCreated()));
+        mockMvc.perform(post("/api/automation/rules/{ruleId}/webhook-secret/rotate", manual)
+                        .session(owner.session()).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("automation_webhook_rule_required"));
+    }
+
     private ResultActions execute(Owner owner, UUID ruleId, UUID releaseId, UUID requestId) throws Exception {
         return mockMvc.perform(post("/api/automation/rules/{ruleId}/execute", ruleId)
                 .session(owner.session())

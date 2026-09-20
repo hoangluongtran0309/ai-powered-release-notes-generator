@@ -2,6 +2,7 @@ package com.hoangluongtran0309.releaseflow.release;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,4 +25,11 @@ interface ReleaseRepository extends JpaRepository<Release, UUID> {
     List<Release> findAllByOrganizationIdAndProjectIdOrderByCreatedAtDescIdDesc(UUID organizationId, UUID projectId);
 
     List<Release> findAllByOrganizationIdAndStatusOrderByCreatedAtDescIdDesc(UUID organizationId, ReleaseStatus status);
+
+    List<Release> findAllByOrganizationIdAndStatusAndPlannedReleaseAtGreaterThanAndPlannedReleaseAtLessThanEqualOrderByPlannedReleaseAtAscIdAsc(
+            UUID organizationId,
+            ReleaseStatus status,
+            Instant after,
+            Instant until
+    );
 }

@@ -39,7 +39,22 @@
                 <tbody>
                 <tr th:each="rule : ${rules}" th:id="|rule-${rule.id}|">
                     <td class="font-semibold" th:text="${rule.name}">Announce to Slack</td>
-                    <td th:text="${rule.triggerType.label}">Release published</td>
+                    <td>
+                        <span th:text="${rule.triggerType.label}">Release published</span>
+                        <div class="text-xs text-slate-500" th:if="${rule.cronExpression != null}"
+                             th:text="|${rule.cronExpression} · ${rule.cronTimeZone}|">0 0 9 * * MON · Europe/Berlin</div>
+                        <div class="text-xs text-slate-500" th:if="${rule.nextFireAt != null}">
+                            Next
+                            <time th:datetime="${rule.nextFireAt}"
+                                  th:text="|${#temporals.format(rule.nextFireAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">18 Sep 2026, 09:14 UTC</time>
+                        </div>
+                        <div class="text-xs text-slate-500" th:if="${rule.reminderDaysBefore != null}"
+                             th:text="${rule.reminderDaysBefore == 0}
+                                      ? 'As the release comes due'
+                                      : |${rule.reminderDaysBefore} day(s) before|">3 day(s) before</div>
+                        <div class="font-mono text-xs text-slate-500" th:if="${rule.webhookPath != null}"
+                             th:text="${rule.webhookPath}">/webhooks/automation/…</div>
+                    </td>
                     <td>
                         <span th:if="${rule.organizationWide()}">Every project</span>
                         <span th:unless="${rule.organizationWide()}" th:text="${rule.projectName}">Checkout</span>
@@ -75,6 +90,10 @@
                                     <button type="submit" class="btn btn-primary btn-sm">Run</button>
                                 </form>
                             </details>
+                            <form method="post" th:if="${rule.webhookSecretConfigured}"
+                                  th:action="@{/automation/{id}/webhook-secret/rotate(id=${rule.id})}">
+                                <button type="submit" class="btn btn-ghost btn-sm">Rotate secret</button>
+                            </form>
                             <form method="post" th:action="@{/automation/{id}/archive(id=${rule.id})}">
                                 <button type="submit" class="btn btn-ghost btn-sm">Archive</button>
                             </form>
@@ -93,7 +112,9 @@
             every action can be carried out. A secret left empty keeps the one already stored.
         </p>
         <form class="mt-4 grid gap-4" method="post" th:object="${ruleForm}"
-              th:action="${editing == null} ? @{/automation} : @{/automation/{id}(id=${editing.id})}">
+              th:action="${editing == null} ? @{/automation} : @{/automation/{id}(id=${editing.id})}"
+              x-data="{ trigger: $el.dataset.trigger }"
+              th:attr="data-trigger=${ruleForm.triggerType != null ? ruleForm.triggerType.name() : 'RELEASE_PUBLISHED'}">
             <div class="grid gap-4 md:grid-cols-3">
                 <label class="form-control"><span class="label-text font-medium">Name</span>
                     <input type="text" th:field="*{name}" maxlength="120" required class="input input-bordered w-full"
@@ -101,7 +122,8 @@
                     <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></span>
                 </label>
                 <label class="form-control"><span class="label-text font-medium">Runs when</span>
-                    <select th:field="*{triggerType}" class="select select-bordered w-full" th:errorclass="select-error">
+                    <select th:field="*{triggerType}" x-model="trigger" class="select select-bordered w-full"
+                            th:errorclass="select-error">
                         <option th:each="trigger : ${triggers}" th:value="${trigger.name()}" th:text="${trigger.label}">Release published</option>
                     </select>
                     <span class="field-error" th:if="${#fields.hasErrors('triggerType')}" th:errors="*{triggerType}"></span>
@@ -113,6 +135,56 @@
                     </select>
                 </label>
             </div>
+
+            <fieldset class="subtle-panel grid gap-3 p-4" x-show="trigger === 'SCHEDULED_CRON'">
+                <legend class="label-text font-medium">Schedule</legend>
+                <p class="text-sm text-slate-600">
+                    A schedule repeats one published release for people who were not watching when it went out. Missed
+                    firings are collapsed into one catch-up run, and only Slack and email actions may be scheduled.
+                </p>
+                <div class="grid gap-3 md:grid-cols-3">
+                    <label class="form-control"><span class="label-text">Release</span>
+                        <select th:field="*{releaseId}" class="select select-bordered select-sm">
+                            <option value="">—</option>
+                            <option th:each="release : ${releases}" th:value="${release.id}"
+                                    th:text="${release.version}">1.4.0</option>
+                        </select>
+                    </label>
+                    <label class="form-control"><span class="label-text">Cron, six fields</span>
+                        <input type="text" th:field="*{cronExpression}" class="input input-bordered input-sm font-mono"
+                               placeholder="0 0 9 * * MON" autocomplete="off" spellcheck="false">
+                    </label>
+                    <label class="form-control"><span class="label-text">Time zone</span>
+                        <input type="text" th:field="*{cronTimeZone}" class="input input-bordered input-sm"
+                               placeholder="Europe/Berlin" autocomplete="off" spellcheck="false">
+                    </label>
+                </div>
+            </fieldset>
+
+            <fieldset class="subtle-panel grid gap-3 p-4" x-show="trigger === 'UPCOMING_RELEASE_REMINDER'">
+                <legend class="label-text font-medium">Reminder</legend>
+                <p class="text-sm text-slate-600">
+                    An approved release with a planned time is announced this many days before it. Moving the release
+                    earns one new reminder. Only Slack and email actions may be scheduled.
+                </p>
+                <label class="form-control max-w-xs"><span class="label-text">Days before</span>
+                    <input type="number" th:field="*{daysBefore}" min="0" max="365"
+                           class="input input-bordered input-sm" placeholder="3">
+                </label>
+            </fieldset>
+
+            <fieldset class="subtle-panel grid gap-3 p-4" x-show="trigger === 'EXTERNAL_WEBHOOK'">
+                <legend class="label-text font-medium">Called by another system</legend>
+                <p class="text-sm text-slate-600">
+                    Saving this rule gives it a path and a signing secret, shown once on the next page. The call names a
+                    published release; who it belongs to comes from this rule alone.
+                </p>
+                <p class="text-sm text-slate-600" th:if="${editing != null and editing.webhookPath != null}">
+                    This rule already answers
+                    <code class="font-mono" th:text="${editing.webhookPath}">/webhooks/automation/…</code>. Saving keeps
+                    both the path and the secret; use <strong>Rotate secret</strong> above to replace the secret alone.
+                </p>
+            </fieldset>
 
             <fieldset class="subtle-panel grid gap-3 p-4">
                 <legend class="label-text font-medium">Actions, in order</legend>
@@ -152,6 +224,24 @@
                 <a class="btn btn-ghost" th:href="@{/automation}" th:if="${editing != null}">Cancel</a>
             </div>
         </form>
+
+        <form class="mt-6 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end" method="post"
+              th:object="${cronPreviewForm}" th:action="@{/automation/cron-preview}">
+            <label class="form-control"><span class="label-text">Try a schedule</span>
+                <input type="text" th:field="*{cronExpression}" class="input input-bordered input-sm font-mono"
+                       placeholder="0 0 9 * * MON" autocomplete="off" spellcheck="false">
+            </label>
+            <label class="form-control"><span class="label-text">In time zone</span>
+                <input type="text" th:field="*{cronTimeZone}" class="input input-bordered input-sm"
+                       placeholder="Europe/Berlin" autocomplete="off" spellcheck="false">
+            </label>
+            <button type="submit" class="btn btn-outline btn-sm">Preview next run</button>
+        </form>
+        <p class="mt-2 text-sm text-slate-600" th:if="${cronPreview != null}">
+            That schedule next runs
+            <time th:datetime="${cronPreview}"
+                  th:text="|${#temporals.format(cronPreview, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">18 Sep 2026, 09:14 UTC</time>.
+        </p>
     </section>
 
     <section class="surface-card mt-6 p-6" id="automation-runs">

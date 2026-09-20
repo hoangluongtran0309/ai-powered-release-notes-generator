@@ -18,6 +18,7 @@ import java.util.UUID;
 public class AutomationSecrets {
 
     private static final String PURPOSE = "automation-action-secret";
+    private static final String WEBHOOK_PURPOSE = "automation-webhook-secret";
     private static final Logger log = LoggerFactory.getLogger(AutomationSecrets.class);
 
     private final CredentialCipher credentialCipher;
@@ -48,6 +49,45 @@ public class AutomationSecrets {
             log.warn("Could not decrypt the secret of automation Action {}.", actionId);
             return null;
         }
+    }
+
+    /**
+     * The secret that proves a call to a Rule's own webhook. It is bound to the Rule
+     * and to the path callers use, so it can never be read as an Action's secret, and
+     * rotating it keeps both.
+     */
+    Secret encryptWebhookSecret(String rawSecret, UUID organizationId, UUID ruleId, UUID webhookId) {
+        CredentialCipher.EncryptedSecret encrypted = credentialCipher.encrypt(
+                rawSecret,
+                webhookAuthenticatedData(organizationId, ruleId, webhookId)
+        );
+        return new Secret(encrypted.nonce(), encrypted.ciphertext());
+    }
+
+    /** A webhook secret that no longer decrypts is treated as missing: no call proves. */
+    String decryptWebhookSecret(Secret secret, UUID organizationId, UUID ruleId, UUID webhookId) {
+        if (secret == null) {
+            return null;
+        }
+        try {
+            return credentialCipher.decrypt(
+                    new CredentialCipher.EncryptedSecret(secret.nonce(), secret.ciphertext()),
+                    webhookAuthenticatedData(organizationId, ruleId, webhookId)
+            );
+        } catch (IllegalStateException exception) {
+            log.warn("Could not decrypt the webhook secret of automation Rule {}.", ruleId);
+            return null;
+        }
+    }
+
+    private static byte[] webhookAuthenticatedData(UUID organizationId, UUID ruleId, UUID webhookId) {
+        return String.join(
+                "\n",
+                organizationId.toString(),
+                ruleId.toString(),
+                webhookId.toString(),
+                WEBHOOK_PURPOSE
+        ).getBytes(StandardCharsets.UTF_8);
     }
 
     private static byte[] authenticatedData(UUID organizationId, UUID ruleId, UUID actionId, ActionType actionType) {
