@@ -4,8 +4,6 @@ import com.samskivert.mustache.Escapers;
 import com.samskivert.mustache.Mustache;
 import com.samskivert.mustache.MustacheException;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * An audience's Mustache template, which renders one change as Markdown. Rendering is
@@ -22,13 +20,68 @@ public final class AudienceTemplate {
             .strictSections(true)
             .emptyStringIsFalse(true)
             .withEscaper(Escapers.NONE);
-    // One character class rather than two runs of whitespace around an optional sigil:
-    // with two, a long run of spaces can be split between them in many ways and the
-    // scan costs time proportional to the square of the template's length.
-    private static final Pattern NARRATIVES_PATH = Pattern.compile("\\{\\{[\\s&{]*narratives\\s*\\.");
+    private static final String NARRATIVES = "narratives";
     private static final int MESSAGE_LIMIT = 300;
 
     private AudienceTemplate() {
+    }
+
+    /**
+     * Whether the template reaches for another audience's narrative — {{narratives.x}}
+     * in any of its Mustache spellings, with or without the {@code &} or the third
+     * brace, and with spaces anywhere inside the tag.
+     *
+     * <p>It is a walk rather than a pattern. An expression that has to allow a run of
+     * braces and spaces before the word is retried from every brace in that run, so a
+     * template made of nothing else would cost time in proportion to the square of its
+     * length. Looking for the word first, and only then reading outwards from it, costs
+     * one pass and a little more.
+     */
+    private static boolean namesAnotherAudience(String body) {
+        for (int at = body.indexOf(NARRATIVES); at >= 0; at = body.indexOf(NARRATIVES, at + 1)) {
+            if (opensATag(body, at) && startsAPath(body, at + NARRATIVES.length())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a Mustache tag opens just before here: two braces, then spaces, then at
+     * most one {@code &} or third brace, then spaces. The sigil is optional in both
+     * directions — in {@code {{narratives.x}}} the brace before the word is the tag's
+     * own, and in {@code {{{narratives.x}}} it is the sigil — so both readings are tried.
+     */
+    private static boolean opensATag(String body, int before) {
+        int at = skipSpacesBack(body, before);
+        if (twoBracesBefore(body, at)) {
+            return true;
+        }
+        if (at > 0 && (body.charAt(at - 1) == '&' || body.charAt(at - 1) == '{')) {
+            return twoBracesBefore(body, skipSpacesBack(body, at - 1));
+        }
+        return false;
+    }
+
+    private static boolean twoBracesBefore(String body, int at) {
+        return at >= 2 && body.charAt(at - 1) == '{' && body.charAt(at - 2) == '{';
+    }
+
+    /** Whether a dot, and so a path into the narratives of every audience, comes next. */
+    private static boolean startsAPath(String body, int from) {
+        int at = from;
+        while (at < body.length() && Character.isWhitespace(body.charAt(at))) {
+            at++;
+        }
+        return at < body.length() && body.charAt(at) == '.';
+    }
+
+    private static int skipSpacesBack(String body, int from) {
+        int at = from;
+        while (at > 0 && Character.isWhitespace(body.charAt(at - 1))) {
+            at--;
+        }
+        return at;
     }
 
     /**
@@ -45,8 +98,7 @@ public final class AudienceTemplate {
                     "A template must not exceed " + MAX_LENGTH + " characters."
             );
         }
-        Matcher narratives = NARRATIVES_PATH.matcher(body);
-        if (narratives.find()) {
+        if (namesAnotherAudience(body)) {
             throw new InvalidAudienceTemplateException(
                     InvalidAudienceTemplateException.NARRATIVES_PATH,
                     "Use {{narrative}}. Each audience gets its own narrative, so a template never names an audience."

@@ -507,14 +507,15 @@ version has been released.
 
 ### Security
 
-- Three regular expressions that read a person's input now run in time
-  proportional to its length rather than to its square, which is what CodeQL's
-  `java/polynomial-redos` pointed at: an audience template is scanned for another
-  audience's narrative with one character class instead of two runs of whitespace
-  around an optional sigil, and a GitLab instance or Jira site address loses its
-  trailing slashes by walking the string rather than matching an anchored
-  pattern. All three inputs were already length-capped and administrator-only, so
-  nothing was exploitable; the code is simply faster and plainer.
+- Three places that read a person's input now do so in time proportional to its
+  length rather than to its square, which is what CodeQL's `java/polynomial-redos`
+  pointed at. An audience template is searched for another audience's narrative by
+  looking for the word and reading outwards from it, instead of by a pattern that
+  had to allow a run of braces and spaces in front and was therefore retried at
+  every brace; a GitLab instance or Jira site address loses its trailing slashes
+  by walking back from the end instead of matching an anchored pattern. All three
+  inputs were already length-capped and administrator-only, so nothing was
+  exploitable; the code is simply faster and plainer.
 
 - CSRF protection is no longer disabled anywhere (ADR-0023). The webhook chain
   names its exemption instead — `ignoringRequestMatchers("/webhooks/**")` — which

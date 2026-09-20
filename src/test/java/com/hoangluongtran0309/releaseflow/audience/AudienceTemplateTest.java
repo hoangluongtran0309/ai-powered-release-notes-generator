@@ -86,10 +86,19 @@ class AudienceTemplateTest {
 
         assertThatCode(() -> AudienceTemplate.validate(braces)).doesNotThrowAnyException();
 
-        // A narrative named after all that punctuation is still caught.
+        // A narrative named after all that punctuation is still caught, whichever
+        // spelling of the tag it hides behind.
         assertThatThrownBy(() -> AudienceTemplate.validate("{{ {  narratives.operator }}"))
                 .isInstanceOf(InvalidAudienceTemplateException.class)
                 .extracting("code").isEqualTo(InvalidAudienceTemplateException.NARRATIVES_PATH);
+        assertThatThrownBy(() -> AudienceTemplate.validate("{{  &  narratives  . x }}"))
+                .isInstanceOf(InvalidAudienceTemplateException.class)
+                .extracting("code").isEqualTo(InvalidAudienceTemplateException.NARRATIVES_PATH);
+
+        // The word on its own is not a path into another audience, and neither is one
+        // that no tag opens.
+        assertThatCode(() -> AudienceTemplate.validate("These are the narratives. {{whatChanged}}"))
+                .doesNotThrowAnyException();
 
         // And the audience's own narrative is not what the rule is about.
         assertThatCode(() -> AudienceTemplate.validate("- {{whatChanged}}{{#narrative}} — {{.}}{{/narrative}}"))
