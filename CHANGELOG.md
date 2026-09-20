@@ -507,6 +507,18 @@ version has been released.
 
 ### Security
 
+- CSRF protection is no longer disabled anywhere (ADR-0023). The webhook chain
+  names its exemption instead — `ignoringRequestMatchers("/webhooks/**")` — which
+  is what CodeQL's `java/spring-disabled-csrf-protection` was pointing at. It was
+  not exploitable: those endpoints read no cookie and prove themselves with an
+  HMAC over the request, so a cross-site call has no authority to borrow. But
+  `disable()` excused more than was meant, and would have excused whatever was
+  added beside them later.
+- The webhook chain permits only the five endpoints that exist — `POST` for the
+  GitHub, GitLab, and Linear deliveries and the automation trigger, and the
+  signed `GET` that reads a run back. Anything else beneath `/webhooks/` is
+  denied rather than public by default.
+
 - The GitHub and DeepL clients now refuse redirects explicitly, as the GitLab,
   Jira, and Linear clients already did. A Slack webhook URL is checked against a
   deployment allowlist when it is stored and again before every delivery, so a
