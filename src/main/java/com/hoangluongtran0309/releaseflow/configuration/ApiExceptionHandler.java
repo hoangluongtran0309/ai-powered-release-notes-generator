@@ -22,6 +22,7 @@ import com.hoangluongtran0309.releaseflow.automation.AutomationConflictException
 import com.hoangluongtran0309.releaseflow.automation.AutomationRuleApiController;
 import com.hoangluongtran0309.releaseflow.automation.AutomationRuleNotFoundException;
 import com.hoangluongtran0309.releaseflow.automation.AutomationRunApiController;
+import com.hoangluongtran0309.releaseflow.automation.AutomationWebhookController;
 import com.hoangluongtran0309.releaseflow.automation.AutomationRunNotFoundException;
 import com.hoangluongtran0309.releaseflow.automation.InvalidAutomationRunPageException;
 import com.hoangluongtran0309.releaseflow.category.CategoryApiController;
@@ -107,7 +108,8 @@ import java.util.Map;
         ReleaseLanguageApiController.class,
         SourceImportApiController.class,
         AutomationRuleApiController.class,
-        AutomationRunApiController.class
+        AutomationRunApiController.class,
+        AutomationWebhookController.class
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {

@@ -77,6 +77,41 @@ public class AutomationActionInvalidException extends RuntimeException {
         );
     }
 
+    static AutomationActionInvalidException cronInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_cron_invalid",
+                "A schedule needs a six-field cron expression, such as 0 0 9 * * MON."
+        );
+    }
+
+    static AutomationActionInvalidException cronTimeZoneInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_cron_time_zone_invalid",
+                "A schedule needs an IANA time zone, such as Europe/Berlin."
+        );
+    }
+
+    static AutomationActionInvalidException cronHasNoFutureOccurrence() {
+        return new AutomationActionInvalidException(
+                "automation_cron_no_occurrence",
+                "This schedule never comes round again."
+        );
+    }
+
+    static AutomationActionInvalidException cronReleaseRequired() {
+        return new AutomationActionInvalidException(
+                "automation_cron_release_required",
+                "A scheduled rule needs the published release it repeats."
+        );
+    }
+
+    static AutomationActionInvalidException reminderDaysInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_reminder_days_invalid",
+                "A reminder is sent between 0 and 365 days before the planned release."
+        );
+    }
+
     static AutomationActionInvalidException requestIdRequired() {
         return new AutomationActionInvalidException(
                 "automation_request_id_required",

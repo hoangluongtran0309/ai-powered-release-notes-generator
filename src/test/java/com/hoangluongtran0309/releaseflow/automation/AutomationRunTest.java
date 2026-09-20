@@ -110,6 +110,7 @@ class AutomationRunTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 "Mai Tran",
+                null,
                 NOW
         );
     }

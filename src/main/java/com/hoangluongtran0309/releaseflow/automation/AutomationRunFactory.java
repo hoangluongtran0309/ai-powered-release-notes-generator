@@ -54,7 +54,8 @@ class AutomationRunFactory {
             TriggerType trigger,
             UUID requestId,
             UUID initiatedBy,
-            String initiatorName
+            String initiatorName,
+            Instant scheduledFor
     ) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         AutomationRun run = runRepository.saveAndFlush(new AutomationRun(
@@ -67,6 +68,7 @@ class AutomationRunFactory {
                 requestId,
                 initiatedBy,
                 initiatorName,
+                scheduledFor,
                 now
         ));
         List<AutomationRuleAction> actions = ruleActionRepository.findAllByRuleIdOrderByPositionAsc(rule.getId());

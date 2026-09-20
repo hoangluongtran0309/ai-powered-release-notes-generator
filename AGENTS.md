@@ -9,8 +9,9 @@ classification with neutral summaries and an Organization output language,
 human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
-source, GitLab source, Linear source, Jira source, and automation slices: one
-Spring Boot application, PostgreSQL/Flyway V1-V22,
+source, GitLab source, Linear source, Jira source, automation, and automation
+trigger slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V23,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -35,11 +36,14 @@ and AI narratives, one release note per audience and language written at
 approval, translated by an optional DeepL queue, and frozen at publication,
 administrator-written automation rules that deliver a published note to a GitHub
 Release, a Slack channel, or a list of addresses through a durable run its worker
-walks one action at a time,
+walks one action at a time, fired by a publication, a person, a cron schedule in
+an IANA time zone, the approach of a planned release, or another system's signed
+call,
 REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
-Read `README.md`, `docs/architecture.md`, and
-`docs/implementation-status.md` before changing behavior.
+The decisions behind all of it are ADR-0001 through ADR-0021. Read `README.md`,
+`docs/architecture.md`, and `docs/implementation-status.md` before changing
+behavior.
 
 ## Working rules
 
@@ -146,6 +150,20 @@ Read `README.md`, `docs/architecture.md`, and
   every note is ready, and translation retries stay bounded.
 - Tenant-owned repository lookups include both resource ID and the current
   principal's Organization ID.
+- A rule ReleaseFlow sets off itself may only tell people something: a cron or
+  reminder rule takes Slack and email actions alone. A cron rule repeats one
+  published release and takes that release's project. Its next firing is booked
+  from the present, never from the occurrence just handled, so downtime owes one
+  catch-up run. A rule that is disabled or archived has no booking and is never
+  claimed. A reminder answers the planned time less its notice, and that moment
+  is its identity, so rescheduling a release earns one more reminder and
+  rescanning earns none.
+- A call from outside is proven by a signature over its timestamp, delivery,
+  method, path, and body digest, keyed by the rule's own secret, inside a bounded
+  clock skew and a body limit checked before any rule is looked up. The
+  Organization comes from the rule; a body names only a release. Every refusal
+  looks the same. A webhook secret is bound to its rule and path, shown once, and
+  rotating it keeps the path and stops the old secret at once.
 - Publishing a release records that it happened and nothing else. Automation runs
   are created after that transaction commits, from the outbox row the publication
   left, so no rule can hold up or undo a release. A rule with nothing to deliver

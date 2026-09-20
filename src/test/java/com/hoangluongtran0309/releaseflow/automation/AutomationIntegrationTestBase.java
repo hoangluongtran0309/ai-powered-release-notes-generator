@@ -23,6 +23,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -87,7 +94,7 @@ abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
         SLACK.reset();
         SMTP.reset();
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
-        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs,"
+        jdbcTemplate.execute("TRUNCATE automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
                 + " release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
         jdbcTemplate.update("DELETE FROM automation_rule_actions");
         jdbcTemplate.update("DELETE FROM automation_rules");
@@ -134,11 +141,15 @@ abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
     }
 
     protected UUID createProject(Owner owner) throws Exception {
+        return createProject(owner, "ReleaseFlow");
+    }
+
+    protected UUID createProject(Owner owner, String name) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/projects")
                         .session(owner.session())
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"ReleaseFlow\"}"))
+                        .content("{\"name\":\"%s\"}".formatted(name)))
                 .andExpect(status().isCreated())
                 .andReturn();
         return UUID.fromString(JsonPath.read(result.getResponse().getContentAsString(), "$.id"));
@@ -261,17 +272,99 @@ abstract class AutomationIntegrationTestBase extends PostgreSqlIntegrationTest {
 
     /** A rule body with one Slack action for an audience, in the given language. */
     protected String slackRule(String name, String trigger, UUID projectId, UUID audienceId, String language) {
+        return slackRule(name, trigger, projectId, audienceId, language, "");
+    }
+
+    /** The same, plus whatever the trigger itself needs, as further JSON fields. */
+    protected String slackRule(
+            String name,
+            String trigger,
+            UUID projectId,
+            UUID audienceId,
+            String language,
+            String triggerFields
+    ) {
         return """
-                {"name":"%s","triggerType":"%s","projectId":%s,
+                {"name":"%s","triggerType":"%s","projectId":%s,%s
                  "actions":[{"actionType":"SLACK","audienceId":"%s","language":"%s","secret":"%s"}]}
                 """.formatted(
                 name,
                 trigger,
                 projectId == null ? "null" : "\"" + projectId + "\"",
+                triggerFields,
                 audienceId,
                 language,
                 slackWebhook()
         );
+    }
+
+    /** A schedule that repeats one published release. */
+    protected String cronRule(
+            String name,
+            UUID projectId,
+            UUID audienceId,
+            UUID releaseId,
+            String expression,
+            String timeZone
+    ) {
+        return slackRule(name, "SCHEDULED_CRON", projectId, audienceId, "en",
+                """
+                 "releaseId":"%s","cronExpression":"%s","cronTimeZone":"%s","""
+                        .formatted(releaseId, expression, timeZone));
+    }
+
+    protected String reminderRule(String name, UUID projectId, UUID audienceId, int daysBefore) {
+        return slackRule(name, "UPCOMING_RELEASE_REMINDER", projectId, audienceId, "en",
+                "\n \"daysBefore\":%d,".formatted(daysBefore));
+    }
+
+    protected String webhookRule(String name, UUID projectId, UUID audienceId) {
+        return slackRule(name, "EXTERNAL_WEBHOOK", projectId, audienceId, "en", "");
+    }
+
+    /** Makes a schedule due, the way time passing would. */
+    protected void setNextFireAt(UUID ruleId, Instant nextFireAt) {
+        jdbcTemplate.update(
+                "UPDATE automation_rules SET next_fire_at = ? WHERE id = ?", Timestamp.from(nextFireAt), ruleId);
+    }
+
+    protected Instant nextFireAt(UUID ruleId) {
+        Timestamp booked = jdbcTemplate.queryForObject(
+                "SELECT next_fire_at FROM automation_rules WHERE id = ?", Timestamp.class, ruleId);
+        return booked == null ? null : booked.toInstant();
+    }
+
+    /** Plans an approved release, which is what a reminder rule watches for. */
+    protected void schedule(Owner owner, UUID projectId, UUID releaseId, Instant plannedReleaseAt) throws Exception {
+        mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}/schedule", projectId, releaseId)
+                        .session(owner.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plannedReleaseAt\":\"%s\"}".formatted(plannedReleaseAt.toString())))
+                .andExpect(status().isOk());
+    }
+
+    /** Signs a call exactly as a caller of an automation webhook must. */
+    protected static String sign(
+            String secret,
+            String timestamp,
+            String deliveryId,
+            String method,
+            String path,
+            String body
+    ) throws Exception {
+        MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+        String canonical = String.join(
+                "\n",
+                timestamp,
+                deliveryId,
+                method,
+                path,
+                HexFormat.of().formatHex(sha256.digest(body.getBytes(StandardCharsets.UTF_8)))
+        );
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        return "sha256=" + HexFormat.of().formatHex(mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8)));
     }
 
     protected ResultActions enable(Owner owner, UUID ruleId) throws Exception {

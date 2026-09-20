@@ -220,9 +220,33 @@
   - an administrator-only `/api/automation/**` and `/automation`, with the run
     history as the first paged list in ReleaseFlow.
 
+- Scheduled, reminding, and called-from-outside automation rules (ADR-0021),
+  with Flyway `V23`:
+  - a six-field cron schedule in an IANA time zone that repeats one published
+    release, taking that release's own project, with the next firing always
+    booked from the present so downtime owes one catch-up run and not a queue of
+    them, and a preview of the next firing before a rule keeps the schedule;
+  - a reminder 0 to 365 days before an approved release's planned time, whose
+    identity is that moment, so rescheduling a release earns exactly one more
+    reminder and scanning the same state again earns none;
+  - both restricted to Slack and email actions, because nobody is watching when
+    a rule ReleaseFlow set off goes off;
+  - a trigger worker that only writes runs, claiming a due schedule with
+    `FOR UPDATE SKIP LOCKED`, and a rule that is off or archived that can never
+    be claimed;
+  - a signed `POST /webhooks/automation/{webhookId}`, answering `202` with the
+    run and a signed path to read it back: HMAC-SHA256 over the timestamp, the
+    delivery, the method, the path, and the body's digest, compared in constant
+    time within five minutes of skew, with the Organization taken from the rule
+    and a body of at most 64 KiB;
+  - a delivery identifier that makes a retried call the same run;
+  - a webhook secret bound to its rule and path, shown once when the rule is
+    written and once more when it is rotated, which keeps the path and stops the
+    old secret at once.
+
 ## In progress
 
-- Nothing. The automation slice is complete and awaiting review.
+- Nothing. The trigger slice is complete and awaiting review.
 
 ## Planned
 
@@ -243,8 +267,7 @@ deliberately deferred list below, one reviewed slice at a time.
   secret or token rotation reminders.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
-- Scheduled, reminder, and incoming-webhook automation triggers, automation
-  actions other than GitHub Releases, Slack, and email, distribution
+- Automation actions other than GitHub Releases, Slack, and email, distribution
   integrations, and a public changelog.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
   tests, production observability (Actuator, metrics, Prometheus, Grafana),
@@ -253,5 +276,5 @@ deliberately deferred list below, one reviewed slice at a time.
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
 - Review history, comments, reviewer roles, and bulk review.
-- Item reordering, and reminders or automation for planned release times.
+- Item reordering.
 - Unpublishing or correcting published release notes.

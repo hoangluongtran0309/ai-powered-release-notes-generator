@@ -395,6 +395,37 @@ version has been released.
   the publication outbox, and Testcontainers coverage of the action order,
   concurrent claims, an expired lease, retries and cancellation, idempotency,
   stubbed GitHub, Slack, and SMTP servers, and the new constraints.
+- Three more ways a rule fires (ADR-0021): a six-field cron schedule in an IANA
+  time zone that repeats one published release, a reminder a chosen 0 to 365
+  days before an approved release's planned time, and a signed call from
+  another system.
+- `AutomationTriggerWorker`, which only writes runs: it claims a due schedule
+  with `FOR UPDATE SKIP LOCKED`, books the next firing from the present so
+  downtime costs one catch-up run rather than a queue of them, and answers a
+  reminder's moment — the planned time less its notice — once per rule, release,
+  and moment, so rescheduling a release earns exactly one more reminder.
+- A schedule takes its project from the release it repeats, and a scheduled or
+  reminding rule accepts Slack and email actions only.
+- `POST /webhooks/automation/{webhookId}` answering `202` with
+  `{runId, status, statusPath}`, and a signed `GET …/runs/{runId}`: HMAC-SHA256
+  over the timestamp, delivery UUID, method, path, and body digest, compared in
+  constant time within five minutes of skew, with the Organization taken from
+  the rule and never from the body. The delivery UUID makes a retried call the
+  same run.
+- A rule's webhook path and 256-bit secret, shown once on creation and once
+  again from `POST /api/automation/rules/{id}/webhook-secret/rotate`, which
+  keeps the path and stops the old secret at once, plus
+  `POST /api/automation/rules/cron-preview` and the same button on the page.
+- `RELEASEFLOW_AUTOMATION_TRIGGER_DELAY`,
+  `RELEASEFLOW_AUTOMATION_TRIGGER_BATCH_SIZE`,
+  `RELEASEFLOW_AUTOMATION_REMINDER_LOOKAHEAD`,
+  `RELEASEFLOW_AUTOMATION_WEBHOOK_CLOCK_SKEW`, and
+  `RELEASEFLOW_AUTOMATION_WEBHOOK_MAX_BODY_BYTES`.
+- Flyway migration `V23` for the trigger columns, a run's occurrence, and their
+  constraints, with Testcontainers coverage of a daylight-saving change,
+  collapsed missed firings, concurrent trigger workers, a rescheduled release,
+  signatures, clock skew, replayed deliveries, secret rotation, and tenant
+  isolation.
 
 ### Changed
 

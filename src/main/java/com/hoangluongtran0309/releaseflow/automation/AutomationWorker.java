@@ -190,7 +190,7 @@ class AutomationWorker {
                             rule.getId(), claim.releaseId(), TriggerType.RELEASE_PUBLISHED)) {
                 continue;
             }
-            runFactory.create(rule, release.get(), TriggerType.RELEASE_PUBLISHED, null, null, null);
+            runFactory.create(rule, release.get(), TriggerType.RELEASE_PUBLISHED, null, null, null, null);
         }
         completeOutbox(claim, job -> job.succeed(now()));
     }

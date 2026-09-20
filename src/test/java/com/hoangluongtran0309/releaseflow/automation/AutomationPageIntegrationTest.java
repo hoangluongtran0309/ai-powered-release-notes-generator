@@ -152,6 +152,91 @@ class AutomationPageIntegrationTest extends AutomationIntegrationTestBase {
     }
 
     @Test
+    void thePageWritesAScheduleAndSaysWhenItWouldRun() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+        UUID releaseId = publishedRelease(owner, projectId, "1.4.0");
+
+        mockMvc.perform(post("/automation/cron-preview").session(owner.session()).with(csrf())
+                        .param("cronExpression", "0 0 9 * * MON")
+                        .param("cronTimeZone", "Europe/Berlin"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("That schedule next runs")));
+
+        mockMvc.perform(post("/automation").session(owner.session()).with(csrf())
+                        .param("name", "Weekly digest")
+                        .param("triggerType", "SCHEDULED_CRON")
+                        .param("projectId", projectId.toString())
+                        .param("releaseId", releaseId.toString())
+                        .param("cronExpression", "0 0 9 * * MON")
+                        .param("cronTimeZone", "Europe/Berlin")
+                        .param("actions[0].actionType", "SLACK")
+                        .param("actions[0].audienceId", endUser.toString())
+                        .param("actions[0].language", "en")
+                        .param("actions[0].secret", slackWebhook()))
+                .andExpect(redirectedUrl("/automation?saved"));
+
+        UUID ruleId = UUID.fromString(jdbcTemplate.queryForObject(
+                "SELECT id::text FROM automation_rules WHERE name = 'Weekly digest'", String.class));
+        mockMvc.perform(post("/automation/{ruleId}/enable", ruleId).session(owner.session()).with(csrf()))
+                .andExpect(redirectedUrl("/automation?enabled"));
+        mockMvc.perform(get("/automation").session(owner.session()))
+                .andExpect(content().string(containsString("0 0 9 * * MON · Europe/Berlin")))
+                .andExpect(content().string(containsString("Next")));
+
+        // A reminder is written the same way, and says how much notice it gives.
+        mockMvc.perform(post("/automation").session(owner.session()).with(csrf())
+                        .param("name", "Warn the team")
+                        .param("triggerType", "UPCOMING_RELEASE_REMINDER")
+                        .param("daysBefore", "3")
+                        .param("actions[0].actionType", "SLACK")
+                        .param("actions[0].audienceId", endUser.toString())
+                        .param("actions[0].language", "en")
+                        .param("actions[0].secret", slackWebhook()))
+                .andExpect(redirectedUrl("/automation?saved"));
+        mockMvc.perform(get("/automation").session(owner.session()))
+                .andExpect(content().string(containsString("3 day(s) before")));
+    }
+
+    @Test
+    void thePageShowsAWebhookSecretOnceAndRotatesIt() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+
+        String revealed = mockMvc.perform(post("/automation").session(owner.session()).with(csrf())
+                        .param("name", "Called from outside")
+                        .param("triggerType", "EXTERNAL_WEBHOOK")
+                        .param("projectId", projectId.toString())
+                        .param("actions[0].actionType", "SLACK")
+                        .param("actions[0].audienceId", endUser.toString())
+                        .param("actions[0].language", "en")
+                        .param("actions[0].secret", slackWebhook()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Save this webhook secret now")))
+                .andReturn().getResponse().getContentAsString();
+
+        UUID ruleId = UUID.fromString(jdbcTemplate.queryForObject(
+                "SELECT id::text FROM automation_rules WHERE name = 'Called from outside'", String.class));
+        String path = jdbcTemplate.queryForObject(
+                "SELECT '/webhooks/automation/' || webhook_id FROM automation_rules WHERE id = ?",
+                String.class, ruleId);
+        assertThat(revealed).contains(path);
+
+        // The list shows the path, never the secret.
+        mockMvc.perform(get("/automation").session(owner.session()))
+                .andExpect(content().string(containsString(path)))
+                .andExpect(content().string(containsString("Rotate secret")));
+
+        mockMvc.perform(post("/automation/{ruleId}/webhook-secret/rotate", ruleId)
+                        .session(owner.session()).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Save this webhook secret now")))
+                .andExpect(content().string(containsString(path)));
+    }
+
+    @Test
     void membersNeverSeeAutomation() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
         var memberSession = member(owner.organizationId(), "member@example.com");

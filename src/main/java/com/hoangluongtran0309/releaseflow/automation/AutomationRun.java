@@ -55,6 +55,9 @@ class AutomationRun {
     @Column(name = "initiator_name", length = 120, updatable = false)
     private String initiatorName;
 
+    @Column(name = "scheduled_for", updatable = false)
+    private Instant scheduledFor;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ExecutionStatus status;
@@ -84,6 +87,7 @@ class AutomationRun {
             UUID requestId,
             UUID initiatedBy,
             String initiatorName,
+            Instant scheduledFor,
             Instant createdAt
     ) {
         this.id = id;
@@ -97,6 +101,7 @@ class AutomationRun {
         this.requestId = requestId;
         this.initiatedBy = initiatedBy;
         this.initiatorName = initiatorName;
+        this.scheduledFor = scheduledFor;
         this.status = ExecutionStatus.PENDING;
         this.createdAt = createdAt;
     }
@@ -182,6 +187,11 @@ class AutomationRun {
 
     String getInitiatorName() {
         return initiatorName;
+    }
+
+    /** The occurrence this Run answers, for a Rule ReleaseFlow itself set off. */
+    Instant getScheduledFor() {
+        return scheduledFor;
     }
 
     ExecutionStatus getStatus() {

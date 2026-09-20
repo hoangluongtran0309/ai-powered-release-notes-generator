@@ -14,6 +14,6 @@ class ReleaseFlowApplicationTest extends PostgreSqlIntegrationTest {
 
     @Test
     void applicationContextStarts() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("22");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("23");
     }
 }

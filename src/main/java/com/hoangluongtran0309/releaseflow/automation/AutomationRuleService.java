@@ -7,15 +7,19 @@ import com.hoangluongtran0309.releaseflow.audience.ReleaseLanguageService;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.SourceAccess;
+import com.hoangluongtran0309.releaseflow.release.ReleaseAccess;
+import com.hoangluongtran0309.releaseflow.release.ReleaseStatus;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -37,6 +41,9 @@ import java.util.stream.Collectors;
 public class AutomationRuleService {
 
     private static final String NAME_CONSTRAINT = "automation_rules_name_unique";
+    private static final String WEBHOOK_PATH_PREFIX = "/webhooks/automation/";
+    private static final int WEBHOOK_SECRET_BYTES = 32;
+    private static final int REMINDER_MAX_DAYS = 365;
 
     private final AutomationRuleRepository ruleRepository;
     private final AutomationRuleActionRepository actionRepository;
@@ -47,7 +54,9 @@ public class AutomationRuleService {
     private final ReleaseLanguageService releaseLanguageService;
     private final ProjectService projectService;
     private final SourceAccess sourceAccess;
+    private final ReleaseAccess releaseAccess;
     private final Map<ActionType, RuleActionExecutor> executors;
+    private final SecureRandom secureRandom;
     private final Clock clock;
 
     AutomationRuleService(
@@ -60,6 +69,7 @@ public class AutomationRuleService {
             ReleaseLanguageService releaseLanguageService,
             ProjectService projectService,
             SourceAccess sourceAccess,
+            ReleaseAccess releaseAccess,
             List<RuleActionExecutor> executors,
             Clock clock
     ) {
@@ -72,6 +82,8 @@ public class AutomationRuleService {
         this.releaseLanguageService = releaseLanguageService;
         this.projectService = projectService;
         this.sourceAccess = sourceAccess;
+        this.releaseAccess = releaseAccess;
+        this.secureRandom = new SecureRandom();
         this.executors = executors.stream().collect(Collectors.toMap(
                 RuleActionExecutor::actionType,
                 Function.identity(),
@@ -111,6 +123,10 @@ public class AutomationRuleService {
         );
     }
 
+    /**
+     * Writes a rule. A rule called by another system is given its path and its secret
+     * here, and the secret is in the answer to this call and nowhere else afterwards.
+     */
     @Transactional
     public AutomationRuleView create(UUID organizationId, AutomationRuleRequest request) {
         Instant now = now();
@@ -123,26 +139,126 @@ public class AutomationRuleService {
                 request.getProjectId(),
                 now
         );
+        String rawWebhookSecret = configureTrigger(rule, request, null, null);
         save(rule);
         replaceActions(rule, request);
-        return get(organizationId, rule.getId());
+        return reveal(get(organizationId, rule.getId()), rawWebhookSecret);
     }
 
     @Transactional
     public AutomationRuleView update(UUID organizationId, UUID ruleId, AutomationRuleRequest request) {
         AutomationRule rule = find(organizationId, ruleId);
         requireProject(organizationId, request.getProjectId());
+        // A webhook rule that stays one keeps its path and its secret, so the systems
+        // already calling it are not silently cut off by an edit.
+        boolean keepsWebhook = rule.getTriggerType() == TriggerType.EXTERNAL_WEBHOOK
+                && request.getTriggerType() == TriggerType.EXTERNAL_WEBHOOK;
+        UUID keptWebhookId = keepsWebhook ? rule.getWebhookId() : null;
+        AutomationSecrets.Secret keptSecret = keepsWebhook ? rule.getWebhookSecret() : null;
         rule.redefine(request.getName(), request.getTriggerType(), request.getProjectId(), now());
+        String rawWebhookSecret = configureTrigger(rule, request, keptWebhookId, keptSecret);
         save(rule);
         replaceActions(rule, request);
-        return get(organizationId, ruleId);
+        return reveal(get(organizationId, ruleId), rawWebhookSecret);
+    }
+
+    /** The next firing of a schedule, so a person can see what they just wrote. */
+    public Instant previewCron(String expression, String timeZone) {
+        return CronSchedule.of(expression, timeZone).nextAfter(now());
     }
 
     /**
-     * Checks, in order, that the rule's project is the Organization's, that every
-     * audience and language it writes for exist, that a GitHub Release action has one
-     * repository to publish to, that this deployment can carry the action out at all,
-     * and that its configuration and secret are usable. Only then does the rule fire.
+     * A new secret for the same webhook path. The old one stops proving anything the
+     * moment this returns, and the new one is in this answer only.
+     */
+    @Transactional
+    public AutomationRuleView rotateWebhookSecret(UUID organizationId, UUID ruleId) {
+        AutomationRule rule = find(organizationId, ruleId);
+        if (rule.getTriggerType() != TriggerType.EXTERNAL_WEBHOOK || rule.getWebhookId() == null) {
+            throw AutomationConflictException.webhookRuleRequired();
+        }
+        String rawSecret = generateWebhookSecret();
+        rule.rotateWebhookSecret(
+                secrets.encryptWebhookSecret(rawSecret, organizationId, rule.getId(), rule.getWebhookId()),
+                now()
+        );
+        save(rule);
+        return reveal(get(organizationId, ruleId), rawSecret);
+    }
+
+    /**
+     * Remembers what this trigger, and only this trigger, needs: the published release
+     * a schedule repeats and the schedule itself, how many days before a planned release
+     * a reminder goes out, or the path and secret another system calls with. Changing
+     * the trigger forgets the rest.
+     *
+     * @return the raw webhook secret when one was just minted, otherwise null
+     */
+    private String configureTrigger(
+            AutomationRule rule,
+            AutomationRuleRequest request,
+            UUID keptWebhookId,
+            AutomationSecrets.Secret keptSecret
+    ) {
+        Instant now = now();
+        switch (request.getTriggerType()) {
+            case SCHEDULED_CRON -> {
+                ReleaseAccess.ReleaseSnapshot release = releaseAccess
+                        .find(rule.getOrganizationId(), request.getReleaseId())
+                        .orElseThrow(AutomationActionInvalidException::cronReleaseRequired);
+                if (release.status() != ReleaseStatus.PUBLISHED) {
+                    throw AutomationConflictException.releaseNotPublished();
+                }
+                CronSchedule schedule = CronSchedule.of(request.getCronExpression(), request.getCronTimeZone());
+                // Proves the schedule comes round at all before it is ever stored.
+                Instant next = schedule.nextAfter(now);
+                // The project of a scheduled rule is the release's own; it is not a
+                // separate choice, because the rule works on that one release.
+                rule.configureCron(
+                        release.releaseId(),
+                        release.projectId(),
+                        schedule.expressionText(),
+                        schedule.zoneText(),
+                        now
+                );
+                if (rule.isEnabled()) {
+                    rule.advanceNextFireAt(next, now);
+                }
+            }
+            case UPCOMING_RELEASE_REMINDER -> {
+                Integer daysBefore = request.getDaysBefore();
+                if (daysBefore == null || daysBefore < 0 || daysBefore > REMINDER_MAX_DAYS) {
+                    throw AutomationActionInvalidException.reminderDaysInvalid();
+                }
+                rule.configureReminder(daysBefore, now);
+            }
+            case EXTERNAL_WEBHOOK -> {
+                if (keptWebhookId != null && keptSecret != null) {
+                    rule.configureWebhook(keptWebhookId, keptSecret, now);
+                    return null;
+                }
+                UUID webhookId = UUID.randomUUID();
+                String rawSecret = generateWebhookSecret();
+                rule.configureWebhook(
+                        webhookId,
+                        secrets.encryptWebhookSecret(
+                                rawSecret, rule.getOrganizationId(), rule.getId(), webhookId),
+                        now
+                );
+                return rawSecret;
+            }
+            default -> rule.configureWithoutParameters(now);
+        }
+        return null;
+    }
+
+    /**
+     * Checks, in order, that the rule's project is the Organization's, that its trigger
+     * can promise what it needs, that every audience and language it writes for exist,
+     * that a GitHub Release action has one repository to publish to, that this
+     * deployment can carry the action out at all, and that its configuration and secret
+     * are usable. Only then does the rule fire, and a schedule is booked its first
+     * firing.
      */
     @Transactional
     public AutomationRuleView enable(UUID organizationId, UUID ruleId) {
@@ -152,6 +268,7 @@ public class AutomationRuleService {
         if (actions.isEmpty()) {
             throw AutomationActionInvalidException.actionRequired();
         }
+        CronSchedule schedule = validateTrigger(rule, actions);
         List<String> languages = releaseLanguageService.targetLanguages(organizationId);
         for (AutomationRuleAction action : actions) {
             requireAudience(organizationId, action.getAudienceId());
@@ -164,9 +281,62 @@ public class AutomationRuleService {
             executor.validateAvailability();
             executor.validate(action.getConfiguration(), decrypt(rule, action));
         }
-        rule.enable(now());
+        Instant now = now();
+        rule.enable(now);
+        if (schedule != null) {
+            rule.advanceNextFireAt(schedule.nextAfter(now), now);
+        }
         save(rule);
         return get(organizationId, ruleId);
+    }
+
+    /**
+     * What a trigger must be able to promise before its rule fires. A rule ReleaseFlow
+     * sets off itself may only tell people something: nobody is watching a schedule go
+     * off, so it never publishes a GitHub Release.
+     *
+     * @return the schedule to book the first firing from, for a cron rule
+     */
+    private CronSchedule validateTrigger(AutomationRule rule, List<AutomationRuleAction> actions) {
+        if (rule.getTriggerType().isScheduled() && actions.stream().anyMatch(action ->
+                action.getActionType() != ActionType.SLACK && action.getActionType() != ActionType.EMAIL)) {
+            throw AutomationConflictException.scheduledActionUnsupported();
+        }
+        switch (rule.getTriggerType()) {
+            case SCHEDULED_CRON -> {
+                ReleaseAccess.ReleaseSnapshot release = releaseAccess
+                        .find(rule.getOrganizationId(), rule.getTriggerReleaseId())
+                        .orElseThrow(AutomationActionInvalidException::cronReleaseRequired);
+                if (release.status() != ReleaseStatus.PUBLISHED) {
+                    throw AutomationConflictException.releaseNotPublished();
+                }
+                return CronSchedule.of(rule.getCronExpression(), rule.getCronTimeZone());
+            }
+            case UPCOMING_RELEASE_REMINDER -> {
+                if (rule.getReminderDaysBefore() == null) {
+                    throw AutomationActionInvalidException.reminderDaysInvalid();
+                }
+            }
+            case EXTERNAL_WEBHOOK -> {
+                if (rule.getWebhookId() == null || rule.getWebhookSecret() == null) {
+                    throw AutomationConflictException.webhookRuleRequired();
+                }
+            }
+            default -> {
+                // A published release or a person decides when these fire.
+            }
+        }
+        return null;
+    }
+
+    private String generateWebhookSecret() {
+        byte[] secret = new byte[WEBHOOK_SECRET_BYTES];
+        secureRandom.nextBytes(secret);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
+    }
+
+    private static AutomationRuleView reveal(AutomationRuleView view, String rawSecret) {
+        return rawSecret == null ? view : view.revealing(rawSecret);
     }
 
     @Transactional
@@ -372,6 +542,14 @@ public class AutomationRuleService {
                 rule.getTriggerType(),
                 rule.getProjectId(),
                 rule.getProjectId() == null ? null : projects.get(rule.getProjectId()),
+                rule.getTriggerReleaseId(),
+                rule.getCronExpression(),
+                rule.getCronTimeZone(),
+                rule.getNextFireAt(),
+                rule.getReminderDaysBefore(),
+                rule.getWebhookId() == null ? null : WEBHOOK_PATH_PREFIX + rule.getWebhookId(),
+                rule.getWebhookSecret() != null,
+                null,
                 rule.isEnabled(),
                 rule.getCreatedAt(),
                 rule.getUpdatedAt(),
