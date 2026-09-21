@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.automation;
 
+import com.hoangluongtran0309.releaseflow.support.TeamsStub;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -146,6 +147,33 @@ class AutomationIntegrationTest extends AutomationIntegrationTestBase {
                 "No token", "MANUAL", projectId, endUser, "https://acme.atlassian.net", "42", null))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("automation_confluence_token_required"));
+        createRule(owner, teamsRule("Elsewhere", "MANUAL", projectId, endUser,
+                "https://evil.test/powerautomate/automations/direct/workflows/a/triggers/manual/paths/invoke?sig=a",
+                ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_teams_webhook_invalid"));
+        createRule(owner, teamsRule("Unsigned", "MANUAL", projectId, endUser,
+                "https://contoso.environment.api.powerplatform.com/powerautomate/automations/direct/workflows/a"
+                        + "/triggers/manual/paths/invoke",
+                ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_teams_webhook_invalid"));
+        createRule(owner, teamsRule("No callback", "MANUAL", projectId, endUser, null, ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_teams_webhook_required"));
+        createRule(owner, zendeskRule(
+                "Whole host", "MANUAL", projectId, endUser, "acme.zendesk.com", "42", null, "secret"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_zendesk_subdomain_invalid"));
+        createRule(owner, zendeskRule("No section", "MANUAL", projectId, endUser, "acme", "0", null, "secret"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_zendesk_section_invalid"));
+        createRule(owner, zendeskRule("Named segment", "MANUAL", projectId, endUser, "acme", "42", "vip", "secret"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_zendesk_user_segment_invalid"));
+        createRule(owner, zendeskRule("No secret", "MANUAL", projectId, endUser, "acme", "42", null, null))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_zendesk_client_secret_required"));
         createRule(owner, """
                 {"name":"Own token","triggerType":"MANUAL","projectId":"%s","actions":[
                   {"actionType":"GITHUB_RELEASE","audienceId":"%s","language":"en","secret":"ghp_x"}]}
@@ -389,6 +417,42 @@ class AutomationIntegrationTest extends AutomationIntegrationTestBase {
         enable(owner, reminding)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("automation_scheduled_action_unsupported"));
+
+        // Zendesk publishes a page, so a schedule is refused it too.
+        UUID repeatingArticle = createdRuleId(createRule(owner, zendeskRule(
+                "Weekly article", "SCHEDULED_CRON", projectId, endUser,
+                "acme", "42", null, "zendesk-client-secret")
+                .replace("\"projectId\":\"" + projectId + "\",",
+                        "\"projectId\":\"" + projectId + "\",\"releaseId\":\"" + published
+                                + "\",\"cronExpression\":\"0 0 9 * * MON\",\"cronTimeZone\":\"Europe/Berlin\","))
+                .andExpect(status().isCreated()));
+        enable(owner, repeatingArticle)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("automation_scheduled_action_unsupported"));
+    }
+
+    @Test
+    void letsAScheduleAndAReminderTellPeopleThroughMicrosoftTeams() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+        UUID published = publishedRelease(owner, projectId, "1.4.0");
+
+        // Teams leaves nothing behind, so a rule ReleaseFlow sets off itself may use it.
+        UUID repeating = createdRuleId(createRule(owner, teamsRule(
+                "Weekly digest", "SCHEDULED_CRON", projectId, endUser, TeamsStub.CALLBACK,
+                """
+
+                 "releaseId":"%s","cronExpression":"0 0 9 * * MON","cronTimeZone":"Europe/Berlin","""
+                        .formatted(published)))
+                .andExpect(status().isCreated()));
+        enable(owner, repeating).andExpect(status().isOk());
+
+        UUID reminding = createdRuleId(createRule(owner, teamsRule(
+                "Release reminder", "UPCOMING_RELEASE_REMINDER", projectId, endUser, TeamsStub.CALLBACK,
+                "\n \"daysBefore\":2,"))
+                .andExpect(status().isCreated()));
+        enable(owner, reminding).andExpect(status().isOk());
     }
 
     @Test

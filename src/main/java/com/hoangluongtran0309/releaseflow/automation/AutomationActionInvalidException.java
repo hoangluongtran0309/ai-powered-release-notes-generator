@@ -47,7 +47,7 @@ public class AutomationActionInvalidException extends RuntimeException {
                     case SLACK -> "A Slack action takes its webhook URL as its secret.";
                     case PUBLIC_CHANGELOG -> "A public changelog action publishes inside ReleaseFlow itself.";
                     // These do take one, so nothing may report that theirs was refused.
-                    case NOTION, CONFLUENCE -> throw new IllegalStateException(
+                    case NOTION, CONFLUENCE, MICROSOFT_TEAMS, ZENDESK -> throw new IllegalStateException(
                             actionType + " takes a secret of its own.");
                 }
         );
@@ -156,6 +156,70 @@ public class AutomationActionInvalidException extends RuntimeException {
         return new AutomationActionInvalidException(
                 "automation_confluence_token_required",
                 "A Confluence action needs its API token."
+        );
+    }
+
+    static AutomationActionInvalidException teamsWebhookRequired() {
+        return new AutomationActionInvalidException(
+                "automation_teams_webhook_required",
+                "A Microsoft Teams action needs its Workflows callback URL."
+        );
+    }
+
+    static AutomationActionInvalidException teamsWebhookInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_teams_webhook_invalid",
+                "A Microsoft Teams callback must be the HTTPS Workflows URL the flow shows, on a "
+                        + "powerplatform.com environment host and carrying its own signature."
+        );
+    }
+
+    static AutomationActionInvalidException zendeskSubdomainRequired() {
+        return new AutomationActionInvalidException(
+                "automation_zendesk_subdomain_required",
+                "A Zendesk action needs the subdomain your help centre answers on."
+        );
+    }
+
+    static AutomationActionInvalidException zendeskSubdomainInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_zendesk_subdomain_invalid",
+                "A Zendesk subdomain is one label, such as acme in acme.zendesk.com."
+        );
+    }
+
+    static AutomationActionInvalidException zendeskClientIdRequired() {
+        return new AutomationActionInvalidException(
+                "automation_zendesk_client_id_required",
+                "A Zendesk action needs its OAuth client ID."
+        );
+    }
+
+    static AutomationActionInvalidException zendeskClientSecretRequired() {
+        return new AutomationActionInvalidException(
+                "automation_zendesk_client_secret_required",
+                "A Zendesk action needs its OAuth client secret."
+        );
+    }
+
+    static AutomationActionInvalidException zendeskSectionRequired() {
+        return new AutomationActionInvalidException(
+                "automation_zendesk_section_required",
+                "A Zendesk action needs the numeric id of the section it writes to."
+        );
+    }
+
+    static AutomationActionInvalidException zendeskSectionInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_zendesk_section_invalid",
+                "A Zendesk section id is a positive number."
+        );
+    }
+
+    static AutomationActionInvalidException zendeskUserSegmentInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_zendesk_user_segment_invalid",
+                "A Zendesk user segment id is a positive number."
         );
     }
 

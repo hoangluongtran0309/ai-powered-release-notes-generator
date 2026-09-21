@@ -2,6 +2,8 @@ package com.hoangluongtran0309.releaseflow.automation;
 
 import com.hoangluongtran0309.releaseflow.support.ConfluenceStub;
 import com.hoangluongtran0309.releaseflow.support.NotionStub;
+import com.hoangluongtran0309.releaseflow.support.TeamsStub;
+import com.hoangluongtran0309.releaseflow.support.ZendeskStub;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -303,6 +305,183 @@ class AutomationActionIntegrationTest extends AutomationIntegrationTestBase {
         mockMvc.perform(get("/api/automation/runs/{runId}", runId).session(owner.session()))
                 .andExpect(jsonPath("$.status").value("FAILED"))
                 .andExpect(jsonPath("$.actions[0].errorCode").value("confluence_rejected"));
+    }
+
+    @Test
+    void postsTheNoteThroughAWorkflowsCallback() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID runId = teamsRun(owner, projectId, "1.4.0");
+
+        work();
+
+        mockMvc.perform(get("/api/automation/runs/{runId}", runId).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                // Teams names nothing to link to, so a delivery records no reference.
+                .andExpect(jsonPath("$.actions[0].externalReference").doesNotExist());
+        TeamsStub.RecordedRequest request = TEAMS.requests().getFirst();
+        assertThat(request.method()).isEqualTo("POST");
+        // The stand-in changes the origin only; the path and the signature are the flow's.
+        assertThat(request.path())
+                .isEqualTo("/powerautomate/automations/direct/workflows/2f1a6c/triggers/manual/paths/invoke");
+        assertThat(request.query()).contains("sig=uT8k_signature-value");
+        assertThat(request.body()).contains("Release 1.4.0");
+    }
+
+    @Test
+    void leavesATeamsMessageItCouldNotConfirmUnknownAndFailsOneTeamsRefused() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID unconfirmed = teamsRun(owner, projectId, "1.4.0");
+        TEAMS.respondWith(503);
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", unconfirmed).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("UNKNOWN"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("execution_outcome_unknown"));
+
+        TEAMS.respondWith(400);
+        UUID refused = teamsRun(owner, projectId, "1.5.0");
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", refused).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("teams_rejected"));
+    }
+
+    @Test
+    void refusesToFollowARedirectAwayFromTeams() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID runId = teamsRun(owner, projectId, "1.4.0");
+        // The callback URL is a credential; following this would hand it to another origin.
+        TEAMS.redirectTo("http://127.0.0.1:9/collect");
+
+        work();
+
+        mockMvc.perform(get("/api/automation/runs/{runId}", runId).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("teams_rejected"));
+    }
+
+    @Test
+    void publishesTheNoteAsAHelpCentreArticleAndEscapesRawHtml() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID runId = zendeskRun(owner, projectId, "1.4.0");
+
+        work();
+
+        mockMvc.perform(get("/api/automation/runs/{runId}", runId).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.actions[0].externalReference").value(ZendeskStub.ARTICLE_URL));
+        ZendeskStub.RecordedRequest token = ZENDESK.requests().getFirst();
+        assertThat(token.path()).isEqualTo("/oauth/tokens");
+        assertThat(token.contentType()).startsWith("application/x-www-form-urlencoded");
+        assertThat(token.body()).contains("grant_type=client_credentials", "scope=write", "client_id=releaseflow");
+        ZendeskStub.RecordedRequest article = ZENDESK.articleRequests().getFirst();
+        assertThat(article.path())
+                .isEqualTo("/api/v2/help_center/sections/" + ZendeskStub.SECTION_ID + "/articles.json");
+        assertThat(article.authorization()).isEqualTo("Bearer " + ZendeskStub.ACCESS_TOKEN);
+        assertThat(article.body()).contains("\"locale\":\"en\"", "\"draft\":false", "\"notify_subscribers\":false");
+        assertThat(article.body()).contains("Release 1.4.0");
+        // An article nobody restricted is left open.
+        assertThat(article.body()).doesNotContain("user_segment_id");
+    }
+
+    @Test
+    void neverPublishesWhenZendeskWouldNotIssueAToken() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+
+        // Nothing is published until the second call, so every way the first can fail is
+        // FAILED: repeating it cannot duplicate an article that never existed.
+        UUID refused = zendeskRun(owner, projectId, "1.4.0");
+        ZENDESK.failTokenWith(400);
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", refused).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("zendesk_auth_rejected"));
+
+        ZENDESK.reset();
+        ZENDESK.failTokenWith(500);
+        UUID unavailable = zendeskRun(owner, projectId, "1.5.0");
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", unavailable).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("zendesk_auth_unavailable"));
+
+        ZENDESK.reset();
+        ZENDESK.answerTokenWithoutToken();
+        UUID tokenless = zendeskRun(owner, projectId, "1.6.0");
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", tokenless).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("zendesk_auth_unavailable"));
+        assertThat(ZENDESK.articleRequests()).isEmpty();
+    }
+
+    @Test
+    void leavesAZendeskArticleItCouldNotConfirmUnknownAndFailsOneZendeskRefused() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+
+        UUID unconfirmed = zendeskRun(owner, projectId, "1.4.0");
+        ZENDESK.failArticleWith(502);
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", unconfirmed).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("UNKNOWN"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("execution_outcome_unknown"));
+
+        // A rate limit is a decision, not an accident: nothing was written.
+        ZENDESK.reset();
+        ZENDESK.failArticleWith(429);
+        UUID refused = zendeskRun(owner, projectId, "1.5.0");
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", refused).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("zendesk_rejected"));
+
+        // An answer that names no article leaves nobody able to say whether one exists.
+        ZENDESK.reset();
+        ZENDESK.answerArticleWithoutUrl();
+        UUID nameless = zendeskRun(owner, projectId, "1.6.0");
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", nameless).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("UNKNOWN"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("execution_outcome_unknown"));
+    }
+
+    @Test
+    void restrictsAZendeskArticleToASegmentWhenOneIsNamed() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID ruleId = createdRuleId(createRule(owner, zendeskRule(
+                "Zendesk restricted", "MANUAL", projectId, audienceId(owner, "end_user"),
+                ZendeskStub.SUBDOMAIN, ZendeskStub.SECTION_ID, "99", "zendesk-client-secret"))
+                .andExpect(status().isCreated()));
+        enable(owner, ruleId).andExpect(status().isOk());
+        UUID runId = run(owner, ruleId, publishedRelease(owner, projectId, "1.4.0"));
+
+        work();
+
+        mockMvc.perform(get("/api/automation/runs/{runId}", runId).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+        assertThat(ZENDESK.articleRequests().getFirst().body()).contains("\"user_segment_id\":99");
+    }
+
+    private UUID teamsRun(Owner owner, UUID projectId, String version) throws Exception {
+        UUID ruleId = createdRuleId(createRule(owner,
+                teamsRule("Teams " + version, "MANUAL", projectId, audienceId(owner, "end_user")))
+                .andExpect(status().isCreated()));
+        enable(owner, ruleId).andExpect(status().isOk());
+        return run(owner, ruleId, publishedRelease(owner, projectId, version));
+    }
+
+    private UUID zendeskRun(Owner owner, UUID projectId, String version) throws Exception {
+        UUID ruleId = createdRuleId(createRule(owner,
+                zendeskRule("Zendesk " + version, "MANUAL", projectId, audienceId(owner, "end_user")))
+                .andExpect(status().isCreated()));
+        enable(owner, ruleId).andExpect(status().isOk());
+        return run(owner, ruleId, publishedRelease(owner, projectId, version));
     }
 
     private UUID notionRun(Owner owner, UUID projectId, String version) throws Exception {

@@ -17,6 +17,10 @@ public class AutomationActionRequest {
     private String siteUrl;
     private String email;
     private String spaceId;
+    private String subdomain;
+    private String clientId;
+    private String sectionId;
+    private String userSegmentId;
     private String secret;
 
     public UUID getId() {
@@ -91,6 +95,38 @@ public class AutomationActionRequest {
         this.spaceId = spaceId == null || spaceId.isBlank() ? null : spaceId.strip();
     }
 
+    public String getSubdomain() {
+        return subdomain;
+    }
+
+    public void setSubdomain(String subdomain) {
+        this.subdomain = subdomain == null || subdomain.isBlank() ? null : subdomain.strip();
+    }
+
+    public String getClientId() {
+        return clientId;
+    }
+
+    public void setClientId(String clientId) {
+        this.clientId = clientId == null || clientId.isBlank() ? null : clientId.strip();
+    }
+
+    public String getSectionId() {
+        return sectionId;
+    }
+
+    public void setSectionId(String sectionId) {
+        this.sectionId = sectionId == null || sectionId.isBlank() ? null : sectionId.strip();
+    }
+
+    public String getUserSegmentId() {
+        return userSegmentId;
+    }
+
+    public void setUserSegmentId(String userSegmentId) {
+        this.userSegmentId = userSegmentId == null || userSegmentId.isBlank() ? null : userSegmentId.strip();
+    }
+
     public String getSecret() {
         return secret;
     }
@@ -102,6 +138,7 @@ public class AutomationActionRequest {
     /** A row the person left empty, which the form always offers a few of. */
     boolean isBlank() {
         return actionType == null && audienceId == null && recipients == null && secret == null
-                && parentPageId == null && siteUrl == null && email == null && spaceId == null;
+                && parentPageId == null && siteUrl == null && email == null && spaceId == null
+                && subdomain == null && clientId == null && sectionId == null && userSegmentId == null;
     }
 }

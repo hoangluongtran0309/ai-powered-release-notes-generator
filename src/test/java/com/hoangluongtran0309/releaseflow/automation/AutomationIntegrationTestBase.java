@@ -6,6 +6,8 @@ import com.hoangluongtran0309.releaseflow.account.RegistrationService;
 import com.hoangluongtran0309.releaseflow.support.ConfluenceStub;
 import com.hoangluongtran0309.releaseflow.support.GitHubStub;
 import com.hoangluongtran0309.releaseflow.support.NotionStub;
+import com.hoangluongtran0309.releaseflow.support.TeamsStub;
+import com.hoangluongtran0309.releaseflow.support.ZendeskStub;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
 import com.hoangluongtran0309.releaseflow.support.SlackStub;
 import com.hoangluongtran0309.releaseflow.support.SmtpStub;
@@ -56,6 +58,8 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
     protected static final SmtpStub SMTP = SmtpStub.start();
     protected static final NotionStub NOTION = NotionStub.start();
     protected static final ConfluenceStub CONFLUENCE = ConfluenceStub.start();
+    protected static final TeamsStub TEAMS = TeamsStub.start();
+    protected static final ZendeskStub ZENDESK = ZendeskStub.start();
     protected static final String GITHUB_TOKEN = "github_pat_automation-test";
     protected static final String SENDER = "releases@example.com";
     /** A made-up Notion page id: the shape the validator wants, addressing nothing. */
@@ -92,6 +96,10 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
         // A Confluence action still names a real atlassian.net site; only where the call
         // goes is the deployment's business.
         registry.add("releaseflow.automation.confluence.api-base-url", CONFLUENCE::baseUrl);
+        // A Teams action still holds a real Power Platform callback; only where the call
+        // goes is the deployment's business.
+        registry.add("releaseflow.automation.teams.api-base-url", TEAMS::baseUrl);
+        registry.add("releaseflow.automation.zendesk.api-base-url", ZENDESK::baseUrl);
     }
 
     @AfterAll
@@ -101,6 +109,8 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
         SMTP.reset();
         NOTION.reset();
         CONFLUENCE.reset();
+        TEAMS.reset();
+        ZENDESK.reset();
     }
 
     @BeforeEach
@@ -111,6 +121,8 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
         SMTP.reset();
         NOTION.reset();
         CONFLUENCE.reset();
+        TEAMS.reset();
+        ZENDESK.reset();
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
         jdbcTemplate.execute("TRUNCATE public_changelog_entries, automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
                 + " release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
@@ -401,6 +413,66 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
                 json(siteUrl),
                 CONFLUENCE_ACCOUNT,
                 json(spaceId),
+                json(secret)
+        );
+    }
+
+    /** A rule body with one Microsoft Teams action for an audience, in English. */
+    protected String teamsRule(String name, String trigger, UUID projectId, UUID audienceId) {
+        return teamsRule(name, trigger, projectId, audienceId, TeamsStub.CALLBACK, "");
+    }
+
+    /** The same, plus whatever the trigger itself needs, as further JSON fields. */
+    protected String teamsRule(
+            String name,
+            String trigger,
+            UUID projectId,
+            UUID audienceId,
+            String callback,
+            String triggerFields
+    ) {
+        return """
+                {"name":"%s","triggerType":"%s","projectId":%s,%s
+                 "actions":[{"actionType":"MICROSOFT_TEAMS","audienceId":"%s","language":"en","secret":%s}]}
+                """.formatted(
+                name,
+                trigger,
+                projectId == null ? "null" : "\"" + projectId + "\"",
+                triggerFields,
+                audienceId,
+                json(callback)
+        );
+    }
+
+    /** A rule body with one Zendesk action for an audience, in English. */
+    protected String zendeskRule(String name, String trigger, UUID projectId, UUID audienceId) {
+        return zendeskRule(name, trigger, projectId, audienceId,
+                ZendeskStub.SUBDOMAIN, ZendeskStub.SECTION_ID, null, "zendesk-client-secret");
+    }
+
+    protected String zendeskRule(
+            String name,
+            String trigger,
+            UUID projectId,
+            UUID audienceId,
+            String subdomain,
+            String sectionId,
+            String userSegmentId,
+            String secret
+    ) {
+        return """
+                {"name":"%s","triggerType":"%s","projectId":%s,
+                 "actions":[{"actionType":"ZENDESK","audienceId":"%s","language":"en",
+                 "subdomain":%s,"clientId":"%s","sectionId":%s,"userSegmentId":%s,"secret":%s}]}
+                """.formatted(
+                name,
+                trigger,
+                projectId == null ? "null" : "\"" + projectId + "\"",
+                audienceId,
+                json(subdomain),
+                ZendeskStub.CLIENT_ID,
+                json(sectionId),
+                json(userSegmentId),
                 json(secret)
         );
     }

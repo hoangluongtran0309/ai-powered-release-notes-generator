@@ -1069,7 +1069,8 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   release earns exactly one more reminder and scanning again earns none. A rule with no
   notice at all is answered within a short lookahead (`PT15S`). `automation_runs`
   records that moment in `scheduled_for`, unique per rule and occurrence for a schedule
-  and per rule, release, and occurrence for a reminder. Both triggers accept Slack and
+  and per rule, release, and occurrence for a reminder. Both triggers accept Slack,
+  Microsoft Teams, and
   email actions only: nobody is watching when a schedule goes off. Disabling or archiving
   a rule clears `next_fire_at`, which the database also requires, so a rule that is off
   is never claimed.
@@ -1118,8 +1119,16 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   450,000 bytes for Notion, 2,000,000 for Confluence — and map a 4xx to `FAILED`, a 5xx
   or a lost connection to `UNKNOWN`, and a redirect, which nothing follows, to `FAILED`,
   because no page was written wherever it pointed. No outbound client follows a
-  redirect. See
-  [ADR-0024](adr/0024-notion-and-confluence-actions.md).
+  redirect. A Microsoft Teams action posts through a Workflows callback whose URL is its
+  secret and carries its own signature, checked against the Workflows shape again before
+  every delivery and never followed through a redirect, with 28 KiB measured on the
+  written request rather than the message. A Zendesk action makes two calls: a short-lived
+  client-credentials token, then a Help Center article from the same `MarkdownHtml`
+  output, bounded at 1,000,000 bytes. Because nothing is published until the second call,
+  every way the first can fail is `FAILED` — including a 5xx — while the second follows
+  the usual rule, and a 2xx naming no article is `UNKNOWN`. No outbound client follows a
+  redirect. See [ADR-0024](adr/0024-notion-and-confluence-actions.md) and
+  [ADR-0025](adr/0025-teams-and-zendesk-actions.md).
 - **An action with no note still runs.** A release with no ready note for an action's
   audience and language gives the action no snapshot, and it fails as
   `release_note_missing` when the worker reaches it. The release publishes either way.

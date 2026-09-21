@@ -56,7 +56,7 @@ public class AutomationConflictException extends RuntimeException {
         return new AutomationConflictException(
                 "automation_scheduled_action_unsupported",
                 "A rule that fires on a schedule or before a planned release may only tell people: "
-                        + "use a Slack or an email action."
+                        + "use a Slack, an email, or a Microsoft Teams action."
         );
     }
 

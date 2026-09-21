@@ -319,6 +319,10 @@ public class AutomationPageController {
                 row.setSiteUrl(action.siteUrl());
                 row.setEmail(action.email());
                 row.setSpaceId(action.spaceId());
+                row.setSubdomain(action.subdomain());
+                row.setClientId(action.clientId());
+                row.setSectionId(action.sectionId());
+                row.setUserSegmentId(action.userSegmentId());
                 request.getActions().add(row);
             });
         }

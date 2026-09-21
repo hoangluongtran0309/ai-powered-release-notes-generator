@@ -10,8 +10,9 @@ human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
 source, GitLab source, Linear source, Jira source, automation, automation
-trigger, public changelog, and wiki page action slices: one
-Spring Boot application, PostgreSQL/Flyway V1-V25,
+trigger, public changelog, wiki page action, and chat and help centre action
+slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V26,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -35,14 +36,15 @@ planned release time), administrator-managed audiences with Mustache templates
 and AI narratives, one release note per audience and language written at
 approval, translated by an optional DeepL queue, and frozen at publication,
 administrator-written automation rules that deliver a published note to a GitHub
-Release, a Slack channel, a list of addresses, a Notion page, or a Confluence
-Cloud space through a durable run its worker
+Release, a Slack channel, a list of addresses, a Notion page, a Confluence Cloud
+space, a Microsoft Teams chat, or a Zendesk help centre through a durable run its
+worker
 walks one action at a time, fired by a publication, a person, a cron schedule in
 an IANA time zone, the approach of a planned release, or another system's signed
 call, a public changelog of immutable entries with an RSS feed that anybody may read,
 REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
-The decisions behind all of it are ADR-0001 through ADR-0024. Read `README.md`,
+The decisions behind all of it are ADR-0001 through ADR-0025. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -152,7 +154,8 @@ behavior.
 - Tenant-owned repository lookups include both resource ID and the current
   principal's Organization ID.
 - A rule ReleaseFlow sets off itself may only tell people something: a cron or
-  reminder rule takes Slack and email actions alone. A cron rule repeats one
+  reminder rule takes only the actions that leave nothing behind — Slack, email,
+  and Microsoft Teams. A cron rule repeats one
   published release and takes that release's project. Its next firing is booked
   from the present, never from the occurrence just handled, so downtime owes one
   catch-up run. A rule that is disabled or archived has no booking and is never
@@ -191,9 +194,17 @@ behavior.
   Slack webhook URL may only name an origin the deployment allows, and a
   Confluence site must be one label beneath `atlassian.net` over HTTPS with
   nothing after the host; both are checked when stored and again before every
-  delivery. Notion's own address is deployment configuration, never something an
-  action can choose, and the API version a page is written against is pinned
-  beside the body that version accepts.
+  delivery. A Microsoft Teams callback is checked the same way, against the
+  Workflows shape: HTTPS, one label beneath
+  `environment.api.powerplatform.com`, the trigger path, and its own signature.
+  A Zendesk subdomain is one DNS label, never a URL, so an action reaches only
+  its own help centre. Notion's own address is deployment configuration, never
+  something an action can choose, and the API version a page is written against
+  is pinned beside the body that version accepts.
+- A delivery made of more than one call fails by where it got to. Nothing is
+  published until Zendesk's article call, so every way its token call can fail is
+  `FAILED`, a 5xx included: only a call that may have written something becomes
+  unknown.
 - A page an Action leaves behind cannot be found again: the marker it carries
   names the run that wrote it and nothing reads it back, so an unconfirmed page
   stays unknown until a person accepts a second one.

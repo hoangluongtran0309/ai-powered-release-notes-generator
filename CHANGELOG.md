@@ -470,8 +470,37 @@ version has been released.
   coverage of both deliveries, refused and unconfirmed outcomes, refused redirects,
   escaped HTML, oversized notes stopped before any request, the configuration and site
   rules at write and enable time, and both actions refused on scheduled triggers.
+- Microsoft Teams and Zendesk automation actions (ADR-0025), which complete the eight
+  kinds of delivery: a `MICROSOFT_TEAMS` action posts the note into the chat a Workflows
+  callback targets, and a `ZENDESK` action publishes it as a Help Center article.
+- A Teams callback URL accepted only as the HTTPS Workflows URL a flow displays — one
+  label beneath `environment.api.powerplatform.com`, the Workflows trigger path with or
+  without its scale-unit segment, and its own `sig` signature — checked when the action
+  is written and again before every delivery, and never followed through a redirect,
+  because the URL is itself the credential.
+- A Zendesk subdomain read as one DNS label rather than a URL, so an action reaches only
+  `https://{subdomain}.zendesk.com`, with a short-lived client-credentials token taken per
+  delivery and never stored or logged.
+- `RELEASEFLOW_TEAMS_API_BASE_URL` and `RELEASEFLOW_ZENDESK_API_BASE_URL`, empty by
+  default, to stand in for the two providers locally without loosening their rules; the
+  Teams stand-in keeps the callback's path and signature, and a Zendesk link is always the
+  one Zendesk returned.
+- Payload limits taken before any network call — 28 KiB measured on the written Teams
+  request, 1,000,000 bytes on the rendered Zendesk article, checked before the token call
+  so no credential is sent for nothing.
+- Flyway migration `V26` widening the two action-type constraints again, with
+  Testcontainers coverage of both deliveries, refused and unconfirmed outcomes, refused
+  redirects, escaped HTML, a Zendesk article restricted to a user segment and left open
+  without one, every kind of token failure recorded as failed with no article requested,
+  and the configuration rules at write and enable time.
 
 ### Changed
+
+- A rule that fires on a schedule or before a planned release now also accepts a
+  Microsoft Teams action, alongside Slack and email. The rule was always that such a rule
+  may only tell people something and leave nothing behind; Teams qualifies for exactly
+  that reason, so the check now asks the question instead of naming two answers
+  (ADR-0025).
 
 - The GitHub client's timeout defaults to 10 seconds rather than 5, because
   publishing a GitHub Release goes through it. `RELEASEFLOW_GITHUB_TIMEOUT`

@@ -241,10 +241,33 @@
                                    class="input input-bordered input-sm" placeholder="Page ID">
                         </label>
                     </div>
+                    <div class="grid gap-2 md:grid-cols-3" x-show="kind === 'ZENDESK'" x-cloak>
+                        <label class="form-control"><span class="label-text">Zendesk subdomain</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].subdomain}"
+                                   class="input input-bordered input-sm" placeholder="acme">
+                        </label>
+                        <label class="form-control"><span class="label-text">OAuth client ID</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].clientId}"
+                                   class="input input-bordered input-sm" placeholder="releaseflow">
+                        </label>
+                        <label class="form-control"><span class="label-text">Section ID</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].sectionId}"
+                                   class="input input-bordered input-sm" placeholder="360001">
+                        </label>
+                        <label class="form-control"><span class="label-text">User segment (optional)</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].userSegmentId}"
+                                   class="input input-bordered input-sm" placeholder="Everybody unless set">
+                        </label>
+                    </div>
                     <div class="grid gap-2 md:grid-cols-3"
-                         x-show="kind === 'SLACK' || kind === 'NOTION' || kind === 'CONFLUENCE'" x-cloak>
+                         x-show="kind === 'SLACK' || kind === 'NOTION' || kind === 'CONFLUENCE'
+                                 || kind === 'MICROSOFT_TEAMS' || kind === 'ZENDESK'" x-cloak>
                         <label class="form-control">
-                            <span class="label-text" x-text="kind === 'SLACK' ? 'Slack webhook URL' : 'API token'">Secret</span>
+                            <span class="label-text"
+                                  x-text="kind === 'SLACK' ? 'Slack webhook URL'
+                                          : kind === 'MICROSOFT_TEAMS' ? 'Teams Workflows URL'
+                                          : kind === 'ZENDESK' ? 'OAuth client secret'
+                                          : 'API token'">Secret</span>
                             <input type="password" th:field="*{actions[__${row.index}__].secret}" autocomplete="off"
                                    class="input input-bordered input-sm">
                         </label>
