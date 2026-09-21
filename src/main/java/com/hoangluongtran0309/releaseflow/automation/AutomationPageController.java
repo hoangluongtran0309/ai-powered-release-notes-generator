@@ -315,6 +315,10 @@ public class AutomationPageController {
                 row.setAudienceId(action.audienceId());
                 row.setLanguage(action.language());
                 row.setRecipients(action.recipients());
+                row.setParentPageId(action.parentPageId());
+                row.setSiteUrl(action.siteUrl());
+                row.setEmail(action.email());
+                row.setSpaceId(action.spaceId());
                 request.getActions().add(row);
             });
         }

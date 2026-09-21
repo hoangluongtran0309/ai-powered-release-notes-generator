@@ -1106,8 +1106,20 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   `<!-- releaseflow-action:{id} -->` so a repeat knows its own work from somebody else's.
   A Slack action posts through an incoming webhook whose origin the deployment allows,
   checked again before every delivery, up to 39,000 characters. An email action sends
-  through the deployment's SMTP server to between 1 and 100 addresses. No outbound client
-  follows a redirect.
+  through the deployment's SMTP server to between 1 and 100 addresses. A Notion action
+  files the note as a child page under a page id the action names, against the API
+  version the deployment pins; Notion's own address is deployment configuration, so no
+  request chooses it. A Confluence action creates a page in a Cloud space, authenticated
+  by the account's email and an API token, with the note rendered by `MarkdownHtml` into
+  the storage body and an `<!-- releaseflow-action:{id} -->` comment saying which run
+  wrote it — provenance only, since nothing reads it back. Its site is checked again
+  before every delivery, and must be exactly one label beneath `atlassian.net` over
+  HTTPS with nothing after the host. Both bound the payload before any network call —
+  450,000 bytes for Notion, 2,000,000 for Confluence — and map a 4xx to `FAILED`, a 5xx
+  or a lost connection to `UNKNOWN`, and a redirect, which nothing follows, to `FAILED`,
+  because no page was written wherever it pointed. No outbound client follows a
+  redirect. See
+  [ADR-0024](adr/0024-notion-and-confluence-actions.md).
 - **An action with no note still runs.** A release with no ready note for an action's
   audience and language gives the action no snapshot, and it fails as
   `release_note_missing` when the worker reaches it. The release publishes either way.

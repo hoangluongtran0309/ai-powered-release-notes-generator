@@ -3,7 +3,9 @@ package com.hoangluongtran0309.releaseflow.automation;
 import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
 import com.hoangluongtran0309.releaseflow.account.RegistrationResult;
 import com.hoangluongtran0309.releaseflow.account.RegistrationService;
+import com.hoangluongtran0309.releaseflow.support.ConfluenceStub;
 import com.hoangluongtran0309.releaseflow.support.GitHubStub;
+import com.hoangluongtran0309.releaseflow.support.NotionStub;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
 import com.hoangluongtran0309.releaseflow.support.SlackStub;
 import com.hoangluongtran0309.releaseflow.support.SmtpStub;
@@ -43,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * What every automation test needs: the three providers a delivery can reach, and an
+ * What every automation test needs: the providers a delivery can reach, and an
  * Organization with a project, a published release, and its notes. The stubs are shared
  * so the tests share one application context.
  */
@@ -52,8 +54,12 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
     protected static final GitHubStub GITHUB = GitHubStub.start();
     protected static final SlackStub SLACK = SlackStub.start();
     protected static final SmtpStub SMTP = SmtpStub.start();
+    protected static final NotionStub NOTION = NotionStub.start();
+    protected static final ConfluenceStub CONFLUENCE = ConfluenceStub.start();
     protected static final String GITHUB_TOKEN = "github_pat_automation-test";
     protected static final String SENDER = "releases@example.com";
+    protected static final String NOTION_PARENT_PAGE = "1a2b3c4d5e6f4a5b8c9d0e1f2a3b4c5d";
+    protected static final String CONFLUENCE_ACCOUNT = "releases@example.com";
 
     @Autowired
     protected MockMvc mockMvc;
@@ -81,6 +87,10 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
         registry.add("spring.mail.host", () -> "localhost");
         registry.add("spring.mail.port", SMTP::port);
         registry.add("releaseflow.automation.email.from", () -> SENDER);
+        registry.add("releaseflow.automation.notion.api-base-url", NOTION::baseUrl);
+        // A Confluence action still names a real atlassian.net site; only where the call
+        // goes is the deployment's business.
+        registry.add("releaseflow.automation.confluence.api-base-url", CONFLUENCE::baseUrl);
     }
 
     @AfterAll
@@ -88,6 +98,8 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
         GITHUB.reset();
         SLACK.reset();
         SMTP.reset();
+        NOTION.reset();
+        CONFLUENCE.reset();
     }
 
     @BeforeEach
@@ -96,6 +108,8 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
         GITHUB.reset();
         SLACK.reset();
         SMTP.reset();
+        NOTION.reset();
+        CONFLUENCE.reset();
         // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
         jdbcTemplate.execute("TRUNCATE public_changelog_entries, automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules,"
                 + " release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
@@ -330,6 +344,68 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
 
     protected String webhookRule(String name, UUID projectId, UUID audienceId) {
         return slackRule(name, "EXTERNAL_WEBHOOK", projectId, audienceId, "en", "");
+    }
+
+    /** A rule body with one Notion action for an audience, in English. */
+    protected String notionRule(String name, String trigger, UUID projectId, UUID audienceId) {
+        return notionRule(name, trigger, projectId, audienceId, NOTION_PARENT_PAGE, "notion-integration-token");
+    }
+
+    protected String notionRule(
+            String name,
+            String trigger,
+            UUID projectId,
+            UUID audienceId,
+            String parentPageId,
+            String secret
+    ) {
+        return """
+                {"name":"%s","triggerType":"%s","projectId":%s,
+                 "actions":[{"actionType":"NOTION","audienceId":"%s","language":"en",
+                 "parentPageId":%s,"secret":%s}]}
+                """.formatted(
+                name,
+                trigger,
+                projectId == null ? "null" : "\"" + projectId + "\"",
+                audienceId,
+                json(parentPageId),
+                json(secret)
+        );
+    }
+
+    /** A rule body with one Confluence action for an audience, in English. */
+    protected String confluenceRule(String name, String trigger, UUID projectId, UUID audienceId) {
+        return confluenceRule(
+                name, trigger, projectId, audienceId, ConfluenceStub.SITE, "42", "confluence-api-token");
+    }
+
+    protected String confluenceRule(
+            String name,
+            String trigger,
+            UUID projectId,
+            UUID audienceId,
+            String siteUrl,
+            String spaceId,
+            String secret
+    ) {
+        return """
+                {"name":"%s","triggerType":"%s","projectId":%s,
+                 "actions":[{"actionType":"CONFLUENCE","audienceId":"%s","language":"en",
+                 "siteUrl":%s,"email":"%s","spaceId":%s,"secret":%s}]}
+                """.formatted(
+                name,
+                trigger,
+                projectId == null ? "null" : "\"" + projectId + "\"",
+                audienceId,
+                json(siteUrl),
+                CONFLUENCE_ACCOUNT,
+                json(spaceId),
+                json(secret)
+        );
+    }
+
+    private static String json(String value) {
+        return value == null ? "null" : "\"" + value + "\"";
     }
 
     /** Makes a schedule due, the way time passing would. */

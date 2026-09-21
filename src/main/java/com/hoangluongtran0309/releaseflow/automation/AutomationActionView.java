@@ -14,6 +14,10 @@ public record AutomationActionView(
         String audienceName,
         String language,
         String recipients,
+        String parentPageId,
+        String siteUrl,
+        String email,
+        String spaceId,
         boolean secretConfigured
 ) {
 }

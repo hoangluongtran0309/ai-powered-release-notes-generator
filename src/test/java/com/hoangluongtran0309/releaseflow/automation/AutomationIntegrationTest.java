@@ -125,6 +125,27 @@ class AutomationIntegrationTest extends AutomationIntegrationTestBase {
                 """.formatted(projectId, endUser))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("automation_email_recipients_required"));
+        createRule(owner, notionRule("No page", "MANUAL", projectId, endUser, null, "notion-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_notion_parent_required"));
+        createRule(owner, notionRule("Not a page", "MANUAL", projectId, endUser, "page-one", "notion-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_notion_parent_invalid"));
+        createRule(owner, notionRule("No token", "MANUAL", projectId, endUser, NOTION_PARENT_PAGE, null))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_notion_token_required"));
+        createRule(owner, confluenceRule(
+                "Elsewhere", "MANUAL", projectId, endUser, "https://acme.atlassian.net.evil.test", "42", "token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_confluence_site_invalid"));
+        createRule(owner, confluenceRule(
+                "Named space", "MANUAL", projectId, endUser, "https://acme.atlassian.net", "RELEASES", "token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_confluence_space_invalid"));
+        createRule(owner, confluenceRule(
+                "No token", "MANUAL", projectId, endUser, "https://acme.atlassian.net", "42", null))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("automation_confluence_token_required"));
         createRule(owner, """
                 {"name":"Own token","triggerType":"MANUAL","projectId":"%s","actions":[
                   {"actionType":"GITHUB_RELEASE","audienceId":"%s","language":"en","secret":"ghp_x"}]}
@@ -342,6 +363,30 @@ class AutomationIntegrationTest extends AutomationIntegrationTestBase {
 
         // Nobody is watching when a schedule goes off, so it may only tell people.
         enable(owner, ruleId)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("automation_scheduled_action_unsupported"));
+
+        // A page is a thing left behind, so a schedule never writes one either.
+        UUID repeating = createdRuleId(createRule(owner, """
+                {"name":"Weekly page","triggerType":"SCHEDULED_CRON","projectId":"%s",
+                 "releaseId":"%s","cronExpression":"0 0 9 * * MON","cronTimeZone":"Europe/Berlin",
+                 "actions":[{"actionType":"NOTION","audienceId":"%s","language":"en",
+                 "parentPageId":"%s","secret":"notion-token"}]}
+                """.formatted(projectId, published, endUser, NOTION_PARENT_PAGE))
+                .andExpect(status().isCreated()));
+        enable(owner, repeating)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("automation_scheduled_action_unsupported"));
+
+        UUID reminding = createdRuleId(createRule(owner, """
+                {"name":"Reminder page","triggerType":"UPCOMING_RELEASE_REMINDER","projectId":"%s",
+                 "daysBefore":2,
+                 "actions":[{"actionType":"CONFLUENCE","audienceId":"%s","language":"en",
+                 "siteUrl":"https://acme.atlassian.net","email":"releases@example.com",
+                 "spaceId":"42","secret":"confluence-token"}]}
+                """.formatted(projectId, endUser))
+                .andExpect(status().isCreated()));
+        enable(owner, reminding)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("automation_scheduled_action_unsupported"));
     }

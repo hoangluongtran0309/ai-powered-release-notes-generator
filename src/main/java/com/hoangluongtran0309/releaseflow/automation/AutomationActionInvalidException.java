@@ -46,6 +46,9 @@ public class AutomationActionInvalidException extends RuntimeException {
                     case EMAIL -> "An email action uses the deployment's SMTP credentials.";
                     case SLACK -> "A Slack action takes its webhook URL as its secret.";
                     case PUBLIC_CHANGELOG -> "A public changelog action publishes inside ReleaseFlow itself.";
+                    // These do take one, so nothing may report that theirs was refused.
+                    case NOTION, CONFLUENCE -> throw new IllegalStateException(
+                            actionType + " takes a secret of its own.");
                 }
         );
     }
@@ -75,6 +78,84 @@ public class AutomationActionInvalidException extends RuntimeException {
         return new AutomationActionInvalidException(
                 "automation_email_recipient_invalid",
                 "This is not an email address: " + recipient
+        );
+    }
+
+    static AutomationActionInvalidException notionParentRequired() {
+        return new AutomationActionInvalidException(
+                "automation_notion_parent_required",
+                "A Notion action needs the page it files release notes under."
+        );
+    }
+
+    static AutomationActionInvalidException notionParentInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_notion_parent_invalid",
+                "A Notion page id is 32 hexadecimal characters, with or without dashes."
+        );
+    }
+
+    static AutomationActionInvalidException notionTokenRequired() {
+        return new AutomationActionInvalidException(
+                "automation_notion_token_required",
+                "A Notion action needs its integration token."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceSiteRequired() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_site_required",
+                "A Confluence action needs its site address."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceSiteInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_site_invalid",
+                "A Confluence site is an HTTPS atlassian.net address such as "
+                        + "https://example.atlassian.net, with nothing after the host."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceEmailRequired() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_email_required",
+                "A Confluence action needs the email address its API token belongs to."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceEmailInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_email_invalid",
+                "The Confluence account is not an email address."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceSpaceRequired() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_space_required",
+                "A Confluence action needs the numeric id of the space it writes to."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceSpaceInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_space_invalid",
+                "A Confluence space id is a number."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceParentInvalid() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_parent_invalid",
+                "A Confluence parent page id is a number."
+        );
+    }
+
+    static AutomationActionInvalidException confluenceTokenRequired() {
+        return new AutomationActionInvalidException(
+                "automation_confluence_token_required",
+                "A Confluence action needs its API token."
         );
     }
 

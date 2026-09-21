@@ -44,6 +44,9 @@ services:
       RELEASEFLOW_PUBLIC_BASE_URL: ${RELEASEFLOW_PUBLIC_BASE_URL:-http://localhost:8080}
       # Empty serves changelogs by path only; a domain here needs wildcard DNS and TLS.
       RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN: ${RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN:-}
+      # Notion and Confluence actions need no variables: their tokens are entered per
+      # action in the UI, and RELEASEFLOW_NOTION_API_BASE_URL and
+      # RELEASEFLOW_NOTION_VERSION have working defaults that must not be blanked.
       # Other optional settings, including RELEASEFLOW_SENSITIVE_PATHS, are
       # deliberately not forwarded: Compose turns an unset variable into an empty
       # string, which would replace the default in application.properties (an
