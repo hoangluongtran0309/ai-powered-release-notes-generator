@@ -110,6 +110,17 @@ class AutomationDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationT
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "UPDATE automation_rules SET trigger_type = 'SCHEDULED_CRON' WHERE id = ?", rule))
                 .isInstanceOf(DataIntegrityViolationException.class);
+
+        // The kinds that do exist are written the same way.
+        for (ActionType actionType : ActionType.values()) {
+            jdbcTemplate.update(
+                    """
+                            INSERT INTO automation_rule_actions
+                                (id, rule_id, organization_id, position, action_type, audience_id, target_language)
+                            VALUES (?, ?, ?, ?, ?, ?, 'en')
+                            """,
+                    UUID.randomUUID(), rule, organization, actionType.ordinal(), actionType.name(), audience);
+        }
     }
 
     @Test

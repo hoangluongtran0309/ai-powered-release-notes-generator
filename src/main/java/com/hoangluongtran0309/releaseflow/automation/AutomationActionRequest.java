@@ -13,6 +13,10 @@ public class AutomationActionRequest {
     private UUID audienceId;
     private String language;
     private String recipients;
+    private String parentPageId;
+    private String siteUrl;
+    private String email;
+    private String spaceId;
     private String secret;
 
     public UUID getId() {
@@ -55,6 +59,38 @@ public class AutomationActionRequest {
         this.recipients = recipients == null || recipients.isBlank() ? null : recipients.strip();
     }
 
+    public String getParentPageId() {
+        return parentPageId;
+    }
+
+    public void setParentPageId(String parentPageId) {
+        this.parentPageId = parentPageId == null || parentPageId.isBlank() ? null : parentPageId.strip();
+    }
+
+    public String getSiteUrl() {
+        return siteUrl;
+    }
+
+    public void setSiteUrl(String siteUrl) {
+        this.siteUrl = siteUrl == null || siteUrl.isBlank() ? null : siteUrl.strip();
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email == null || email.isBlank() ? null : email.strip();
+    }
+
+    public String getSpaceId() {
+        return spaceId;
+    }
+
+    public void setSpaceId(String spaceId) {
+        this.spaceId = spaceId == null || spaceId.isBlank() ? null : spaceId.strip();
+    }
+
     public String getSecret() {
         return secret;
     }
@@ -65,6 +101,7 @@ public class AutomationActionRequest {
 
     /** A row the person left empty, which the form always offers a few of. */
     boolean isBlank() {
-        return actionType == null && audienceId == null && recipients == null && secret == null;
+        return actionType == null && audienceId == null && recipients == null && secret == null
+                && parentPageId == null && siteUrl == null && email == null && spaceId == null;
     }
 }

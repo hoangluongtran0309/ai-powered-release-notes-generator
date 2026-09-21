@@ -437,10 +437,30 @@ public class AutomationRuleService {
 
     private static Map<String, String> configuration(AutomationActionRequest request) {
         Map<String, String> configuration = new LinkedHashMap<>();
-        if (request.getActionType() == ActionType.EMAIL && request.getRecipients() != null) {
-            configuration.put(EmailRecipients.KEY, request.getRecipients());
+        if (request.getActionType() == null) {
+            return configuration;
+        }
+        switch (request.getActionType()) {
+            case EMAIL -> put(configuration, EmailRecipients.KEY, request.getRecipients());
+            case NOTION -> put(configuration, NotionParentPage.KEY, request.getParentPageId());
+            case CONFLUENCE -> {
+                put(configuration, ConfluenceSite.KEY, request.getSiteUrl());
+                put(configuration, ConfluenceActionExecutor.EMAIL_KEY, request.getEmail());
+                put(configuration, ConfluenceActionExecutor.SPACE_KEY, request.getSpaceId());
+                put(configuration, ConfluenceActionExecutor.PARENT_KEY, request.getParentPageId());
+            }
+            // The repository a GitHub Release is cut in is the project's, not the rule's,
+            // so it is read when the run is made rather than written down here.
+            case GITHUB_RELEASE, SLACK, PUBLIC_CHANGELOG -> {
+            }
         }
         return configuration;
+    }
+
+    private static void put(Map<String, String> configuration, String key, String value) {
+        if (value != null) {
+            configuration.put(key, value);
+        }
     }
 
     private void cancelUnfinishedRuns(UUID ruleId) {
@@ -562,6 +582,12 @@ public class AutomationRuleService {
                                 Optional.ofNullable(audiences.get(action.getAudienceId())).orElse("Unknown audience"),
                                 action.getTargetLanguage(),
                                 action.getConfiguration().get(EmailRecipients.KEY),
+                                action.getConfiguration().get(NotionParentPage.KEY) != null
+                                        ? action.getConfiguration().get(NotionParentPage.KEY)
+                                        : action.getConfiguration().get(ConfluenceActionExecutor.PARENT_KEY),
+                                action.getConfiguration().get(ConfluenceSite.KEY),
+                                action.getConfiguration().get(ConfluenceActionExecutor.EMAIL_KEY),
+                                action.getConfiguration().get(ConfluenceActionExecutor.SPACE_KEY),
                                 action.hasSecret()
                         ))
                         .toList()

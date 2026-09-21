@@ -265,9 +265,29 @@
   - absolute links built from `RELEASEFLOW_PUBLIC_BASE_URL`, never from a request, and
     optional `{slug}.{domain}` routing for deployments that provision wildcard DNS.
 
+- Notion and Confluence automation actions (ADR-0024), with Flyway `V25`:
+  - a `NOTION` action that files the note as a child page under a page an
+    administrator names, titled `Release <version>`, with an integration token as its
+    secret and the API version pinned by `RELEASEFLOW_NOTION_VERSION`; the page id is
+    accepted as Notion writes one, with or without dashes;
+  - a `CONFLUENCE` action that creates a page in a Cloud space from the note rendered
+    by `MarkdownHtml`, authenticated by the account's email and an API token, with an
+    `<!-- releaseflow-action:{id} -->` comment recording which run wrote it;
+  - a Confluence site that must be exactly one label beneath `atlassian.net` over
+    HTTPS, with no credentials, port, path, query, or fragment, checked when the action
+    is written and again before every delivery, while Notion's own address stays
+    deployment configuration no request can choose;
+  - payloads bounded before any network call, 450,000 bytes for Notion and 2,000,000
+    for Confluence;
+  - a 4xx recorded as `FAILED`, a 5xx or a lost connection as `UNKNOWN`, and a redirect,
+    which neither client follows, as `FAILED`; neither is ever retried on its own, and a
+    repeat still needs a person to confirm the duplicate;
+  - both refused on scheduled and reminder triggers, like every action that is not Slack
+    or email.
+
 ## In progress
 
-- Nothing. The public changelog slice is complete and awaiting review.
+- Nothing. The Notion and Confluence action slice is complete and awaiting review.
 
 ## Planned
 
@@ -288,8 +308,10 @@ deliberately deferred list below, one reviewed slice at a time.
   secret or token rotation reminders.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
-- Automation actions other than GitHub Releases, Slack, email, and the public
-  changelog, and distribution integrations.
+- Automation actions other than GitHub Releases, Slack, email, the public
+  changelog, Notion, and Confluence Cloud, and distribution integrations.
+- Confluence Data Center, Confluence OAuth, and reading a Notion or Confluence
+  page back to recognise one a previous run wrote.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
   tests, production observability (Actuator, metrics, Prometheus, Grafana),
   image publication, release automation, and an open-core/enterprise module

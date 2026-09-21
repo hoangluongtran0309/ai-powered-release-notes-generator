@@ -68,6 +68,58 @@ class AutomationPageIntegrationTest extends AutomationIntegrationTestBase {
     }
 
     @Test
+    void thePageWritesAConfluenceActionAndReadsItBackWithoutItsToken() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+
+        mockMvc.perform(post("/automation").session(owner.session()).with(csrf())
+                        .param("name", "Wiki")
+                        .param("triggerType", "RELEASE_PUBLISHED")
+                        .param("projectId", projectId.toString())
+                        .param("actions[0].actionType", "CONFLUENCE")
+                        .param("actions[0].audienceId", endUser.toString())
+                        .param("actions[0].language", "en")
+                        .param("actions[0].siteUrl", "https://acme.atlassian.net")
+                        .param("actions[0].email", CONFLUENCE_ACCOUNT)
+                        .param("actions[0].spaceId", "42")
+                        .param("actions[0].parentPageId", "7")
+                        .param("actions[0].secret", "confluence-api-token"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/automation?saved"));
+
+        UUID ruleId = UUID.fromString(jdbcTemplate.queryForObject(
+                "SELECT id::text FROM automation_rules WHERE name = 'Wiki'", String.class));
+        // Editing the rule offers back everything but the token.
+        mockMvc.perform(get("/automation/{ruleId}", ruleId).session(owner.session()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("https://acme.atlassian.net")))
+                .andExpect(content().string(containsString("value=\"42\"")))
+                .andExpect(content().string(not(containsString("confluence-api-token"))));
+    }
+
+    @Test
+    void thePageRefusesAConfluenceSiteSomewhereElse() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+
+        mockMvc.perform(post("/automation").session(owner.session()).with(csrf())
+                        .param("name", "Wiki")
+                        .param("triggerType", "RELEASE_PUBLISHED")
+                        .param("projectId", projectId.toString())
+                        .param("actions[0].actionType", "CONFLUENCE")
+                        .param("actions[0].audienceId", endUser.toString())
+                        .param("actions[0].language", "en")
+                        .param("actions[0].siteUrl", "https://acme.atlassian.net.evil.test")
+                        .param("actions[0].email", CONFLUENCE_ACCOUNT)
+                        .param("actions[0].spaceId", "42")
+                        .param("actions[0].secret", "confluence-api-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("HTTPS atlassian.net address")));
+    }
+
+    @Test
     void thePageShowsWhyARuleWasRefusedAndKeepsTheForm() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
         UUID projectId = createProject(owner);

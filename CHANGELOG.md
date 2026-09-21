@@ -450,6 +450,26 @@ version has been released.
   `public_changelog_entries` with its immutability trigger, and the widened action-type
   constraints, with Testcontainers coverage of anonymous reading, cache headers and the
   ETag, RSS, host routing, XSS, immutability, conflicts, and tenant isolation.
+- Notion and Confluence automation actions (ADR-0024): a `NOTION` action files the
+  note as a child page under a page an administrator names, and a `CONFLUENCE` action
+  creates a page in a Cloud space from the note rendered by the existing
+  `MarkdownHtml`, marked with `<!-- releaseflow-action:{id} -->` to say which run
+  wrote it.
+- A Notion page id accepted the way Notion writes one, with or without dashes, and a
+  Confluence site that must be exactly one label beneath `atlassian.net` over HTTPS
+  with no credentials, port, path, query, or fragment — checked when the action is
+  written and again before every delivery.
+- `RELEASEFLOW_NOTION_API_BASE_URL` and `RELEASEFLOW_NOTION_VERSION` pinning the API a
+  Notion page is written against, and `RELEASEFLOW_CONFLUENCE_API_BASE_URL`, empty by
+  default, to stand in for Confluence Cloud locally without loosening the site rules or
+  changing the links recorded.
+- Payload limits taken before any network call — 450,000 bytes for Notion and
+  2,000,000 for Confluence — with a 4xx recorded as `FAILED`, a 5xx or a lost
+  connection as `UNKNOWN`, and a redirect, which neither client follows, as `FAILED`.
+- Flyway migration `V25` widening the two action-type constraints, with Testcontainers
+  coverage of both deliveries, refused and unconfirmed outcomes, refused redirects,
+  escaped HTML, oversized notes stopped before any request, the configuration and site
+  rules at write and enable time, and both actions refused on scheduled triggers.
 
 ### Changed
 

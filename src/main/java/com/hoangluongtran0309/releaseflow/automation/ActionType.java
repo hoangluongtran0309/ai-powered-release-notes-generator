@@ -6,7 +6,9 @@ public enum ActionType {
     GITHUB_RELEASE("GitHub Release"),
     SLACK("Slack"),
     EMAIL("Email"),
-    PUBLIC_CHANGELOG("Public changelog");
+    PUBLIC_CHANGELOG("Public changelog"),
+    NOTION("Notion"),
+    CONFLUENCE("Confluence");
 
     private final String label;
 

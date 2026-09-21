@@ -188,34 +188,67 @@
 
             <fieldset class="subtle-panel grid gap-3 p-4">
                 <legend class="label-text font-medium">Actions, in order</legend>
-                <div class="grid gap-2 md:grid-cols-5" th:each="action, row : *{actions}">
+                <div class="grid gap-2" th:each="action, row : *{actions}"
+                     x-data="{ kind: $el.dataset.kind }"
+                     th:attr="data-kind=${action.actionType != null ? action.actionType.name() : ''}">
                     <input type="hidden" th:field="*{actions[__${row.index}__].id}">
-                    <label class="form-control"><span class="label-text">Deliver to</span>
-                        <select th:field="*{actions[__${row.index}__].actionType}" class="select select-bordered select-sm">
-                            <option value="">—</option>
-                            <option th:each="type : ${actionTypes}" th:value="${type.name()}" th:text="${type.label}">Slack</option>
-                        </select>
-                    </label>
-                    <label class="form-control"><span class="label-text">Audience</span>
-                        <select th:field="*{actions[__${row.index}__].audienceId}" class="select select-bordered select-sm">
-                            <option value="">—</option>
-                            <option th:each="audience : ${audiences}" th:value="${audience.id}" th:text="${audience.displayName}">End user</option>
-                        </select>
-                    </label>
-                    <label class="form-control"><span class="label-text">Language</span>
-                        <select th:field="*{actions[__${row.index}__].language}" class="select select-bordered select-sm">
-                            <option value="">—</option>
-                            <option th:each="language : ${languages}" th:value="${language}" th:text="${language}">en</option>
-                        </select>
-                    </label>
-                    <label class="form-control"><span class="label-text">Email recipients</span>
-                        <input type="text" th:field="*{actions[__${row.index}__].recipients}"
-                               class="input input-bordered input-sm" placeholder="a@example.com, b@example.com">
-                    </label>
-                    <label class="form-control"><span class="label-text">Slack webhook URL</span>
-                        <input type="password" th:field="*{actions[__${row.index}__].secret}" autocomplete="off"
-                               class="input input-bordered input-sm" placeholder="https://hooks.slack.com/services/…">
-                    </label>
+                    <div class="grid gap-2 md:grid-cols-3">
+                        <label class="form-control"><span class="label-text">Deliver to</span>
+                            <select th:field="*{actions[__${row.index}__].actionType}" x-model="kind"
+                                    class="select select-bordered select-sm">
+                                <option value="">—</option>
+                                <option th:each="type : ${actionTypes}" th:value="${type.name()}" th:text="${type.label}">Slack</option>
+                            </select>
+                        </label>
+                        <label class="form-control"><span class="label-text">Audience</span>
+                            <select th:field="*{actions[__${row.index}__].audienceId}" class="select select-bordered select-sm">
+                                <option value="">—</option>
+                                <option th:each="audience : ${audiences}" th:value="${audience.id}" th:text="${audience.displayName}">End user</option>
+                            </select>
+                        </label>
+                        <label class="form-control"><span class="label-text">Language</span>
+                            <select th:field="*{actions[__${row.index}__].language}" class="select select-bordered select-sm">
+                                <option value="">—</option>
+                                <option th:each="language : ${languages}" th:value="${language}" th:text="${language}">en</option>
+                            </select>
+                        </label>
+                    </div>
+                    <!-- What a delivery needs depends on where it goes; a row only shows its own fields. -->
+                    <div class="grid gap-2 md:grid-cols-3" x-show="kind === 'EMAIL'" x-cloak>
+                        <label class="form-control"><span class="label-text">Email recipients</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].recipients}"
+                                   class="input input-bordered input-sm" placeholder="a@example.com, b@example.com">
+                        </label>
+                    </div>
+                    <div class="grid gap-2 md:grid-cols-3" x-show="kind === 'CONFLUENCE'" x-cloak>
+                        <label class="form-control"><span class="label-text">Confluence site</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].siteUrl}"
+                                   class="input input-bordered input-sm" placeholder="https://example.atlassian.net">
+                        </label>
+                        <label class="form-control"><span class="label-text">Confluence account</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].email}"
+                                   class="input input-bordered input-sm" placeholder="you@example.com">
+                        </label>
+                        <label class="form-control"><span class="label-text">Space ID</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].spaceId}"
+                                   class="input input-bordered input-sm" placeholder="65537">
+                        </label>
+                    </div>
+                    <div class="grid gap-2 md:grid-cols-3" x-show="kind === 'NOTION' || kind === 'CONFLUENCE'" x-cloak>
+                        <label class="form-control">
+                            <span class="label-text" x-text="kind === 'NOTION' ? 'Notion parent page' : 'Parent page (optional)'">Parent page</span>
+                            <input type="text" th:field="*{actions[__${row.index}__].parentPageId}"
+                                   class="input input-bordered input-sm" placeholder="Page ID">
+                        </label>
+                    </div>
+                    <div class="grid gap-2 md:grid-cols-3"
+                         x-show="kind === 'SLACK' || kind === 'NOTION' || kind === 'CONFLUENCE'" x-cloak>
+                        <label class="form-control">
+                            <span class="label-text" x-text="kind === 'SLACK' ? 'Slack webhook URL' : 'API token'">Secret</span>
+                            <input type="password" th:field="*{actions[__${row.index}__].secret}" autocomplete="off"
+                                   class="input input-bordered input-sm">
+                        </label>
+                    </div>
                 </div>
             </fieldset>
 

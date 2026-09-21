@@ -10,8 +10,8 @@ human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
 source, GitLab source, Linear source, Jira source, automation, automation
-trigger, and public changelog slices: one
-Spring Boot application, PostgreSQL/Flyway V1-V24,
+trigger, public changelog, and wiki page action slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V25,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -35,13 +35,14 @@ planned release time), administrator-managed audiences with Mustache templates
 and AI narratives, one release note per audience and language written at
 approval, translated by an optional DeepL queue, and frozen at publication,
 administrator-written automation rules that deliver a published note to a GitHub
-Release, a Slack channel, or a list of addresses through a durable run its worker
+Release, a Slack channel, a list of addresses, a Notion page, or a Confluence
+Cloud space through a durable run its worker
 walks one action at a time, fired by a publication, a person, a cron schedule in
 an IANA time zone, the approach of a planned release, or another system's signed
 call, a public changelog of immutable entries with an RSS feed that anybody may read,
 REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
 stack, and GitHub Actions security and test gates are also in place.
-The decisions behind all of it are ADR-0001 through ADR-0023. Read `README.md`,
+The decisions behind all of it are ADR-0001 through ADR-0024. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -186,9 +187,16 @@ behavior.
   into a response, a page, or a log. A GitHub Release action has no secret: it
   borrows the project's one GitHub source and its token, and fails when the
   project has none or more than one.
-- No outbound client follows a redirect. A Slack webhook URL may only name an
-  origin the deployment allows, checked when it is stored and again before every
-  delivery.
+- No outbound client follows a redirect, and a redirect is never a delivery. A
+  Slack webhook URL may only name an origin the deployment allows, and a
+  Confluence site must be one label beneath `atlassian.net` over HTTPS with
+  nothing after the host; both are checked when stored and again before every
+  delivery. Notion's own address is deployment configuration, never something an
+  action can choose, and the API version a page is written against is pinned
+  beside the body that version accepts.
+- A page an Action leaves behind cannot be found again: the marker it carries
+  names the run that wrote it and nothing reads it back, so an unconfirmed page
+  stays unknown until a person accepts a second one.
 - A rule is written freely and starts disabled; enabling it is where ReleaseFlow
   promises the deliveries can be made. Archiving or disabling a rule cancels the
   runs it had not finished.

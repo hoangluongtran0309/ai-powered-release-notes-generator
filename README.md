@@ -72,7 +72,8 @@ The application currently provides:
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme;
 - a non-root container image and a Docker Compose demo stack with PostgreSQL;
 - automation rules that deliver a published release note to a GitHub Release, a
-  Slack channel, or a list of email addresses, in an order the rule fixes, with a
+  Slack channel, a list of email addresses, a Notion page, or a Confluence Cloud
+  space, in an order the rule fixes, with a
   durable run history, an outcome nobody may repeat without confirming it, and no
   way for a rule to hold up the release that triggered it;
 - GitHub Actions gates for tests, CodeQL, dependency review, secret scanning,
@@ -119,10 +120,19 @@ export RELEASEFLOW_AUTOMATION_EMAIL_FROM='releases@example.com'
 ```
 
 Without them, an email action simply cannot be enabled; the rest of automation
-works. `RELEASEFLOW_AUTOMATION_TIMEOUT` (default `PT10S`) bounds a Slack or SMTP
-delivery, and `RELEASEFLOW_SLACK_ALLOWED_HOSTS` (default
+works. `RELEASEFLOW_AUTOMATION_TIMEOUT` (default `PT10S`) bounds every delivery
+that leaves the application, and `RELEASEFLOW_SLACK_ALLOWED_HOSTS` (default
 `hooks.slack.com,hooks.slack-gov.com`) is the only set of origins a Slack webhook
 URL may name.
+
+A Notion or Confluence action needs nothing from the deployment beyond the
+defaults: the token is entered per action in the UI.
+`RELEASEFLOW_NOTION_API_BASE_URL` (default `https://api.notion.com`) and
+`RELEASEFLOW_NOTION_VERSION` (default `2026-03-11`) pin the API a page is written
+against; change the version only together with the body the application sends.
+`RELEASEFLOW_CONFLUENCE_API_BASE_URL` is empty by default, which means each action
+calls its own site; set it only to stand in for Confluence Cloud locally, and note
+that the site is still checked and every recorded link still points at it.
 
 Rules that fire on their own, and rules other systems call, have their own
 settings:
@@ -1091,7 +1101,7 @@ GitHub Release action's project has exactly one GitHub source, the deployment ca
 carry the action out at all, and the configuration and secret are usable. A rule
 that is refused says which of those failed.
 
-Three kinds of action exist:
+Six kinds of action exist:
 
 | Action | What it needs | What it does |
 | --- | --- | --- |
@@ -1099,10 +1109,18 @@ Three kinds of action exist:
 | Slack | An incoming webhook URL, which is the action's secret | Posts the note to the channel, up to 39,000 characters |
 | Email | `RELEASEFLOW_AUTOMATION_EMAIL_FROM` and an SMTP server | Sends the note to between 1 and 100 addresses |
 | Public changelog | Nothing | Publishes the note on your own changelog page and RSS feed |
+| Notion | The parent page's id and an integration token | Files the note as a child page titled `Release <version>`, up to 450,000 bytes |
+| Confluence | A Cloud site, the account's email, a numeric space id, an optional parent page, and an API token | Creates a page titled `Release <version>` in that space, up to 2,000,000 bytes |
 
 A Slack webhook URL must name an origin the deployment allows —
 `hooks.slack.com` or `hooks.slack-gov.com` unless `RELEASEFLOW_SLACK_ALLOWED_HOSTS`
-says otherwise — and is checked again before every delivery. A secret is
+says otherwise — and is checked again before every delivery. A Confluence site is
+checked the same way, against the shape rather than a list: it must be exactly one
+label beneath `atlassian.net` over HTTPS, with nothing after the host. A Notion
+page id is the 32 hexadecimal characters Notion shows, with or without dashes. A
+Confluence page carries an HTML comment naming the run that wrote it; nothing
+reads it back, so a delivery Notion or Confluence never confirmed stays unknown
+until a person says a second page is acceptable. A secret is
 write-only: once stored, no response, page, or log ever repeats it, and leaving
 the field empty while editing keeps the one already there.
 
@@ -1185,7 +1203,13 @@ Refusals carry a stable code: `automation_rule_name_taken`,
 `automation_release_not_published`, `automation_scheduled_action_unsupported`,
 and `automation_webhook_rule_required` are `409`; `automation_action_required`,
 `automation_audience_not_found`, `automation_language_not_configured`,
-`automation_slack_webhook_invalid`, `automation_cron_invalid`,
+`automation_slack_webhook_invalid`, `automation_notion_parent_required`,
+`automation_notion_parent_invalid`, `automation_notion_token_required`,
+`automation_confluence_site_required`, `automation_confluence_site_invalid`,
+`automation_confluence_email_required`, `automation_confluence_email_invalid`,
+`automation_confluence_space_required`, `automation_confluence_space_invalid`,
+`automation_confluence_parent_invalid`, `automation_confluence_token_required`,
+`automation_cron_invalid`,
 `automation_cron_time_zone_invalid`, `automation_cron_no_occurrence`,
 `automation_cron_release_required`, `automation_reminder_days_invalid`, and
 `invalid_automation_run_page` are `400`. Every automation path is administrator
