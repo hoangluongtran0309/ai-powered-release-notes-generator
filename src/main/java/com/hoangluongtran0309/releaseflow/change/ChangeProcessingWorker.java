@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Collects the changed files of received pull and merge requests, asks the configured AI
@@ -57,6 +58,7 @@ class ChangeProcessingWorker {
     private final CategorySuggestionService suggestionService;
     private final ClassificationSettings settings;
     private final DuplicateDetector duplicateDetector;
+    private final ClassificationMetrics metrics;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final boolean enabled;
@@ -75,6 +77,7 @@ class ChangeProcessingWorker {
             CategorySuggestionService suggestionService,
             ClassificationSettings settings,
             DuplicateDetector duplicateDetector,
+            ClassificationMetrics metrics,
             PlatformTransactionManager transactionManager,
             Clock clock,
             @Value("${releaseflow.processing.enabled}") boolean enabled
@@ -92,6 +95,7 @@ class ChangeProcessingWorker {
         this.suggestionService = suggestionService;
         this.settings = settings;
         this.duplicateDetector = duplicateDetector;
+        this.metrics = metrics;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.enabled = enabled;
@@ -125,11 +129,15 @@ class ChangeProcessingWorker {
             }
         });
 
+        // Held outside the transaction so a classification is only ever counted once it
+        // is committed: a rollback never reaches the line that records it.
+        AtomicReference<Classified> committed = new AtomicReference<>();
         Optional<Claim> claim = transactionTemplate.execute(status -> jobRepository.lockNextDue(now)
                 .map(job -> {
                     Change change = findChange(job);
                     if (job.isFallbackRequired()) {
                         completeWithoutAi(job, change, now);
+                        committed.set(Classified.of(change, now));
                         return Claim.FINISHED;
                     }
                     job.claim(now);
@@ -140,6 +148,7 @@ class ChangeProcessingWorker {
             return false;
         }
         if (claim.get() == Claim.FINISHED) {
+            record(committed.get());
             return true;
         }
         try {
@@ -231,11 +240,11 @@ class ChangeProcessingWorker {
     private void complete(Claim claim, Enriched enriched, ChangeAiMerge.ClassifiedChange outcome, String error) {
         Enrichment enrichment = enriched.enrichment();
         ChangedFiles files = enrichment.files();
-        transactionTemplate.executeWithoutResult(status -> {
+        Classified committed = transactionTemplate.execute(status -> {
             ChangeProcessingJob job = jobRepository.findById(claim.jobId()).orElseThrow();
             if (!job.isClaimedAt(claim.claimedAt())) {
                 // The claim went stale and another worker took the job over.
-                return;
+                return null;
             }
             Instant now = now();
             Change change = findChange(job);
@@ -247,7 +256,9 @@ class ChangeProcessingWorker {
             if (outcome.suggestion() != null) {
                 suggestionService.propose(claim.organizationId(), claim.projectId(), claim.changeId(), outcome.suggestion());
             }
+            return Classified.of(change, now);
         });
+        record(committed);
         log.info("Processed change {} with {} changed file(s) {}{}.", claim.changeId(),
                 files.isCollected() ? files.files().size() : 0,
                 files.isCollected() ? "collected" : "unavailable (" + files.failure() + ")",
@@ -327,6 +338,22 @@ class ChangeProcessingWorker {
     // PostgreSQL keeps microseconds, so a claim time must survive a round trip unchanged.
     private Instant now() {
         return clock.instant().truncatedTo(ChronoUnit.MICROS);
+    }
+
+    /** A classification that reached the database, and how long its change waited for it. */
+    private record Classified(boolean needsHumanReview, Duration collectToComplete) {
+
+        static Classified of(Change change, Instant completedAt) {
+            return new Classified(
+                    change.isNeedsReview(), Duration.between(change.getReceivedAt(), completedAt));
+        }
+    }
+
+    /** Counts a classification, or nothing at all when the claim went stale. */
+    private void record(Classified classified) {
+        if (classified != null) {
+            metrics.recordCompleted(classified.needsHumanReview(), classified.collectToComplete());
+        }
     }
 
     private record Claim(

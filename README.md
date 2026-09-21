@@ -70,7 +70,8 @@ The application currently provides:
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme;
-- a non-root container image and a Docker Compose demo stack with PostgreSQL;
+- a non-root container image and a Docker Compose demo stack with PostgreSQL,
+  Prometheus, and Grafana, with metrics on a private management port;
 - automation rules that deliver a published release note to a GitHub Release, a
   Slack channel, a list of email addresses, a Notion page, a Confluence Cloud
   space, a Microsoft Teams chat, or a Zendesk help centre, in an order the rule
@@ -198,7 +199,8 @@ unknown source returns `404 source_not_found`, and one already connected returns
 ## Run with Docker Compose
 
 `docker-compose.demo.yml` builds the application image and runs it with
-PostgreSQL 17 for local evaluation; it is not a production deployment.
+PostgreSQL 17, Prometheus, and Grafana for local evaluation; it is not a
+production deployment.
 
 ```bash
 cp .env.example .env
@@ -207,12 +209,42 @@ cp .env.example .env
 docker compose -f docker-compose.demo.yml up --build
 ```
 
-Compose refuses to start until `RELEASEFLOW_DB_PASSWORD` and
-`RELEASEFLOW_CREDENTIAL_MASTER_KEY` are set. The application listens on
-`http://127.0.0.1:8080` (change it with `RELEASEFLOW_HTTP_PORT`); the database
-port is not published. The container runs as UID `65534`, and its health check
-calls `GET /api/status`. `docker compose -f docker-compose.demo.yml down --volumes`
-removes the demo data.
+Compose refuses to start until `RELEASEFLOW_DB_PASSWORD`,
+`RELEASEFLOW_CREDENTIAL_MASTER_KEY`, and `RELEASEFLOW_GRAFANA_PASSWORD` are set.
+The application listens on `http://127.0.0.1:8080` (change it with
+`RELEASEFLOW_HTTP_PORT`), the operations dashboard on `http://127.0.0.1:3000`
+and Prometheus on `http://127.0.0.1:9090`. The database port and the
+management port are not published. The container runs as UID `65534`, and its
+health check calls the management port.
+`docker compose -f docker-compose.demo.yml down --volumes` removes the demo data.
+
+## Watch a deployment
+
+Actuator answers on its own port — 8081 on loopback by default, set with
+`RELEASEFLOW_MANAGEMENT_PORT` and `RELEASEFLOW_MANAGEMENT_ADDRESS` — and serves
+exactly two things there: `GET /actuator/health`, without component details, and
+`GET /actuator/prometheus`. Everything else is refused, and the application port
+serves none of it. Keep that port private; it is not a product endpoint.
+
+Four metrics answer the operational questions, and every label comes from a
+finite set:
+
+| Metric | Labels | What it answers |
+| --- | --- | --- |
+| `releaseflow_classification_completed_total` | `needs_human_review` | How much is classified, and how much of it still needs a person |
+| `releaseflow_classification_collect_to_complete_seconds` | — | How long a change waits between arriving and being classified |
+| `releaseflow_classification_provider_requests_total` | `provider`, `outcome` | How often the AI refuses or cannot be read |
+| `releaseflow_automation_action_executions_total` | `trigger`, `outcome` | How deliveries end, with unknown kept apart from failed |
+
+**No label ever carries an Organization, Project, release, rule, run, action,
+model, external reference, or error text.** Metrics are a deployment-wide view; a
+question about one Organization is a product feature, not a label. Every series
+exists from startup at zero, so a panel reads zero rather than "no data".
+
+The demo stack provisions a *ReleaseFlow Operations* dashboard in Grafana with
+seven panels over those metrics, and keeps seven days of history. Alerting,
+durable storage, a retention policy, and access control are a real deployment's
+own to bring. See [ADR-0026](docs/adr/0026-deployment-observability.md).
 
 The `Dockerfile` can also be built on its own with `docker build .`. The image
 reads the same `RELEASEFLOW_*` environment variables as `./mvnw spring-boot:run`.
@@ -1305,7 +1337,7 @@ and `main`:
 | `CodeQL` | Java and JavaScript analysis (also weekly) |
 | `Dependency Review` | Fails pull requests that add high or critical vulnerabilities |
 | `Secret Scan` | Gitleaks over the complete Git history (also weekly) |
-| `Container` | Image build, Trivy high/critical scan, Compose smoke test |
+| `Container` | Image build, Trivy high/critical scan, Compose smoke test, and the management port proven private |
 
 Actions are pinned to commit SHAs and images to digests; Dependabot proposes
 weekly updates to `develop`. The pinned tools in `scripts/ci/` verify their
@@ -1316,7 +1348,8 @@ checksums, so the scans can be reproduced locally, for example:
 gitleaks git . --redact
 ```
 
-See [ADR-0007](docs/adr/0007-ci-and-container-supply-chain.md).
+See [ADR-0007](docs/adr/0007-ci-and-container-supply-chain.md) and
+[ADR-0026](docs/adr/0026-deployment-observability.md).
 
 ## Contributing
 

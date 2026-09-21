@@ -1218,17 +1218,49 @@ the secure-cookie environment switch.
 The Maven build is the only build: it runs the tests, compiles the stylesheet,
 and packages `target/releaseflow.jar`. The `Dockerfile` runs that build with the
 `release` profile in a JDK stage and copies the JAR into a Temurin 21 JRE UBI
-minimal image that runs as UID/GID `65534`. The image health check calls
-`GET /api/status`. `docker-compose.demo.yml` adds PostgreSQL 17 on a private
-network, publishes the application on host loopback only, and requires the
-database password and credential master key to be supplied.
+minimal image that runs as UID/GID `65534`. The image health check calls the
+management port, which reports the database too. `docker-compose.demo.yml` adds
+PostgreSQL 17, Prometheus, and Grafana, publishes the application, Prometheus,
+and Grafana on host loopback only, and requires the database password, the
+credential master key, and Grafana's administrator password to be supplied.
 
 GitHub Actions workflows in `.github/workflows` gate pushes and pull requests
 to `develop` and `main`: tests and audits (`ci.yml`), CodeQL, dependency
 review, a full-history Gitleaks scan, and a container workflow that builds the
 image, scans it with Trivy, and smoke tests the Compose stack. Actions are
 pinned to commit SHAs, images to digests, and downloaded tools to SHA-256
-checksums. See [ADR-0007](adr/0007-ci-and-container-supply-chain.md).
+checksums. The container workflow also proves the management port is not
+published and that all four metric families are being scraped. See
+[ADR-0007](adr/0007-ci-and-container-supply-chain.md).
+
+## Observability
+
+What a deployment may know about itself, and no more. See
+[ADR-0026](adr/0026-deployment-observability.md).
+
+- **The management port is not a product endpoint.** Actuator answers on
+  `management.server.port` (8081 by default), bound to loopback unless a
+  deployment moves it onto a private address; the Compose stack does exactly
+  that, on a network marked `internal: true`, and never publishes the port. A
+  security chain of its own, matched with `EndpointRequest.toAnyEndpoint()`
+  rather than by path, permits `GET` on health and Prometheus, denies the rest,
+  and creates no session. The application port serves none of it.
+- **Four metrics, all labels from finite sets.** `ClassificationMetrics` owns
+  the count of committed classifications by `needs_human_review`, the timer from
+  a change arriving to its classification, and provider requests by `provider`
+  and `outcome`; `AutomationMetrics` owns deliveries by `trigger` and `outcome`.
+  Both build every series from enums in their constructors, so each exists at
+  zero from startup and no tenant, entity, model, reference, or error text can
+  become a label.
+- **Counting follows the write.** A classification is counted after its
+  transaction returns, a delivery after its outcome is durable and only while
+  this worker held the claim, and an action abandoned by a stopped worker is
+  counted as `unknown` when recovery marks it so. `FAILED` and `UNKNOWN` stay
+  apart: an unconfirmed delivery may have arrived.
+- **One decorator counts every provider request.** `MeteredChangeClassifier`
+  wraps the configured classifier, so all three providers and every caller are
+  counted alike, exactly once, and an answer that arrived but could not be read
+  counts as the error it was.
 
 ## Development direction
 

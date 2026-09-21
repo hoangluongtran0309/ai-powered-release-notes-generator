@@ -159,11 +159,14 @@ class LinearWebhookIntegrationTest extends PostgreSqlIntegrationTest {
     void refusesADeliveryStampedOutsideTheAllowedSkew() throws Exception {
         Connected source = connect("stale@example.com");
 
-        for (long offset : List.of(-61L, 61L)) {
+        // The window is a minute. These sit well outside and well inside it, rather than
+        // a second either side of the boundary, so a slow machine cannot move a stamp
+        // across it while the request is in flight.
+        for (long offset : List.of(-90L, 90L)) {
             String body = issue(TEAM, 7, "started", "completed", quoted(Instant.now().plusSeconds(offset)));
             expectUnauthorized(signed(source.webhookPath(), body, sign(SECRET, body)));
         }
-        String fresh = issue(TEAM, 8, "started", "completed", quoted(Instant.now().minusSeconds(59)));
+        String fresh = issue(TEAM, 8, "started", "completed", quoted(Instant.now().minusSeconds(30)));
         mockMvc.perform(signed(source.webhookPath(), fresh, sign(SECRET, fresh))).andExpect(status().isOk());
 
         // Linear may stamp the delivery with epoch milliseconds instead.

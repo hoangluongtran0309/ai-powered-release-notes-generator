@@ -54,6 +54,7 @@ class AutomationWorker {
     private final ReleaseAccess releaseAccess;
     private final Map<ActionType, RuleActionExecutor> executors;
     private final TransactionTemplate transactionTemplate;
+    private final AutomationMetrics metrics;
     private final Clock clock;
     private final boolean enabled;
 
@@ -66,6 +67,7 @@ class AutomationWorker {
             AutomationSecrets secrets,
             ReleaseAccess releaseAccess,
             List<RuleActionExecutor> executors,
+            AutomationMetrics metrics,
             PlatformTransactionManager transactionManager,
             Clock clock,
             @Value("${releaseflow.automation.worker-enabled}") boolean enabled
@@ -85,6 +87,7 @@ class AutomationWorker {
                 },
                 () -> new EnumMap<>(ActionType.class)
         ));
+        this.metrics = metrics;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.enabled = enabled;
@@ -118,7 +121,11 @@ class AutomationWorker {
         if (claim == null || claim.isEmpty()) {
             return false;
         }
-        finish(claim.get(), execute(claim.get()));
+        ActionResult result = execute(claim.get());
+        if (finish(claim.get(), result)) {
+            // Counted only after the outcome is durable, and never for a claim that went stale.
+            metrics.recordExecution(claim.get().triggerType(), result.outcome());
+        }
         return true;
     }
 
@@ -126,6 +133,7 @@ class AutomationWorker {
     // offered again: it becomes UNKNOWN, and its Run with it.
     private void recoverStale() {
         Instant now = now();
+        Map<TriggerType, Long> recovered = new EnumMap<>(TriggerType.class);
         transactionTemplate.executeWithoutResult(status -> {
             publishJobRepository.recoverStale(now.minus(OUTBOX_STALE_AFTER), now);
             List<UUID> stale = actionRunRepository.findStaleRunningIds(now.minus(STALE_AFTER));
@@ -135,12 +143,17 @@ class AutomationWorker {
             log.warn("Recovering {} automation action(s) whose worker stopped responding.", stale.size());
             actionRunRepository.findAllById(stale).forEach(action -> {
                 action.markUnknown(ActionResult.OUTCOME_UNKNOWN, now);
-                runRepository.findById(action.getRunId()).ifPresent(run -> run.settle(
-                        actionRunRepository.findAllByRunIdOrderByPositionAsc(run.getId()), now));
+                runRepository.findById(action.getRunId()).ifPresent(run -> {
+                    run.settle(actionRunRepository.findAllByRunIdOrderByPositionAsc(run.getId()), now);
+                    recovered.merge(run.getTriggerType(), 1L, Long::sum);
+                });
             });
             actionRunRepository.flush();
             runRepository.flush();
         });
+        // An abandoned delivery ends as unknown like any other, or the unknown rate lies.
+        recovered.forEach((trigger, count) ->
+                metrics.recordExecutions(trigger, ExecutionStatus.UNKNOWN, count));
     }
 
     /**
@@ -214,6 +227,7 @@ class AutomationWorker {
             return new Claim(
                     action.getId(),
                     action.getOrganizationId(),
+                    run.getTriggerType(),
                     run.getProjectId(),
                     run.getReleaseId(),
                     run.getReleaseVersionSnapshot(),
@@ -263,11 +277,16 @@ class AutomationWorker {
     }
 
     // Applies the result if this worker still holds the claim, then advances the Run.
-    private void finish(Claim claim, ActionResult result) {
+    /**
+     * Applies the result if this worker still holds the claim.
+     *
+     * @return whether the outcome was recorded, so nothing is counted that was not written
+     */
+    private boolean finish(Claim claim, ActionResult result) {
         Instant now = now();
-        transactionTemplate.executeWithoutResult(status -> actionRunRepository.findById(claim.actionRunId())
+        Boolean applied = transactionTemplate.execute(status -> actionRunRepository.findById(claim.actionRunId())
                 .filter(action -> action.isClaimedAt(claim.claimedAt()))
-                .ifPresent(action -> {
+                .map(action -> {
                     switch (result.outcome()) {
                         case SUCCEEDED -> action.succeed(result.externalReference(), now);
                         case FAILED -> action.fail(result.errorCode(), now);
@@ -284,7 +303,10 @@ class AutomationWorker {
                         runRepository.flush();
                         actionRunRepository.flush();
                     });
-                }));
+                    return true;
+                })
+                .orElse(false));
+        return Boolean.TRUE.equals(applied);
     }
 
     private Instant now() {
@@ -297,6 +319,7 @@ class AutomationWorker {
     private record Claim(
             UUID actionRunId,
             UUID organizationId,
+            TriggerType triggerType,
             UUID projectId,
             UUID releaseId,
             String releaseVersion,

@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.change;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -59,7 +60,8 @@ class AiClassifierConfigurationTest {
                 provider,
                 TIMEOUT,
                 name -> settings.getOrDefault(name, name.endsWith("base-url") ? "http://localhost:9" : ""),
-                OBJECT_MAPPER
+                OBJECT_MAPPER,
+                new ClassificationMetrics(new SimpleMeterRegistry())
         );
     }
 }

@@ -494,8 +494,39 @@ version has been released.
   without one, every kind of token failure recorded as failed with no article requested,
   and the configuration rules at write and enable time.
 
+- Deployment observability (ADR-0026): Actuator answers on its own port, 8081 on
+  loopback by default, serving only `GET /actuator/health` without component details
+  and `GET /actuator/prometheus`. A security chain of its own, matched by asking the
+  actuator rather than by path, denies everything else and creates no session, and the
+  application port serves none of it.
+- Four metrics, every label from a finite set:
+  `releaseflow_classification_completed_total` by `needs_human_review`;
+  `releaseflow_classification_collect_to_complete_seconds`, a timer over the whole wait
+  from a change arriving to its classification;
+  `releaseflow_classification_provider_requests_total` by `provider` and `outcome`; and
+  `releaseflow_automation_action_executions_total` by `trigger` and `outcome`. No
+  Organization, Project, release, rule, run, action, model, external reference, or error
+  text can become a label, because every series is built from enums at startup.
+- Every series registered at zero when the application starts, so a panel reads zero
+  rather than "no data" and a rate never divides by a series that is not there.
+- Counting that follows the write: a classification after its transaction returns, a
+  delivery after its outcome is durable and only while this worker held the claim, and
+  an action abandoned by a stopped worker counted as `unknown` when recovery marks it
+  so. `FAILED` and `UNKNOWN` are never added together.
+- Prometheus and Grafana in the demo stack, on a network marked `internal: true` that
+  carries the management port and nothing else, with seven days of history and a
+  *ReleaseFlow Operations* dashboard of seven panels. `RELEASEFLOW_GRAFANA_PASSWORD` has
+  no default, like every other Compose secret.
+- `RELEASEFLOW_MANAGEMENT_PORT`, `RELEASEFLOW_MANAGEMENT_ADDRESS`, and
+  `RELEASEFLOW_MANAGEMENT_HEALTH_MAIL`, the last so an unconfigured SMTP server cannot
+  make a healthy process report itself unwell.
+
 ### Changed
 
+- The container health check now calls the management port instead of the public
+  `GET /api/status`, so a container whose database has gone is unhealthy rather than
+  merely answering. The image declares port 8081 alongside 8080, and the container
+  workflow asserts that Compose never publishes it (ADR-0026, amending ADR-0007).
 - A rule that fires on a schedule or before a planned release now also accepts a
   Microsoft Teams action, alongside Slack and email. The rule was always that such a rule
   may only tell people something and leave nothing behind; Teams qualifies for exactly
