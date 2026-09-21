@@ -26,7 +26,7 @@ class ActionPayloadLimitTest {
 
         ActionResult result = executor.execute(command(
                 "x".repeat(NotionActionExecutor.MAX_CONTENT_BYTES + 1),
-                Map.of(NotionParentPage.KEY, "1a2b3c4d5e6f4a5b8c9d0e1f2a3b4c5d"),
+                Map.of(NotionParentPage.KEY, AutomationIntegrationTestBase.NOTION_PARENT_PAGE),
                 "notion-integration-token"
         ));
 

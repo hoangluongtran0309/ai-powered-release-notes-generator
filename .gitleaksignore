@@ -1,0 +1,11 @@
+# Findings Gitleaks reports that are not secrets. A fingerprint names one finding in one
+# commit, so an entry here excuses exactly that line of history and nothing else.
+#
+# A commit already on develop cannot be edited, so a false positive is retired here and
+# the code it came from is changed so the pattern does not come back.
+
+# A made-up Notion page id in a test that checks the size limit, written next to the
+# word KEY, which is what Gitleaks' generic-api-key rule looks for. Notion page ids are
+# not credentials; this one addresses nothing, and the test never reaches the network.
+# The line now uses the shared test fixture instead of repeating the literal.
+6cdf854c0462983888b5b9ded9003c236f22dab0:src/test/java/com/hoangluongtran0309/releaseflow/automation/ActionPayloadLimitTest.java:generic-api-key:29
