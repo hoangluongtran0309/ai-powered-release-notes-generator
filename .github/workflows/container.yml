@@ -35,10 +35,13 @@ jobs:
           {
             echo "RELEASEFLOW_DB_PASSWORD=$(openssl rand -hex 24)"
             echo "RELEASEFLOW_CREDENTIAL_MASTER_KEY=$(openssl rand -base64 32)"
+            echo "RELEASEFLOW_GRAFANA_PASSWORD=$(openssl rand -hex 24)"
           } > "${env_file}"
           echo "COMPOSE_ENV_FILES=${env_file}" >> "${GITHUB_ENV}"
-      - name: Validate Compose configuration
-        run: docker compose -f "${COMPOSE_FILE}" config --quiet
+      - name: Validate Compose and observability configuration
+        run: |
+          docker compose -f "${COMPOSE_FILE}" config --quiet
+          jq empty observability/grafana/dashboards/releaseflow-operations.json
       - name: Build image
         run: docker build --tag "${IMAGE_NAME}" .
       - name: Install Trivy with checksum verification
@@ -69,6 +72,54 @@ jobs:
             echo "The application must run as UID 65534, not ${user}." >&2
             exit 1
           fi
+      - name: Verify the management port stays private
+        shell: bash
+        run: |
+          # `docker compose port` prints "invalid IP:0" for a port nobody published, so
+          # the published list is asked for directly, as the database check above does.
+          if docker port "$(docker compose -f "${COMPOSE_FILE}" ps --quiet app)" | grep -q 8081; then
+            echo "The management port must not be published to the host." >&2
+            exit 1
+          fi
+          # Reachable from inside the container, and from Prometheus, and nowhere else.
+          docker compose -f "${COMPOSE_FILE}" exec -T app \
+            curl --fail --silent --show-error http://127.0.0.1:8081/actuator/health \
+            | jq -e '.status == "UP" and (has("components") | not)'
+          if curl --fail --silent --show-error --max-time 5 \
+            --output /dev/null http://127.0.0.1:8081/actuator/prometheus; then
+            echo "The management port answered on the host." >&2
+            exit 1
+          fi
+      - name: Verify the scrape and the provisioned dashboard
+        shell: bash
+        run: |
+          docker compose -f "${COMPOSE_FILE}" exec -T prometheus \
+            promtool check config /etc/prometheus/prometheus.yml
+          up="$(curl --fail --silent --show-error \
+            'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22releaseflow%22%7D' \
+            | jq -r '.data.result[0].value[1]')"
+          if [[ "${up}" != "1" ]]; then
+            echo "Prometheus is not scraping ReleaseFlow (up=${up})." >&2
+            exit 1
+          fi
+          # Every family is present before anything has happened, because each series
+          # is registered at zero when the application starts.
+          for metric in \
+            releaseflow_classification_completed_total \
+            releaseflow_classification_collect_to_complete_seconds_count \
+            releaseflow_classification_provider_requests_total \
+            releaseflow_automation_action_executions_total; do
+            if ! curl --fail --silent --show-error \
+              "http://127.0.0.1:9090/api/v1/label/__name__/values" \
+              | jq -e --arg metric "${metric}" '.data | index($metric)' > /dev/null; then
+              echo "Prometheus never saw ${metric}." >&2
+              exit 1
+            fi
+          done
+          curl --fail --silent --show-error \
+            --user "admin:$(grep RELEASEFLOW_GRAFANA_PASSWORD "${COMPOSE_ENV_FILES}" | cut -d= -f2-)" \
+            'http://127.0.0.1:3000/api/search?query=ReleaseFlow%20Operations' \
+            | jq -e 'map(.uid) | index("releaseflow-operations")'
       - name: Capture Compose logs
         if: always()
         run: |

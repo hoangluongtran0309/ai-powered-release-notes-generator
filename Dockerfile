@@ -2,8 +2,8 @@
 #
 # Single-process ReleaseFlow image used by docker-compose.demo.yml and CI.
 # Orchestration, TLS termination, and secret management remain deployment
-# responsibilities. The health check uses the public GET /api/status endpoint
-# until a private management port exists.
+# responsibilities. The health check asks the management port, which reports the
+# database too; that port is private and must never be published.
 
 # ---- Build stage ------------------------------------------------------------
 FROM eclipse-temurin:21-jdk@sha256:1f79c73404fb0cccf9a3459eda22892f368d994b1028d6fb1ae871c1f49749a6 AS build
@@ -27,7 +27,9 @@ WORKDIR /app
 COPY --from=build --chown=65534:65534 /app/target/releaseflow.jar app.jar
 USER 65534:65534
 
-EXPOSE 8080
+# 8080 serves the product. 8081 is the management port: declared so an operator can
+# see it, and deliberately never published by the Compose stack.
+EXPOSE 8080 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD ["curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "http://127.0.0.1:8080/api/status"]
+    CMD ["curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "http://127.0.0.1:8081/actuator/health"]
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -10,8 +10,8 @@ human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
 source, GitLab source, Linear source, Jira source, automation, automation
-trigger, public changelog, wiki page action, and chat and help centre action
-slices: one
+trigger, public changelog, wiki page action, chat and help centre action, and
+deployment observability slices: one
 Spring Boot application, PostgreSQL/Flyway V1-V26,
 administrator
 registration, member
@@ -42,9 +42,11 @@ worker
 walks one action at a time, fired by a publication, a person, a cron schedule in
 an IANA time zone, the approach of a planned release, or another system's signed
 call, a public changelog of immutable entries with an RSS feed that anybody may read,
-REST/UI paths, and Testcontainers tests. A non-root container image, a Docker Compose demo
-stack, and GitHub Actions security and test gates are also in place.
-The decisions behind all of it are ADR-0001 through ADR-0025. Read `README.md`,
+REST/UI paths, and Testcontainers tests. A private management port with four
+finite-cardinality metrics, a non-root container image, a Docker Compose demo
+stack with Prometheus and Grafana, and GitHub Actions security and test gates are
+also in place.
+The decisions behind all of it are ADR-0001 through ADR-0026. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -213,6 +215,18 @@ behavior.
   runs it had not finished.
 - GitHub Actions stay pinned to commit SHAs, images to digests, and downloaded
   CI tools to SHA-256 checksums. Compose secrets never get default values.
+- The management port is not a product endpoint. It binds to loopback unless a
+  deployment moves it onto a private network, it is never published, and it
+  serves only health without component details and the Prometheus scrape; the
+  application port serves none of it.
+- A metric label comes from a finite set and never from data. No Organization,
+  Project, release, rule, run, action, model, external reference, or error text
+  is ever a label, and every series is registered at zero at startup so a query
+  never meets a series that is not there.
+- A metric is recorded after the write it describes: a classification once its
+  transaction returns, a delivery once its outcome is durable and only while
+  this worker held the claim. `FAILED` and `UNKNOWN` are never added together,
+  because an unconfirmed delivery may have arrived.
 
 ## Commands
 

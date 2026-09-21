@@ -126,9 +126,9 @@
 
 - Administrator and member roles with single-use, hashed, expiring member
   invitations through Thymeleaf and REST, a Members page, and Flyway `V9`.
-- A two-stage, digest-pinned, non-root container image with a health check on
-  `GET /api/status`, and a Docker Compose demo stack with PostgreSQL that
-  requires its secrets to be supplied.
+- A two-stage, digest-pinned, non-root container image whose health check calls
+  the private management port, and a Docker Compose demo stack with PostgreSQL,
+  Prometheus, and Grafana that requires its secrets to be supplied.
 - GitHub Actions gates: Conventional PR titles, actionlint, npm audit, Maven
   verification, CodeQL, dependency review, a full-history Gitleaks scan, and
   a Trivy image scan with a Compose smoke test; weekly Dependabot updates.
@@ -306,9 +306,35 @@
   - Microsoft Teams allowed on scheduled and reminder triggers, which now admit every
     action that only tells people something, while Zendesk is refused with the rest.
 
+- Deployment observability (ADR-0026), with no migration:
+  - Actuator on its own port, 8081 on loopback by default, exposing only `health`
+    without component details and `prometheus`, behind a security chain matched with
+    `EndpointRequest.toAnyEndpoint()` that denies everything else and creates no session;
+  - four metrics whose labels all come from finite sets —
+    `releaseflow.classification.completed` by `needs_human_review`,
+    `releaseflow.classification.collect_to_complete` as a timer with service-level
+    objectives from one second to ten minutes,
+    `releaseflow.classification.provider.requests` by `provider` and `outcome`, and
+    `releaseflow.automation.action.executions` by `trigger` and `outcome`;
+  - no Organization, Project, release, rule, run, action, model, external reference, or
+    error text anywhere in a label, enforced by building every series from enums at
+    startup and asserted by both unit tests;
+  - every series registered at zero when the application starts, so a panel reads zero
+    rather than "no data" and CI can prove all four families are scraped;
+  - a count that follows the write: a classification after its transaction returns, a
+    delivery after its outcome is durable and only while this worker held the claim, and
+    an abandoned action as `unknown` when recovery marks it so;
+  - one decorator counting every provider request exactly once, for all three providers
+    and for a person retrying by hand;
+  - a Compose stack with Prometheus and Grafana on a network marked `internal: true`, the
+    management port never published, seven days of history, and a *ReleaseFlow
+    Operations* dashboard of seven panels;
+  - a container workflow that proves the management port is private and that all four
+    metric families reach Prometheus.
+
 ## In progress
 
-- Nothing. The Microsoft Teams and Zendesk action slice is complete and awaiting review.
+- Nothing. The deployment observability slice is complete and awaiting review.
 
 ## Planned
 
@@ -336,9 +362,12 @@ deliberately deferred list below, one reviewed slice at a time.
 - Office 365 connectors, sovereign-cloud Teams endpoints, Graph bots, and
   Entra-authenticated Teams flows; Zendesk API tokens in place of OAuth.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
-  tests, production observability (Actuator, metrics, Prometheus, Grafana),
-  image publication, release automation, and an open-core/enterprise module
-  split.
+  tests, image publication, release automation, and an open-core/enterprise
+  module split.
+- Alerting, durable metric storage, a retention policy beyond the demo's seven
+  days, and access control for the demo dashboards; per-Organization analytics,
+  which need a product feature with an authorization story rather than a metric
+  label.
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
 - Review history, comments, reviewer roles, and bulk review.

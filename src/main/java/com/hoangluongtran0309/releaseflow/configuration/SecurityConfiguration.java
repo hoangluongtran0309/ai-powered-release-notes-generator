@@ -1,5 +1,8 @@
 package com.hoangluongtran0309.releaseflow.configuration;
 
+import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
+import org.springframework.boot.micrometer.metrics.autoconfigure.export.prometheus.PrometheusScrapeEndpoint;
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -16,6 +19,39 @@ import java.time.Clock;
 
 @Configuration
 public class SecurityConfiguration {
+
+    /**
+     * The management server. It answers on its own port, which a deployment keeps on
+     * loopback or on a private network and never publishes, so this chain is the second
+     * lock rather than the first: whatever reaches the port may read the two endpoints an
+     * operator needs and nothing else.
+     *
+     * <p>The matcher asks the actuator itself which requests are its own rather than
+     * matching {@code /actuator/**} by hand, so moving the base path — or exposing an
+     * endpoint on the application port by mistake — cannot quietly change what this chain
+     * protects.
+     *
+     * <p>A scrape carries no cookie and reads nothing a session holds, so a CSRF token is
+     * something Prometheus could never send; the exemption is named here and nowhere else,
+     * as ADR-0023 requires. Nothing here creates a session either: a scrape every fifteen
+     * seconds would otherwise fill the session store with nobody.
+     */
+    @Bean
+    @Order(0)
+    SecurityFilterChain managementSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher(EndpointRequest.toAnyEndpoint())
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.GET,
+                                "/actuator/health", "/actuator/health/**", "/actuator/prometheus").permitAll()
+                        .requestMatchers(EndpointRequest.to(HealthEndpoint.class, PrometheusScrapeEndpoint.class))
+                        .permitAll()
+                        .anyRequest().denyAll())
+                .csrf(csrf -> csrf.ignoringRequestMatchers(EndpointRequest.toAnyEndpoint()))
+                .requestCache(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        return http.build();
+    }
 
     /**
      * Deliveries from a provider, and calls to an Organization's own automation webhook.

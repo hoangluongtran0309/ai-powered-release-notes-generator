@@ -24,16 +24,19 @@ class AiClassifierConfiguration {
             @Value("${releaseflow.ai.provider}") String provider,
             @Value("${releaseflow.ai.timeout}") Duration timeout,
             Environment environment,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ClassificationMetrics metrics
     ) {
-        return create(provider, timeout, name -> environment.getProperty("releaseflow." + name, ""), objectMapper);
+        return create(provider, timeout, name -> environment.getProperty("releaseflow." + name, ""), objectMapper,
+                metrics);
     }
 
     static AiClassifiers create(
             String providerValue,
             Duration timeout,
             Function<String, String> settings,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ClassificationMetrics metrics
     ) {
         String value = providerValue == null ? "" : providerValue.strip();
         if (value.isEmpty()) {
@@ -63,11 +66,12 @@ class AiClassifierConfiguration {
             );
         }
         String baseUrl = setting(settings, provider, "base-url");
-        return new AiClassifiers(switch (provider) {
+        // Metered here rather than in each provider, so all three are counted alike.
+        return new AiClassifiers(new MeteredChangeClassifier(switch (provider) {
             case OPENAI -> OpenAiCompatibleClassifier.openAi(apiKey, model, baseUrl, timeout, objectMapper);
             case DEEPSEEK -> OpenAiCompatibleClassifier.deepSeek(apiKey, model, baseUrl, timeout, objectMapper);
             case ANTHROPIC -> new AnthropicChangeClassifier(apiKey, model, baseUrl, timeout, objectMapper);
-        });
+        }, metrics));
     }
 
     private static String setting(Function<String, String> settings, AiProvider provider, String name) {

@@ -64,6 +64,9 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
     private ChangeProcessingWorker worker;
 
     @Autowired
+    private io.micrometer.core.instrument.MeterRegistry registry;
+
+    @Autowired
     private ChangeRepository changeRepository;
 
     @Autowired
@@ -100,14 +103,32 @@ class ChangeProcessingIntegrationTest extends PostgreSqlIntegrationTest {
         jdbcTemplate.update("DELETE FROM organizations");
     }
 
+    private double completions(boolean needsHumanReview) {
+        return registry.get("releaseflow.classification.completed")
+                .tag("needs_human_review", Boolean.toString(needsHumanReview))
+                .counter()
+                .count();
+    }
+
     @Test
     void forcesReviewOfAChangeThatTouchesAMigration() throws Exception {
         Repository repository = connect(true);
         GITHUB.respondWithFiles("src/main/java/Audit.java", MIGRATION);
+        // Counters live as long as the process and these tests share one, so what is
+        // asserted below is what this test added.
+        double reviewedBefore = completions(true);
+        double settledBefore = completions(false);
+        long timedBefore = registry.get("releaseflow.classification.collect_to_complete").timer().count();
 
         deliver(repository, 42, "feat: add audit table");
         assertThat(worker.processOne()).isTrue();
         assertThat(worker.processOne()).isFalse();
+
+        // One classification was committed, it needed review, and its wait was measured.
+        assertThat(completions(true)).isEqualTo(reviewedBefore + 1);
+        assertThat(completions(false)).isEqualTo(settledBefore);
+        assertThat(registry.get("releaseflow.classification.collect_to_complete").timer().count())
+                .isEqualTo(timedBefore + 1);
 
         Change change = onlyChange();
         assertThat(change.getProcessingStatus()).isEqualTo(ProcessingStatus.COMPLETED);

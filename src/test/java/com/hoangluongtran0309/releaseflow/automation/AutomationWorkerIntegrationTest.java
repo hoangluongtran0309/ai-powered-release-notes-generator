@@ -26,6 +26,63 @@ class AutomationWorkerIntegrationTest extends AutomationIntegrationTestBase {
     @Autowired
     private AutomationWorker worker;
 
+    @Autowired
+    private io.micrometer.core.instrument.MeterRegistry registry;
+
+    @Test
+    void countsADeliveryOnlyOnceItsOutcomeIsWritten() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+        UUID ruleId = createdRuleId(createRule(owner,
+                slackRule("Announce", "RELEASE_PUBLISHED", projectId, endUser, "en"))
+                .andExpect(status().isCreated()));
+        enable(owner, ruleId).andExpect(status().isOk());
+        // Counters live as long as the process, and these tests share one, so every
+        // assertion here is about what this test added.
+        double succeededBefore = executions("release_published", "succeeded");
+        double failedBefore = executions("release_published", "failed");
+        double manualBefore = executions("manual", "succeeded");
+
+        publishedRelease(owner, projectId, "1.4.0");
+        // The outbox row alone is not a delivery.
+        assertThat(executions("release_published", "succeeded")).isEqualTo(succeededBefore);
+
+        deliverEverything();
+
+        assertThat(executions("release_published", "succeeded")).isEqualTo(succeededBefore + 1);
+        assertThat(executions("release_published", "failed")).isEqualTo(failedBefore);
+        assertThat(executions("manual", "succeeded")).isEqualTo(manualBefore);
+    }
+
+    @Test
+    void countsARefusedDeliveryAsFailedAndNotAsUnknown() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+        UUID ruleId = createdRuleId(createRule(owner,
+                slackRule("Announce", "RELEASE_PUBLISHED", projectId, endUser, "en"))
+                .andExpect(status().isCreated()));
+        enable(owner, ruleId).andExpect(status().isOk());
+        SLACK.respondWith(400);
+        double failedBefore = executions("release_published", "failed");
+        double unknownBefore = executions("release_published", "unknown");
+
+        publishedRelease(owner, projectId, "1.4.0");
+        deliverEverything();
+
+        // A refusal is a decision somebody made, and never counted as unconfirmed.
+        assertThat(executions("release_published", "failed")).isEqualTo(failedBefore + 1);
+        assertThat(executions("release_published", "unknown")).isEqualTo(unknownBefore);
+    }
+
+    private double executions(String trigger, String outcome) {
+        return registry.get(AutomationMetrics.EXECUTIONS)
+                .tags("trigger", trigger, "outcome", outcome)
+                .counter()
+                .count();
+    }
+
     @Test
     void publishingARuleCoversCreatesItsRunAfterTheReleaseIsCommitted() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");

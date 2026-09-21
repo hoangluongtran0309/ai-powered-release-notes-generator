@@ -1,0 +1,90 @@
+{
+  "uid": "releaseflow-operations",
+  "title": "ReleaseFlow Operations",
+  "tags": ["releaseflow", "operations"],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
+  "annotations": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Changes needing human review",
+      "description": "Share of committed classifications a person still has to look at.",
+      "datasource": {"type": "prometheus", "uid": "releaseflow-prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+      "targets": [{"editorMode": "code", "expr": "100 * sum(rate(releaseflow_classification_completed_total{needs_human_review=\"true\"}[$__rate_interval])) / clamp_min(sum(rate(releaseflow_classification_completed_total[$__rate_interval])), 1e-9)", "legendFormat": "review required", "range": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "decimals": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 80}]}}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Classification throughput",
+      "description": "Classifications committed per second, split by whether they need review.",
+      "datasource": {"type": "prometheus", "uid": "releaseflow-prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+      "targets": [{"editorMode": "code", "expr": "sum by (needs_human_review) (rate(releaseflow_classification_completed_total[$__rate_interval]))", "legendFormat": "review={{needs_human_review}}", "range": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Time from a change arriving to its classification",
+      "description": "Includes the queue, the changed-file collection, the AI request, and any retry.",
+      "datasource": {"type": "prometheus", "uid": "releaseflow-prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum(rate(releaseflow_classification_collect_to_complete_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p50", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum(rate(releaseflow_classification_collect_to_complete_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p95", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "sum(rate(releaseflow_classification_collect_to_complete_seconds_sum[$__rate_interval])) / clamp_min(sum(rate(releaseflow_classification_collect_to_complete_seconds_count[$__rate_interval])), 1e-9)", "legendFormat": "average", "range": true, "refId": "C"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "AI provider error rate",
+      "description": "A refused or unreadable answer becomes a change that needs review.",
+      "datasource": {"type": "prometheus", "uid": "releaseflow-prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "targets": [{"editorMode": "code", "expr": "100 * sum by (provider) (rate(releaseflow_classification_provider_requests_total{outcome=\"error\"}[$__rate_interval])) / clamp_min(sum by (provider) (rate(releaseflow_classification_provider_requests_total[$__rate_interval])), 1e-9)", "legendFormat": "{{provider}}", "range": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "decimals": 1}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Action failure rate by trigger",
+      "description": "Failed over the deliveries whose outcome is known. Unknown is counted separately.",
+      "datasource": {"type": "prometheus", "uid": "releaseflow-prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "targets": [{"editorMode": "code", "expr": "100 * sum by (trigger) (rate(releaseflow_automation_action_executions_total{outcome=\"failed\"}[$__rate_interval])) / clamp_min(sum by (trigger) (rate(releaseflow_automation_action_executions_total{outcome=~\"succeeded|failed\"}[$__rate_interval])), 1e-9)", "legendFormat": "{{trigger}}", "range": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "decimals": 1}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Deliveries nobody could confirm",
+      "description": "Each one may have arrived, and waits for a person to accept the duplicate.",
+      "datasource": {"type": "prometheus", "uid": "releaseflow-prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "targets": [{"editorMode": "code", "expr": "sum by (trigger) (rate(releaseflow_automation_action_executions_total{outcome=\"unknown\"}[$__rate_interval]))", "legendFormat": "{{trigger}}", "range": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Prometheus target",
+      "description": "Whether this dashboard is reading anything at all.",
+      "datasource": {"type": "prometheus", "uid": "releaseflow-prometheus"},
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 16},
+      "targets": [{"editorMode": "code", "expr": "up{job=\"releaseflow\"}", "legendFormat": "ReleaseFlow scrape", "range": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red", "index": 0}, "1": {"text": "UP", "color": "green", "index": 1}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []}
+    }
+  ]
+}
