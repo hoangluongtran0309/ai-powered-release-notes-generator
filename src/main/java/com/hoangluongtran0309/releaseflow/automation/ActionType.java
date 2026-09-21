@@ -8,7 +8,9 @@ public enum ActionType {
     EMAIL("Email"),
     PUBLIC_CHANGELOG("Public changelog"),
     NOTION("Notion"),
-    CONFLUENCE("Confluence");
+    CONFLUENCE("Confluence"),
+    MICROSOFT_TEAMS("Microsoft Teams"),
+    ZENDESK("Zendesk");
 
     private final String label;
 

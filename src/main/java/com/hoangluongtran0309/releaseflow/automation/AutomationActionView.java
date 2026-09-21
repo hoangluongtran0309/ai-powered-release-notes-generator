@@ -18,6 +18,10 @@ public record AutomationActionView(
         String siteUrl,
         String email,
         String spaceId,
+        String subdomain,
+        String clientId,
+        String sectionId,
+        String userSegmentId,
         boolean secretConfigured
 ) {
 }

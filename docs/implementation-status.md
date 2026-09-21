@@ -229,8 +229,9 @@
   - a reminder 0 to 365 days before an approved release's planned time, whose
     identity is that moment, so rescheduling a release earns exactly one more
     reminder and scanning the same state again earns none;
-  - both restricted to Slack and email actions, because nobody is watching when
-    a rule ReleaseFlow set off goes off;
+  - both restricted to the actions that only tell people something — Slack, email,
+    and, since ADR-0025, Microsoft Teams — because nobody is watching when a rule
+    ReleaseFlow set off goes off;
   - a trigger worker that only writes runs, claiming a due schedule with
     `FOR UPDATE SKIP LOCKED`, and a rule that is off or archived that can never
     be claimed;
@@ -285,9 +286,29 @@
   - both refused on scheduled and reminder triggers, like every action that is not Slack
     or email.
 
+- Microsoft Teams and Zendesk automation actions (ADR-0025), with Flyway `V26`:
+  - a `MICROSOFT_TEAMS` action whose secret is the Workflows callback URL itself,
+    accepted only as HTTPS on one label beneath `environment.api.powerplatform.com`,
+    with the Workflows trigger path and its own `sig` signature, checked when written and
+    again before every delivery, and never followed through a redirect because the URL is
+    a credential;
+  - a plain-text message of `Release <version>` and the note, with 28 KiB measured on the
+    written request rather than on the message;
+  - a `ZENDESK` action that takes a short-lived client-credentials token and then
+    publishes a Help Center article from the same `MarkdownHtml` output, in the action's
+    language, with `draft=false`, `notify_subscribers=false`, and a user segment only when
+    one is configured;
+  - a subdomain that is one DNS label rather than a URL, so the only help centre an action
+    can reach is its own, and section and segment ids that are positive numbers;
+  - every failure of the token call recorded as `FAILED`, including a 5xx, because nothing
+    is published until the second call, while the article call keeps the usual mapping and
+    a 2xx naming no article is `UNKNOWN`;
+  - Microsoft Teams allowed on scheduled and reminder triggers, which now admit every
+    action that only tells people something, while Zendesk is refused with the rest.
+
 ## In progress
 
-- Nothing. The Notion and Confluence action slice is complete and awaiting review.
+- Nothing. The Microsoft Teams and Zendesk action slice is complete and awaiting review.
 
 ## Planned
 
@@ -309,9 +330,11 @@ deliberately deferred list below, one reviewed slice at a time.
 - Localization of the UI, translation providers other than DeepL, and
   asynchronous note generation.
 - Automation actions other than GitHub Releases, Slack, email, the public
-  changelog, Notion, and Confluence Cloud, and distribution integrations.
-- Confluence Data Center, Confluence OAuth, and reading a Notion or Confluence
-  page back to recognise one a previous run wrote.
+  changelog, Notion, Confluence Cloud, Microsoft Teams, and Zendesk.
+- Confluence Data Center, Confluence OAuth, and reading a Notion, Confluence, or
+  Zendesk page back to recognise one a previous run wrote.
+- Office 365 connectors, sovereign-cloud Teams endpoints, Graph bots, and
+  Entra-authenticated Teams flows; Zendesk API tokens in place of OAuth.
 - Client-rendered pages, JavaScript bundling and tests, browser end-to-end
   tests, production observability (Actuator, metrics, Prometheus, Grafana),
   image publication, release automation, and an open-core/enterprise module

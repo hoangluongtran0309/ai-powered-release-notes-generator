@@ -293,13 +293,13 @@ public class AutomationRuleService {
     /**
      * What a trigger must be able to promise before its rule fires. A rule ReleaseFlow
      * sets off itself may only tell people something: nobody is watching a schedule go
-     * off, so it never publishes a GitHub Release.
+     * off, so it never publishes a GitHub Release or leaves a page behind.
      *
      * @return the schedule to book the first firing from, for a cron rule
      */
     private CronSchedule validateTrigger(AutomationRule rule, List<AutomationRuleAction> actions) {
-        if (rule.getTriggerType().isScheduled() && actions.stream().anyMatch(action ->
-                action.getActionType() != ActionType.SLACK && action.getActionType() != ActionType.EMAIL)) {
+        if (rule.getTriggerType().isScheduled()
+                && actions.stream().anyMatch(action -> !tellsPeople(action.getActionType()))) {
             throw AutomationConflictException.scheduledActionUnsupported();
         }
         switch (rule.getTriggerType()) {
@@ -435,6 +435,13 @@ public class AutomationRuleService {
         );
     }
 
+    /** An action that says something and leaves nothing behind to be said twice. */
+    private static boolean tellsPeople(ActionType actionType) {
+        return actionType == ActionType.SLACK
+                || actionType == ActionType.EMAIL
+                || actionType == ActionType.MICROSOFT_TEAMS;
+    }
+
     private static Map<String, String> configuration(AutomationActionRequest request) {
         Map<String, String> configuration = new LinkedHashMap<>();
         if (request.getActionType() == null) {
@@ -449,9 +456,16 @@ public class AutomationRuleService {
                 put(configuration, ConfluenceActionExecutor.SPACE_KEY, request.getSpaceId());
                 put(configuration, ConfluenceActionExecutor.PARENT_KEY, request.getParentPageId());
             }
+            case ZENDESK -> {
+                put(configuration, ZendeskTenant.SUBDOMAIN_KEY, request.getSubdomain());
+                put(configuration, ZendeskTenant.CLIENT_ID_KEY, request.getClientId());
+                put(configuration, ZendeskTenant.SECTION_KEY, request.getSectionId());
+                put(configuration, ZendeskTenant.USER_SEGMENT_KEY, request.getUserSegmentId());
+            }
             // The repository a GitHub Release is cut in is the project's, not the rule's,
-            // so it is read when the run is made rather than written down here.
-            case GITHUB_RELEASE, SLACK, PUBLIC_CHANGELOG -> {
+            // so it is read when the run is made rather than written down here. A Teams
+            // action is nothing but its callback URL, which is its secret.
+            case GITHUB_RELEASE, SLACK, PUBLIC_CHANGELOG, MICROSOFT_TEAMS -> {
             }
         }
         return configuration;
@@ -588,6 +602,10 @@ public class AutomationRuleService {
                                 action.getConfiguration().get(ConfluenceSite.KEY),
                                 action.getConfiguration().get(ConfluenceActionExecutor.EMAIL_KEY),
                                 action.getConfiguration().get(ConfluenceActionExecutor.SPACE_KEY),
+                                action.getConfiguration().get(ZendeskTenant.SUBDOMAIN_KEY),
+                                action.getConfiguration().get(ZendeskTenant.CLIENT_ID_KEY),
+                                action.getConfiguration().get(ZendeskTenant.SECTION_KEY),
+                                action.getConfiguration().get(ZendeskTenant.USER_SEGMENT_KEY),
                                 action.hasSecret()
                         ))
                         .toList()

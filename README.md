@@ -72,8 +72,9 @@ The application currently provides:
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme;
 - a non-root container image and a Docker Compose demo stack with PostgreSQL;
 - automation rules that deliver a published release note to a GitHub Release, a
-  Slack channel, a list of email addresses, a Notion page, or a Confluence Cloud
-  space, in an order the rule fixes, with a
+  Slack channel, a list of email addresses, a Notion page, a Confluence Cloud
+  space, a Microsoft Teams chat, or a Zendesk help centre, in an order the rule
+  fixes, with a
   durable run history, an outcome nobody may repeat without confirming it, and no
   way for a rule to hold up the release that triggered it;
 - GitHub Actions gates for tests, CodeQL, dependency review, secret scanning,
@@ -125,14 +126,18 @@ that leaves the application, and `RELEASEFLOW_SLACK_ALLOWED_HOSTS` (default
 `hooks.slack.com,hooks.slack-gov.com`) is the only set of origins a Slack webhook
 URL may name.
 
-A Notion or Confluence action needs nothing from the deployment beyond the
-defaults: the token is entered per action in the UI.
+A Notion, Confluence, Microsoft Teams, or Zendesk action needs nothing from the
+deployment beyond the defaults: its token, callback URL, or client secret is
+entered per action in the UI.
 `RELEASEFLOW_NOTION_API_BASE_URL` (default `https://api.notion.com`) and
 `RELEASEFLOW_NOTION_VERSION` (default `2026-03-11`) pin the API a page is written
 against; change the version only together with the body the application sends.
 `RELEASEFLOW_CONFLUENCE_API_BASE_URL` is empty by default, which means each action
 calls its own site; set it only to stand in for Confluence Cloud locally, and note
 that the site is still checked and every recorded link still points at it.
+`RELEASEFLOW_TEAMS_API_BASE_URL` and `RELEASEFLOW_ZENDESK_API_BASE_URL` do the same
+for those two; the Teams stand-in keeps the callback's path and signature, and a
+Zendesk link is always the one Zendesk itself returned.
 
 Rules that fire on their own, and rules other systems call, have their own
 settings:
@@ -1089,7 +1094,8 @@ Five things can make a rule run:
 | Before a planned release | A notice of 0 to 365 days | An approved release with a planned time is announced that long before it. Moving the release earns one more reminder |
 | Called by another system | Nothing; ReleaseFlow mints the path and the secret | A signed call names a published release and starts a run |
 
-A schedule and a reminder take Slack and email actions only: nobody is watching
+A schedule and a reminder take only the actions that tell people something —
+Slack, email, and Microsoft Teams: nobody is watching
 when they go off. A schedule takes its project from the release it repeats.
 **Preview next run** on the page, or `POST /api/automation/rules/cron-preview`,
 says when an expression would next fire before any rule keeps it.
@@ -1101,7 +1107,7 @@ GitHub Release action's project has exactly one GitHub source, the deployment ca
 carry the action out at all, and the configuration and secret are usable. A rule
 that is refused says which of those failed.
 
-Six kinds of action exist:
+Eight kinds of action exist:
 
 | Action | What it needs | What it does |
 | --- | --- | --- |
@@ -1111,6 +1117,8 @@ Six kinds of action exist:
 | Public changelog | Nothing | Publishes the note on your own changelog page and RSS feed |
 | Notion | The parent page's id and an integration token | Files the note as a child page titled `Release <version>`, up to 450,000 bytes |
 | Confluence | A Cloud site, the account's email, a numeric space id, an optional parent page, and an API token | Creates a page titled `Release <version>` in that space, up to 2,000,000 bytes |
+| Microsoft Teams | The Workflows callback URL, which is the action's secret | Posts the note into the chat or channel the flow targets, up to 28 KiB of request |
+| Zendesk | A subdomain, an OAuth client ID and secret, a numeric section, and an optional user segment | Publishes the note as a Help Center article in the action's language, up to 1,000,000 bytes |
 
 A Slack webhook URL must name an origin the deployment allows —
 `hooks.slack.com` or `hooks.slack-gov.com` unless `RELEASEFLOW_SLACK_ALLOWED_HOSTS`
@@ -1118,6 +1126,10 @@ says otherwise — and is checked again before every delivery. A Confluence site
 checked the same way, against the shape rather than a list: it must be exactly one
 label beneath `atlassian.net` over HTTPS, with nothing after the host. A Notion
 page id is the 32 hexadecimal characters Notion shows, with or without dashes. A
+Microsoft Teams callback must be the HTTPS Workflows URL the flow displays — one
+label beneath `environment.api.powerplatform.com`, the Workflows trigger path, and
+its own `sig` signature — and a Zendesk subdomain is one label, not a URL, so the
+only help centre an action can reach is its own. A
 Confluence page carries an HTML comment naming the run that wrote it; nothing
 reads it back, so a delivery Notion or Confluence never confirmed stays unknown
 until a person says a second page is acceptable. A secret is
@@ -1209,6 +1221,11 @@ and `automation_webhook_rule_required` are `409`; `automation_action_required`,
 `automation_confluence_email_required`, `automation_confluence_email_invalid`,
 `automation_confluence_space_required`, `automation_confluence_space_invalid`,
 `automation_confluence_parent_invalid`, `automation_confluence_token_required`,
+`automation_teams_webhook_required`, `automation_teams_webhook_invalid`,
+`automation_zendesk_subdomain_required`, `automation_zendesk_subdomain_invalid`,
+`automation_zendesk_client_id_required`, `automation_zendesk_client_secret_required`,
+`automation_zendesk_section_required`, `automation_zendesk_section_invalid`,
+`automation_zendesk_user_segment_invalid`,
 `automation_cron_invalid`,
 `automation_cron_time_zone_invalid`, `automation_cron_no_occurrence`,
 `automation_cron_release_required`, `automation_reminder_days_invalid`, and

@@ -99,6 +99,55 @@ class AutomationPageIntegrationTest extends AutomationIntegrationTestBase {
     }
 
     @Test
+    void thePageWritesAZendeskActionAndReadsItBackWithoutItsSecret() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+
+        mockMvc.perform(post("/automation").session(owner.session()).with(csrf())
+                        .param("name", "Help centre")
+                        .param("triggerType", "RELEASE_PUBLISHED")
+                        .param("projectId", projectId.toString())
+                        .param("actions[0].actionType", "ZENDESK")
+                        .param("actions[0].audienceId", endUser.toString())
+                        .param("actions[0].language", "en")
+                        .param("actions[0].subdomain", "acme")
+                        .param("actions[0].clientId", "releaseflow")
+                        .param("actions[0].sectionId", "360001")
+                        .param("actions[0].secret", "zendesk-client-secret"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/automation?saved"));
+
+        UUID ruleId = UUID.fromString(jdbcTemplate.queryForObject(
+                "SELECT id::text FROM automation_rules WHERE name = 'Help centre'", String.class));
+        mockMvc.perform(get("/automation/{ruleId}", ruleId).session(owner.session()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("value=\"acme\"")))
+                .andExpect(content().string(containsString("value=\"360001\"")))
+                .andExpect(content().string(not(containsString("zendesk-client-secret"))));
+    }
+
+    @Test
+    void thePageRefusesATeamsCallbackSomewhereElse() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+
+        mockMvc.perform(post("/automation").session(owner.session()).with(csrf())
+                        .param("name", "Chat")
+                        .param("triggerType", "RELEASE_PUBLISHED")
+                        .param("projectId", projectId.toString())
+                        .param("actions[0].actionType", "MICROSOFT_TEAMS")
+                        .param("actions[0].audienceId", endUser.toString())
+                        .param("actions[0].language", "en")
+                        .param("actions[0].secret",
+                                "https://evil.test/powerautomate/automations/direct/workflows/a"
+                                        + "/triggers/manual/paths/invoke?sig=a"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("powerplatform.com")));
+    }
+
+    @Test
     void thePageRefusesAConfluenceSiteSomewhereElse() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
         UUID projectId = createProject(owner);

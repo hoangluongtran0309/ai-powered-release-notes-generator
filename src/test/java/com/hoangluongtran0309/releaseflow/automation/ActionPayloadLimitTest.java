@@ -54,6 +54,42 @@ class ActionPayloadLimitTest {
     }
 
     @Test
+    void refusesAMessageLargerThanTeamsAccepts() {
+        TeamsActionExecutor executor =
+                new TeamsActionExecutor(new ObjectMapper(), new TeamsWebhookUrl(), NOWHERE, TIMEOUT);
+
+        // Teams measures the request, so the note is sized against the written payload.
+        ActionResult result = executor.execute(command(
+                "x".repeat(TeamsActionExecutor.MAX_PAYLOAD_BYTES),
+                Map.of(),
+                "https://contoso.environment.api.powerplatform.com/powerautomate/automations/direct/workflows/a"
+                        + "/triggers/manual/paths/invoke?sig=a"
+        ));
+
+        assertThat(result.outcome()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(result.errorCode()).isEqualTo(TeamsActionExecutor.PAYLOAD_TOO_LARGE);
+    }
+
+    @Test
+    void refusesAnArticleLargerThanZendeskAccepts() {
+        ZendeskActionExecutor executor = new ZendeskActionExecutor(new ObjectMapper(), NOWHERE, TIMEOUT);
+
+        // Refused before the token call, so no credential is sent for nothing.
+        ActionResult result = executor.execute(command(
+                "x".repeat(ZendeskActionExecutor.MAX_ARTICLE_BYTES + 1),
+                Map.of(
+                        ZendeskTenant.SUBDOMAIN_KEY, "acme",
+                        ZendeskTenant.CLIENT_ID_KEY, "releaseflow",
+                        ZendeskTenant.SECTION_KEY, "42"
+                ),
+                "zendesk-client-secret"
+        ));
+
+        assertThat(result.outcome()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(result.errorCode()).isEqualTo(ZendeskActionExecutor.CONTENT_TOO_LARGE);
+    }
+
+    @Test
     void failsAnActionWhoseConfigurationNoLongerHolds() {
         ConfluenceActionExecutor executor =
                 new ConfluenceActionExecutor(new ObjectMapper(), new ConfluenceSite(), NOWHERE, TIMEOUT);
@@ -71,6 +107,28 @@ class ActionPayloadLimitTest {
 
         assertThat(result.outcome()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(result.errorCode()).isEqualTo(ConfluenceActionExecutor.CONFIGURATION_INVALID);
+
+        // The same for a Teams callback that is no longer one.
+        TeamsActionExecutor teams =
+                new TeamsActionExecutor(new ObjectMapper(), new TeamsWebhookUrl(), NOWHERE, TIMEOUT);
+        ActionResult teamsResult = teams.execute(command(
+                "Anything.", Map.of(), "https://evil.test/powerautomate/x?sig=a"));
+        assertThat(teamsResult.outcome()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(teamsResult.errorCode()).isEqualTo(TeamsActionExecutor.WEBHOOK_INVALID);
+
+        // And for a Zendesk subdomain that is no longer one.
+        ZendeskActionExecutor zendesk = new ZendeskActionExecutor(new ObjectMapper(), NOWHERE, TIMEOUT);
+        ActionResult zendeskResult = zendesk.execute(command(
+                "Anything.",
+                Map.of(
+                        ZendeskTenant.SUBDOMAIN_KEY, "acme.zendesk.com",
+                        ZendeskTenant.CLIENT_ID_KEY, "releaseflow",
+                        ZendeskTenant.SECTION_KEY, "42"
+                ),
+                "zendesk-client-secret"
+        ));
+        assertThat(zendeskResult.outcome()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(zendeskResult.errorCode()).isEqualTo(ZendeskActionExecutor.CONFIGURATION_INVALID);
     }
 
     private static ActionCommand command(String note, Map<String, String> configuration, String secret) {
