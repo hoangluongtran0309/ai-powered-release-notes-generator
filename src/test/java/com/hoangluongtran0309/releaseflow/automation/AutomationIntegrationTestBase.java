@@ -58,6 +58,7 @@ public abstract class AutomationIntegrationTestBase extends PostgreSqlIntegratio
     protected static final ConfluenceStub CONFLUENCE = ConfluenceStub.start();
     protected static final String GITHUB_TOKEN = "github_pat_automation-test";
     protected static final String SENDER = "releases@example.com";
+    /** A made-up Notion page id: the shape the validator wants, addressing nothing. */
     protected static final String NOTION_PARENT_PAGE = "1a2b3c4d5e6f4a5b8c9d0e1f2a3b4c5d";
     protected static final String CONFLUENCE_ACCOUNT = "releases@example.com";
 
