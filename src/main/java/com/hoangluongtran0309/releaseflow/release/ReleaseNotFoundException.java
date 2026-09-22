@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-public class ReleaseNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ReleaseNotFoundException extends LocalizedException {
 
     public ReleaseNotFoundException() {
-        super("Release was not found.");
+        super("error.release_not_found");
     }
 }

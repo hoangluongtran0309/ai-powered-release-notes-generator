@@ -36,6 +36,10 @@ public class AppUser {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** The UI language this person chose. NULL means their browser decides. */
+    @Column(name = "ui_locale", length = 16)
+    private String uiLocale;
+
     protected AppUser() {
     }
 
@@ -83,5 +87,13 @@ public class AppUser {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public String getUiLocale() {
+        return uiLocale;
+    }
+
+    void chooseUiLocale(String uiLocale) {
+        this.uiLocale = uiLocale;
     }
 }

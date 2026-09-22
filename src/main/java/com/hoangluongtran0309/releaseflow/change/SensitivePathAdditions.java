@@ -28,18 +28,18 @@ final class SensitivePathAdditions {
             }
             if (trimmed.length() > MAX_LENGTH) {
                 throw new InvalidSensitivePathsException(
-                        "Each pattern must be at most " + MAX_LENGTH + " characters: " + abbreviate(trimmed));
+                        "error.invalid_sensitive_paths.patternTooLong", MAX_LENGTH, abbreviate(trimmed));
             }
             normalized.add(trimmed);
         }
         if (normalized.size() > MAX_PATTERNS) {
-            throw new InvalidSensitivePathsException("A project can add at most " + MAX_PATTERNS + " patterns.");
+            throw new InvalidSensitivePathsException("error.invalid_sensitive_paths.tooMany", MAX_PATTERNS);
         }
         for (String pattern : normalized) {
             try {
                 SensitivePaths.compile(List.of(pattern));
             } catch (IllegalArgumentException exception) {
-                throw new InvalidSensitivePathsException("Not a valid glob pattern: " + pattern);
+                throw new InvalidSensitivePathsException("error.invalid_sensitive_paths.notGlob", pattern);
             }
         }
         return List.copyOf(normalized);

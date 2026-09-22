@@ -1,28 +1,28 @@
 package com.hoangluongtran0309.releaseflow.project;
 
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 import com.hoangluongtran0309.releaseflow.source.SourceType;
 
 /** The provider could not be reached, so nothing is decided about the token. */
-public class SourceUnavailableException extends RuntimeException {
+public class SourceUnavailableException extends LocalizedException {
 
     private final String code;
 
     SourceUnavailableException(SourceType sourceType) {
-        super(switch (sourceType) {
-            case GITHUB -> "GitHub could not be reached to check the token. Try again later.";
-            case GITLAB -> "GitLab could not be reached to check the token. Try again later.";
-            case LINEAR -> "Linear could not be reached to check the API key. Try again later.";
-            case JIRA -> "Jira could not be reached to check the account and token. Try again later.";
-        });
-        this.code = switch (sourceType) {
+        super("error." + code(sourceType));
+        this.code = code(sourceType);
+    }
+
+    public String code() {
+        return code;
+    }
+
+    private static String code(SourceType sourceType) {
+        return switch (sourceType) {
             case GITHUB -> "github_unavailable";
             case GITLAB -> "gitlab_unavailable";
             case LINEAR -> "linear_unavailable";
             case JIRA -> "jira_unavailable";
         };
-    }
-
-    public String code() {
-        return code;
     }
 }

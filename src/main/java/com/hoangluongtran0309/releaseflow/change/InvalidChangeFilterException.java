@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class InvalidChangeFilterException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public InvalidChangeFilterException(String message) {
-        super(message);
+public class InvalidChangeFilterException extends LocalizedException {
+
+    public InvalidChangeFilterException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

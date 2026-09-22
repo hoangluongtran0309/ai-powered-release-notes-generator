@@ -43,13 +43,13 @@ public class GitLabBaseUrl {
     public String validated(String value) {
         if (value == null || value.isBlank() || value.length() > MAX_LENGTH) {
             throw new InvalidGitLabBaseUrlException(
-                    "The GitLab instance URL is required and must not exceed " + MAX_LENGTH + " characters.");
+                    "error.gitlab_base_url_invalid.length", MAX_LENGTH);
         }
         final URI uri;
         try {
             uri = new URI(value.strip());
         } catch (URISyntaxException exception) {
-            throw new InvalidGitLabBaseUrlException("The GitLab instance URL is not a valid URL.");
+            throw new InvalidGitLabBaseUrlException("error.gitlab_base_url_invalid.unreadable");
         }
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
         if (!("https".equals(scheme) || "http".equals(scheme))
@@ -57,12 +57,11 @@ public class GitLabBaseUrl {
                 || uri.getUserInfo() != null
                 || uri.getQuery() != null
                 || uri.getFragment() != null) {
-            throw new InvalidGitLabBaseUrlException(
-                    "The GitLab instance URL must be an HTTP or HTTPS address without credentials, query, or fragment.");
+            throw new InvalidGitLabBaseUrlException("error.gitlab_base_url_invalid.shape");
         }
         String origin = origin(scheme, uri.getHost(), uri.getPort());
         if (!allowedOrigins.contains(origin)) {
-            throw new GitLabHostNotAllowedException("This deployment does not allow the GitLab instance " + origin + ".");
+            throw new GitLabHostNotAllowedException("error.gitlab_host_not_allowed", origin);
         }
         return withoutTrailingSlashes(uri.toString());
     }

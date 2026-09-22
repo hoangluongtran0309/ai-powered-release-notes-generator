@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class ChangeProcessingException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ChangeProcessingException extends LocalizedException {
 
     public ChangeProcessingException() {
-        super("This change is still being processed. Review it once its changed files are checked.");
+        super("error.change_processing");
     }
 }

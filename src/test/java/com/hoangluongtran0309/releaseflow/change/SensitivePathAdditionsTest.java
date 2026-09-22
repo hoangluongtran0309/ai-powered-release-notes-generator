@@ -22,9 +22,11 @@ class SensitivePathAdditionsTest {
     void acceptsAtMostOneHundredPatterns() {
         assertThat(SensitivePathAdditions.normalize(patterns(100))).hasSize(100);
 
+        // The limit is an argument of the sentence, not part of it.
         assertThatThrownBy(() -> SensitivePathAdditions.normalize(patterns(101)))
                 .isInstanceOf(InvalidSensitivePathsException.class)
-                .hasMessageContaining("at most 100 patterns");
+                .hasMessage("error.invalid_sensitive_paths.tooMany")
+                .extracting("arguments").isEqualTo(new Object[]{100});
     }
 
     @Test
@@ -41,14 +43,17 @@ class SensitivePathAdditionsTest {
         assertThat(SensitivePathAdditions.normalize(List.of(longest))).containsExactly(longest);
         assertThatThrownBy(() -> SensitivePathAdditions.normalize(List.of("a".repeat(257))))
                 .isInstanceOf(InvalidSensitivePathsException.class)
-                .hasMessageContaining("at most 256 characters");
+                .hasMessage("error.invalid_sensitive_paths.patternTooLong")
+                .extracting(failure -> ((InvalidSensitivePathsException) failure).arguments()[0])
+                .isEqualTo(256);
     }
 
     @Test
     void rejectsAnInvalidGlobByName() {
         assertThatThrownBy(() -> SensitivePathAdditions.normalize(List.of("**/billing/**", "src/[unclosed")))
                 .isInstanceOf(InvalidSensitivePathsException.class)
-                .hasMessage("Not a valid glob pattern: src/[unclosed");
+                .hasMessage("error.invalid_sensitive_paths.notGlob")
+                .extracting("arguments").isEqualTo(new Object[]{"src/[unclosed"});
     }
 
     @Test

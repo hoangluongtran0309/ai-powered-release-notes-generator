@@ -9,6 +9,16 @@ public enum SourceType {
     /** An issue tracker ReleaseFlow asks, rather than one that tells it. */
     JIRA;
 
+    /** The provider's own name, which reads the same in every language. */
+    public String displayName() {
+        return switch (this) {
+            case GITHUB -> "GitHub";
+            case GITLAB -> "GitLab";
+            case LINEAR -> "Linear";
+            case JIRA -> "Jira";
+        };
+    }
+
     /** Whether an administrator can ask the provider for what it recorded before connection. */
     public boolean supportsHistoryImport() {
         return this == GITHUB || this == GITLAB;

@@ -21,4 +21,12 @@ public enum ActionType {
     public String getLabel() {
         return label;
     }
+
+    /**
+     * The bundle key of this ActionType's name, so a page says it in the reader's language.
+     * {@link #getLabel()} stays the English wording that recorded evidence keeps.
+     */
+    public String getLabelKey() {
+        return "ui.enum.actionType." + name();
+    }
 }

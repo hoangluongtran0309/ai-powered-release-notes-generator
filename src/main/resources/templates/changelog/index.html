@@ -1,18 +1,18 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout/public}">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/public}">
 <head>
-    <title th:text="|${organizationName} release notes|">Release notes</title>
+    <title th:text="#{ui.changelog.title(${organizationName})}">Release notes</title>
 </head>
 <body>
 <main layout:fragment="content">
     <header class="max-w-3xl">
-        <p class="page-eyebrow">Release notes</p>
+        <p class="page-eyebrow" th:text="#{ui.changelog.heading}">Release notes</p>
         <h1 class="page-heading" th:text="${organizationName}">Organization</h1>
-        <p class="page-subtitle">What has shipped, newest first.</p>
+        <p class="page-subtitle" th:text="#{ui.changelog.subtitle}">What has shipped, newest first.</p>
     </header>
 
-    <p class="section-copy mt-8" th:if="${#lists.isEmpty(entries)}">Nothing has been published yet.</p>
+    <p class="section-copy mt-8" th:if="${#lists.isEmpty(entries)}" th:text="#{ui.changelog.empty}">Nothing has been published yet.</p>
 
     <ol class="mt-8 grid gap-4" th:unless="${#lists.isEmpty(entries)}">
         <li class="surface-card p-5 sm:p-6" th:each="entry : ${entries}" th:id="|entry-${entry.id}|">
@@ -24,7 +24,7 @@
             <h2 class="mt-3 text-2xl font-bold tracking-tight">
                 <a class="hover:underline" th:href="${entry.url}" th:text="${entry.releaseVersion}">1.4.0</a>
             </h2>
-            <p class="mt-1 text-sm text-slate-500" th:text="|Written for ${entry.audienceName}|">Written for End user</p>
+            <p class="mt-1 text-sm text-slate-500" th:text="#{ui.changelog.writtenFor(${entry.audienceName})}">Written for End user</p>
         </li>
     </ol>
 </main>

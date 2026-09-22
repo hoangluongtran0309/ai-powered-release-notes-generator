@@ -12,16 +12,16 @@ import jakarta.validation.constraints.Size;
  */
 public class ReleaseDecisionRequest {
 
-    @NotNull(message = "Action must be approve or edit.")
+    @NotNull(message = "{validation.reviewAction.required}")
     private ReviewAction action;
 
-    @NotBlank(message = "Category is required.")
+    @NotBlank(message = "{validation.category.required}")
     private String category;
 
-    @NotNull(message = "Breaking must be true or false.")
+    @NotNull(message = "{validation.breaking.required}")
     private Boolean breaking;
 
-    @Size(max = 2000, message = "Note must not exceed 2000 characters.")
+    @Size(max = 2000, message = "{validation.note.tooLong}")
     private String note;
 
     public ReviewAction getAction() {

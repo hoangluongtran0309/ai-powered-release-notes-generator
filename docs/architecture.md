@@ -18,6 +18,8 @@ POST /login                   -> Spring Security authentication
 POST /logout                  -> Spring Security logout
 GET  /api/session             -> authenticated principal identity
 GET  /api/csrf                -> CSRF token for session-based REST clients
+GET|PUT /api/me/ui-locale     -> UiLocaleService (the signed-in person's own language)
+POST /settings/ui-locale      -> UiLocaleService (the picker in the user menu)
 GET  /api/status              -> JSON status
 GET  /projects                -> Project and source configuration UI
 POST /projects                -> ProjectService
@@ -1183,15 +1185,50 @@ who have no account. See [ADR-0022](adr/0022-public-changelog.md).
 ## User interface
 
 Pages are server-rendered Thymeleaf templates composed with the Layout Dialect:
-`layout/auth` frames the home, sign-in, and registration screens, and
-`layout/main` provides the signed-in sidebar shell. `PageModelAdvice` supplies
-the signed-in viewer and current path to every page controller.
+`layout/auth` frames the home, sign-in, and registration screens, `layout/main`
+provides the signed-in sidebar shell, and `layout/public` frames the anonymous
+changelog. `PageModelAdvice` supplies the signed-in viewer, the current path, the
+languages the picker offers, and the language this page is being written in.
 
 The stylesheet is compiled from Tailwind CSS 4 and DaisyUI 5 during the Maven
 build, which installs a pinned Node.js through `frontend-maven-plugin`.
 Alpine.js, served from a WebJar, handles only presentation behavior; forms post
-to the same controllers and application services as before. See
-[ADR-0003](adr/0003-frontend-toolchain.md).
+to the same controllers and application services as before. `app.js` holds no
+wording at all: the three components that show a label read it from a `data-`
+attribute the template rendered, which is also how server data stays out of an
+Alpine expression. See [ADR-0003](adr/0003-frontend-toolchain.md).
+
+## Interface language
+
+Every word a person reads comes from `messages/ui.properties` and
+`messages/ui_vi.properties` ([ADR-0027](adr/0027-ui-localization.md)). `UiLanguages`
+reads `RELEASEFLOW_UI_LANGUAGES` once at startup, narrows each entry to a primary
+subtag, and refuses a list that names no usable language.
+
+`UiLocaleResolver` picks the language of a request in one order — the
+`releaseflow_lang` cookie, `app_users.ui_locale`, `Accept-Language`, then the first
+configured language — narrowing each step to a language this deployment ships and
+caching the result on the request. The account's choice comes from the snapshot
+`ReleaseFlowPrincipal` took when the session began, so resolving a locale costs no
+query; a change writes the cookie too, and the cookie outranks the account.
+
+`UiLocaleService` saves the choice, `UiLocaleApiController` answers
+`GET|PUT /api/me/ui-locale`, and `UiLocalePageController` backs the picker in the
+user menu. A public changelog request reaches only the cookie, `Accept-Language`
+and fallback steps, so anonymous reading still creates no session and reads no
+account, and the published note keeps the language it was published in. Those
+pages are cached publicly and declare `Vary: Accept-Language, Cookie`; the RSS
+feed is one shared document and stays English.
+
+Failures carry a key rather than a sentence: every user-facing exception extends
+`LocalizedException`, and `UiMessages` writes it in the reader's language for both
+`ApiExceptionHandler` and the page controllers. Bean Validation reads the same
+bundle through a validator wired to a message source over `messages/ui`. A missing
+key is served as the key itself, so a gap is visible rather than silently English.
+
+Recorded evidence is not interface text. A stored AI failure, a classification
+reason, a review trigger's detail and a provider's own name stay as they were
+recorded; only the sentence around them is translated.
 
 ## HTTP security and errors
 
@@ -1210,6 +1247,10 @@ automation trigger, and the signed `GET` that reads a run back). Anything else b
 
 REST failures use `application/problem+json` and a stable `code`, while
 UI validation displays the same application errors next to the relevant field.
+The `title` and `detail` of a problem are written in the reader's language, and
+the `code` never is: it is what a caller matches on. The 401 and 403 bodies the
+security filter chain writes are localized the same way, from the request itself,
+because that chain runs before Spring MVC has put a locale in place.
 Session cookies are HttpOnly and SameSite=Lax; deployments using HTTPS must set
 the secure-cookie environment switch.
 

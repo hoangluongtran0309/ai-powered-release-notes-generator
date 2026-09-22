@@ -126,7 +126,7 @@ class ChangeAiClassificationIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("ai_classification_failed"))
-                .andExpect(jsonPath("$.detail").value("OpenAI returned HTTP 500."));
+                .andExpect(jsonPath("$.detail").value("AI classification failed: OpenAI returned HTTP 500."));
         mockMvc.perform(get("/api/projects/{projectId}/changes", projectId).session(owner.session()))
                 .andExpect(jsonPath("$[0].category").value("UNKNOWN"))
                 .andExpect(jsonPath("$[0].needsReview").value(true))

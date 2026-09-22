@@ -6,7 +6,7 @@ import java.util.List;
 
 public class SensitivePathsRequest {
 
-    @NotNull(message = "List the patterns to add, or none.")
+    @NotNull(message = "{validation.sensitivePaths.required}")
     private List<String> additions;
 
     public List<String> getAdditions() {

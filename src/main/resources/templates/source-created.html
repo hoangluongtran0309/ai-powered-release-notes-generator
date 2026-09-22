@@ -1,143 +1,124 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout/main}">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/main}">
 <head>
-    <title>Source connected</title>
+    <title th:text="#{ui.sourceCreated.title}">Source connected</title>
 </head>
 <body>
-<p layout:fragment="page-title">Projects</p>
+<p layout:fragment="page-title" th:text="#{ui.nav.projects}">Projects</p>
 <div layout:fragment="content"
      th:with="gitHub=${source.type.name() == 'GITHUB'}, gitLab=${source.type.name() == 'GITLAB'},
               linear=${source.type.name() == 'LINEAR'}, jira=${source.type.name() == 'JIRA'},
               secretShown=${source.webhookSecret != null}">
     <header class="page-header">
         <div>
-            <p class="page-eyebrow" th:switch="${source.type.name()}">
-                <span th:case="'GITHUB'">GitHub connected</span>
-                <span th:case="'GITLAB'">GitLab connected</span>
-                <span th:case="'LINEAR'">Linear connected</span>
-                <span th:case="'JIRA'">Jira connected</span>
-            </p>
+            <p class="page-eyebrow"
+               th:text="#{'ui.sourceCreated.connected.' + ${source.type.name()}}">GitHub connected</p>
             <h1 class="page-heading"
-                th:text="${linear} ? 'The team is connected' : (${jira} ? 'The project is connected' : 'Save these webhook credentials now')">
+                th:text="${linear} ? #{ui.sourceCreated.headingTeam}
+                        : (${jira} ? #{ui.sourceCreated.headingProject} : #{ui.sourceCreated.headingSecret})">
                 Save these webhook credentials now</h1>
             <p class="page-subtitle" th:text="${jira}
-                    ? 'ReleaseFlow stores only an encrypted copy of the API token.'
-                    : 'ReleaseFlow stores only an encrypted copy of the secret.'">ReleaseFlow stores only an encrypted copy of the secret.</p>
+                    ? #{ui.sourceCreated.subtitleToken}
+                    : #{ui.sourceCreated.subtitleSecret}">ReleaseFlow stores only an encrypted copy.</p>
         </div>
     </header>
 
     <article class="surface-card max-w-3xl p-6">
         <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:if="${linear}">
             <p class="text-sm font-semibold text-emerald-900">
-                <span>Linear team</span>
+                <span th:text="#{ui.sourceCreated.linearTeam}">Linear team</span>
                 <span th:text="${source.externalProjectKey}">team</span>
             </p>
-            <p class="mt-1 text-xs text-emerald-800">
-                Linear made the signing secret, so ReleaseFlow has none to show you. Point Linear's webhook at the
-                address below.
+            <p class="mt-1 text-xs text-emerald-800" th:text="#{ui.sourceCreated.linearSecretNote}">
+                Linear made the signing secret, so ReleaseFlow has none to show you.
             </p>
         </div>
 
         <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:if="${jira}">
             <p class="text-sm font-semibold text-emerald-900">
-                <span>Jira project</span>
+                <span th:text="#{ui.sourceCreated.jiraProject}">Jira project</span>
                 <span th:text="${source.externalProjectKey}">APP</span>
             </p>
-            <p class="mt-1 text-xs text-emerald-800">
-                There is nothing to paste anywhere: ReleaseFlow reads this project on a schedule, so Jira needs no
-                webhook.
+            <p class="mt-1 text-xs text-emerald-800" th:text="#{ui.sourceCreated.jiraNote}">
+                ReleaseFlow reads this project on a schedule, so Jira needs no webhook.
             </p>
         </div>
 
         <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4" th:if="${secretShown}">
             <p class="text-sm font-semibold text-emerald-900">
-                <span>Signing secret for</span>
+                <span th:text="#{ui.sourceCreated.signingSecretFor}">Signing secret for</span>
                 <span th:text="${source.externalProjectKey}">owner/repository</span>
             </p>
             <p class="mt-1 text-xs text-emerald-800"
-               th:text="${gitLab}
-                        ? 'The secret will not be shown again. Store it in GitLab before leaving this page.'
-                        : 'The secret will not be shown again. Store it in GitHub before leaving this page.'">
+               th:text="${gitLab} ? #{ui.sourceCreated.storeInGitLab} : #{ui.sourceCreated.storeInGitHub}">
                 The secret will not be shown again.
             </p>
         </div>
 
         <dl class="mt-6 grid gap-5 text-sm">
             <div>
-                <dt class="text-slate-500" th:switch="${source.type.name()}">
-                    <span th:case="'GITHUB'">Repository</span>
-                    <span th:case="'GITLAB'">Project</span>
-                    <span th:case="'LINEAR'">Team</span>
-                    <span th:case="'JIRA'">Project key</span>
-                </dt>
+                <dt class="text-slate-500"
+                    th:text="#{'ui.sourceCreated.key.' + ${source.type.name()}}">Repository</dt>
                 <dd class="mt-1 font-semibold" th:text="${source.externalProjectKey}">owner/repository</dd>
             </div>
             <div th:if="${gitLab}">
-                <dt class="text-slate-500">GitLab instance</dt>
+                <dt class="text-slate-500" th:text="#{ui.sourceCreated.gitLabInstance}">GitLab instance</dt>
                 <dd class="mt-1 font-semibold" th:text="${source.apiBaseUrl}">https://gitlab.com</dd>
             </div>
             <div th:if="${linear}">
-                <dt class="text-slate-500">Workspace</dt>
+                <dt class="text-slate-500" th:text="#{ui.sourceCreated.workspace}">Workspace</dt>
                 <dd class="mt-1 font-semibold" th:text="${source.externalWorkspaceKey}">workspace</dd>
             </div>
             <div th:if="${jira}">
-                <dt class="text-slate-500">Jira site</dt>
+                <dt class="text-slate-500" th:text="#{ui.sourceCreated.jiraSite}">Jira site</dt>
                 <dd class="mt-1 font-semibold" th:text="${source.apiBaseUrl}">https://acme.atlassian.net</dd>
             </div>
             <div th:if="${jira}">
-                <dt class="text-slate-500">Account</dt>
+                <dt class="text-slate-500" th:text="#{ui.sourceCreated.account}">Account</dt>
                 <dd class="mt-1 font-semibold" th:text="${source.credentialIdentity}">release-bot@acme.test</dd>
             </div>
-            <div x-data="copyText()" th:if="${source.webhookPath != null}">
-                <dt class="text-slate-500">Webhook path</dt>
+            <div x-data="copyText()" th:data-label-copy="#{ui.common.copy}" th:data-label-copied="#{ui.common.copied}" th:if="${source.webhookPath != null}">
+                <dt class="text-slate-500" th:text="#{ui.sourceCreated.webhookPath}">Webhook path</dt>
                 <dd class="join mt-1 w-full">
                     <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
-                           th:value="${source.webhookPath}" aria-label="Webhook path">
+                           th:value="${source.webhookPath}" th:aria-label="#{ui.sourceCreated.webhookPath}" aria-label="Webhook path">
                     <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
                 </dd>
             </div>
-            <div x-data="copyText()" th:if="${secretShown}">
-                <dt class="text-slate-500">Webhook secret</dt>
+            <div x-data="copyText()" th:data-label-copy="#{ui.common.copy}" th:data-label-copied="#{ui.common.copied}" th:if="${secretShown}">
+                <dt class="text-slate-500" th:text="#{ui.sourceCreated.webhookSecret}">Webhook secret</dt>
                 <dd class="join mt-1 w-full">
                     <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
                            autocomplete="off" spellcheck="false"
-                           th:value="${source.webhookSecret}" aria-label="Webhook secret">
+                           th:value="${source.webhookSecret}" th:aria-label="#{ui.sourceCreated.webhookSecret}" aria-label="Webhook secret">
                     <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
                 </dd>
             </div>
         </dl>
 
-        <p class="mt-6 text-sm text-slate-600" th:if="${gitHub}">
-            In the repository's <strong>Settings → Webhooks</strong>, use your ReleaseFlow address followed by the path
-            above as the payload URL, content type <code>application/json</code>, this secret, and the
-            <strong>Pull requests</strong> event.
+        <!--/* th:utext: the emphasis belongs to ReleaseFlow's own sentence, never to anybody's input. */-->
+        <p class="mt-6 text-sm text-slate-600" th:if="${gitHub}" th:utext="#{ui.sourceCreated.githubSteps}">
+            In the repository's Settings → Webhooks, use your ReleaseFlow address followed by the path above.
         </p>
         <p class="mt-6 text-sm text-slate-600" th:if="${gitLab}">
-            In the project's <strong>Settings → Webhooks</strong>, use your ReleaseFlow address followed by the path
-            above as the URL, this secret as the secret token, and the <strong>Merge request events</strong> trigger.
-            <span th:if="${source.webhookAuthMode.name() == 'GITLAB_SIGNING_TOKEN'}">
-                ReleaseFlow will check the signed <code>webhook-signature</code> header this instance sends.
-            </span>
-            <span th:if="${source.webhookAuthMode.name() == 'GITLAB_SECRET_TOKEN'}">
-                ReleaseFlow will compare the <code>X-Gitlab-Token</code> header with this secret.
-            </span>
+            <span th:utext="#{ui.sourceCreated.gitlabSteps}">In the project's Settings → Webhooks, use your address.</span>
+            <span th:if="${source.webhookAuthMode.name() == 'GITLAB_SIGNING_TOKEN'}"
+                  th:utext="#{ui.sourceCreated.gitlabSigned}">ReleaseFlow will check the signed header.</span>
+            <span th:if="${source.webhookAuthMode.name() == 'GITLAB_SECRET_TOKEN'}"
+                  th:utext="#{ui.sourceCreated.gitlabToken}">ReleaseFlow will compare the token header.</span>
         </p>
 
-        <p class="mt-6 text-sm text-slate-600" th:if="${linear}">
-            In Linear, under <strong>Settings → API → Webhooks</strong>, set the URL to your ReleaseFlow address
-            followed by the path above and enable the <strong>Issues</strong> event. An issue is recorded when it
-            moves into a completed state.
+        <p class="mt-6 text-sm text-slate-600" th:if="${linear}" th:utext="#{ui.sourceCreated.linearSteps}">
+            In Linear, under Settings → API → Webhooks, set the URL and enable the Issues event.
         </p>
 
-        <p class="mt-6 text-sm text-slate-600" th:if="${jira}">
-            The first read happens a few minutes from now, and every few minutes after that. Each issue moved into a
-            <strong>Done</strong> status since now is recorded once, numbered after its key. GitHub and GitLab changes
-            in this Project that mention one of its keys will also show that issue.
+        <p class="mt-6 text-sm text-slate-600" th:if="${jira}" th:utext="#{ui.sourceCreated.jiraSteps}">
+            The first read happens a few minutes from now, and every few minutes after that.
         </p>
 
         <a class="btn btn-primary mt-6" th:href="@{/projects}"
-           th:text="${secretShown} ? 'I have saved the secret' : 'Back to projects'">I have saved the secret</a>
+           th:text="${secretShown} ? #{ui.sourceCreated.savedSecret} : #{ui.sourceCreated.backToProjects}">I have saved the secret</a>
     </article>
 </div>
 </body>

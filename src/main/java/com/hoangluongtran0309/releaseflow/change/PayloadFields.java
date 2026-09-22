@@ -85,6 +85,6 @@ record PayloadFields(String subject) {
     }
 
     MalformedWebhookPayloadException malformed(String field) {
-        return new MalformedWebhookPayloadException("The " + subject + " field " + field + " is missing or invalid.");
+        return new MalformedWebhookPayloadException("error.webhook_payload_malformed.field", subject, field);
     }
 }

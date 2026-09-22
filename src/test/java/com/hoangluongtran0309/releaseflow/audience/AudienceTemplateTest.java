@@ -58,7 +58,7 @@ class AudienceTemplateTest {
     void rejectsABlankTemplate(String body) {
         assertThatThrownBy(() -> AudienceTemplate.validate(body))
                 .isInstanceOf(InvalidAudienceTemplateException.class)
-                .hasMessage("A template is required.")
+                .hasMessage("error.template_invalid.required")
                 .extracting("code").isEqualTo(InvalidAudienceTemplateException.INVALID);
     }
 
@@ -66,7 +66,8 @@ class AudienceTemplateTest {
     void rejectsAnOverlongTemplate() {
         assertThatThrownBy(() -> AudienceTemplate.validate("x".repeat(AudienceTemplate.MAX_LENGTH + 1)))
                 .isInstanceOf(InvalidAudienceTemplateException.class)
-                .hasMessage("A template must not exceed 10000 characters.");
+                .hasMessage("error.template_invalid.tooLong")
+                .extracting("arguments").isEqualTo(new Object[]{AudienceTemplate.MAX_LENGTH});
     }
 
     @ParameterizedTest
@@ -110,7 +111,7 @@ class AudienceTemplateTest {
     void rejectsInvalidMustacheAndUnknownVariables(String body) {
         assertThatThrownBy(() -> AudienceTemplate.validate(body))
                 .isInstanceOf(InvalidAudienceTemplateException.class)
-                .hasMessageStartingWith("This template is not valid Mustache: ")
+                .hasMessage("error.template_invalid.mustache")
                 .extracting("code").isEqualTo(InvalidAudienceTemplateException.INVALID);
     }
 

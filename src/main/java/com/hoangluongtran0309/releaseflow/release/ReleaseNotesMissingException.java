@@ -1,9 +1,11 @@
 package com.hoangluongtran0309.releaseflow.release;
 
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
 /** An approved release has no audience notes to publish. */
-public class ReleaseNotesMissingException extends RuntimeException {
+public class ReleaseNotesMissingException extends LocalizedException {
 
     public ReleaseNotesMissingException() {
-        super("This release has no release notes. Return it to draft and approve it again to write them.");
+        super("error.release_notes_missing");
     }
 }

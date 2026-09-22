@@ -117,7 +117,7 @@ class Release {
     void returnToDraft(Instant at) {
         requireUnpublished();
         if (status != ReleaseStatus.IN_REVIEW && status != ReleaseStatus.APPROVED) {
-            throw new ReleaseStatusException("Only a release that is in review or approved can return to draft.");
+            throw new ReleaseStatusException("error.release_status_conflict.notReturnable");
         }
         this.status = ReleaseStatus.DRAFT;
         this.approvedBy = null;
@@ -127,7 +127,7 @@ class Release {
     }
 
     void publish(UUID publisher, String name, Instant at) {
-        requireStatus(ReleaseStatus.APPROVED, "Approve this release before publishing it.");
+        requireStatus(ReleaseStatus.APPROVED, "error.release_status_conflict.notApproved");
         this.status = ReleaseStatus.PUBLISHED;
         this.publishedBy = publisher;
         this.publisherName = name;
@@ -142,25 +142,25 @@ class Release {
     }
 
     void requireDraft() {
-        requireStatus(ReleaseStatus.DRAFT, "Return this release to draft to change its details or its changes.");
+        requireStatus(ReleaseStatus.DRAFT, "error.release_status_conflict.notDraft");
     }
 
     void requireInReview() {
-        requireStatus(ReleaseStatus.IN_REVIEW, "Request review of this release first. Decisions and approval need a release in review.");
+        requireStatus(ReleaseStatus.IN_REVIEW, "error.release_status_conflict.notInReview");
     }
 
     // A draft chooses its changes; rejecting one during review removes it.
     void requireChangesRemovable() {
         requireUnpublished();
         if (status != ReleaseStatus.DRAFT && status != ReleaseStatus.IN_REVIEW) {
-            throw new ReleaseStatusException("The changes of an approved release are fixed. Return it to draft first.");
+            throw new ReleaseStatusException("error.release_status_conflict.changesFixed");
         }
     }
 
-    private void requireStatus(ReleaseStatus expected, String message) {
+    private void requireStatus(ReleaseStatus expected, String messageKey) {
         requireUnpublished();
         if (status != expected) {
-            throw new ReleaseStatusException(message);
+            throw new ReleaseStatusException(messageKey);
         }
     }
 

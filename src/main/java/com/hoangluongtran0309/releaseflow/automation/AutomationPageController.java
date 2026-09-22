@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.automation;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.audience.AudienceService;
 import com.hoangluongtran0309.releaseflow.audience.ReleaseLanguageService;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.release.ReleaseAccess;
 import jakarta.servlet.http.HttpServletResponse;
@@ -36,6 +37,7 @@ public class AutomationPageController {
     private final ReleaseLanguageService releaseLanguageService;
     private final ProjectService projectService;
     private final ReleaseAccess releaseAccess;
+    private final UiMessages messages;
 
     AutomationPageController(
             AutomationRuleService ruleService,
@@ -43,7 +45,8 @@ public class AutomationPageController {
             AudienceService audienceService,
             ReleaseLanguageService releaseLanguageService,
             ProjectService projectService,
-            ReleaseAccess releaseAccess
+            ReleaseAccess releaseAccess,
+            UiMessages messages
     ) {
         this.ruleService = ruleService;
         this.runService = runService;
@@ -51,6 +54,7 @@ public class AutomationPageController {
         this.releaseLanguageService = releaseLanguageService;
         this.projectService = projectService;
         this.releaseAccess = releaseAccess;
+        this.messages = messages;
     }
 
     @GetMapping("/automation")
@@ -77,7 +81,7 @@ public class AutomationPageController {
         try {
             return render(principal, ruleService.get(principal.organizationId(), ruleId), 0, model);
         } catch (AutomationRuleNotFoundException exception) {
-            return renderWithError(principal, HttpStatus.NOT_FOUND, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.NOT_FOUND, messages.of(exception), model, response);
         }
     }
 
@@ -146,7 +150,7 @@ public class AutomationPageController {
             model.addAttribute(
                     "cronPreview", ruleService.previewCron(request.getCronExpression(), request.getCronTimeZone()));
         } catch (AutomationActionInvalidException exception) {
-            return renderWithError(principal, HttpStatus.BAD_REQUEST, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.BAD_REQUEST, messages.of(exception), model, response);
         }
         return render(principal, null, 0, model);
     }
@@ -243,11 +247,11 @@ public class AutomationPageController {
         try {
             rule = action.get();
         } catch (AutomationRuleNotFoundException exception) {
-            return renderWithError(principal, HttpStatus.NOT_FOUND, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.NOT_FOUND, messages.of(exception), model, response);
         } catch (AutomationConflictException exception) {
-            return renderWithError(principal, HttpStatus.CONFLICT, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.CONFLICT, messages.of(exception), model, response);
         } catch (AutomationActionInvalidException exception) {
-            return renderWithError(principal, HttpStatus.BAD_REQUEST, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.BAD_REQUEST, messages.of(exception), model, response);
         }
         if (rule.webhookSecret() == null) {
             return "redirect:/automation?saved";
@@ -267,11 +271,11 @@ public class AutomationPageController {
         try {
             action.get();
         } catch (AutomationRuleNotFoundException | AutomationRunNotFoundException exception) {
-            return renderWithError(principal, HttpStatus.NOT_FOUND, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.NOT_FOUND, messages.of(exception), model, response);
         } catch (AutomationConflictException exception) {
-            return renderWithError(principal, HttpStatus.CONFLICT, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.CONFLICT, messages.of(exception), model, response);
         } catch (AutomationActionInvalidException exception) {
-            return renderWithError(principal, HttpStatus.BAD_REQUEST, exception.getMessage(), model, response);
+            return renderWithError(principal, HttpStatus.BAD_REQUEST, messages.of(exception), model, response);
         }
         return "redirect:" + successPath;
     }

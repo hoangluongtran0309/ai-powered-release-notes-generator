@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.project;
 
-public class SourceNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class SourceNotFoundException extends LocalizedException {
 
     public SourceNotFoundException() {
-        super("Source was not found.");
+        super("error.source_not_found");
     }
 }

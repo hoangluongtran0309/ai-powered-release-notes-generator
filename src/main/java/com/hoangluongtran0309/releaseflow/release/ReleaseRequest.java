@@ -5,11 +5,11 @@ import jakarta.validation.constraints.Size;
 
 public class ReleaseRequest {
 
-    @NotBlank(message = "Version is required.")
-    @Size(max = 50, message = "Version must not exceed 50 characters.")
+    @NotBlank(message = "{validation.version.required}")
+    @Size(max = 50, message = "{validation.version.tooLong}")
     private String version;
 
-    @Size(max = 2000, message = "Summary must not exceed 2000 characters.")
+    @Size(max = 2000, message = "{validation.summary.tooLong}")
     private String summary;
 
     public String getVersion() {

@@ -90,18 +90,19 @@ public final class AudienceTemplate {
      */
     public static void validate(String body) {
         if (body == null || body.isBlank()) {
-            throw new InvalidAudienceTemplateException(InvalidAudienceTemplateException.INVALID, "A template is required.");
+            throw new InvalidAudienceTemplateException(
+                    InvalidAudienceTemplateException.INVALID, "error.template_invalid.required");
         }
         if (body.length() > MAX_LENGTH) {
             throw new InvalidAudienceTemplateException(
                     InvalidAudienceTemplateException.INVALID,
-                    "A template must not exceed " + MAX_LENGTH + " characters."
+                    "error.template_invalid.tooLong", MAX_LENGTH
             );
         }
         if (namesAnotherAudience(body)) {
             throw new InvalidAudienceTemplateException(
                     InvalidAudienceTemplateException.NARRATIVES_PATH,
-                    "Use {{narrative}}. Each audience gets its own narrative, so a template never names an audience."
+                    "error.template_narratives_path"
             );
         }
         try {
@@ -109,7 +110,7 @@ public final class AudienceTemplate {
         } catch (MustacheException | IllegalArgumentException exception) {
             throw new InvalidAudienceTemplateException(
                     InvalidAudienceTemplateException.INVALID,
-                    "This template is not valid Mustache: " + describe(exception)
+                    "error.template_invalid.mustache", describe(exception)
             );
         }
     }

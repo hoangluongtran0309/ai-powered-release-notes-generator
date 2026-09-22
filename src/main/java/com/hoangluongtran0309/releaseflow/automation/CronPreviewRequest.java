@@ -5,10 +5,10 @@ import jakarta.validation.constraints.NotBlank;
 /** A schedule somebody is still writing, asked about before any rule keeps it. */
 public class CronPreviewRequest {
 
-    @NotBlank(message = "A cron expression is required.")
+    @NotBlank(message = "{validation.cron.required}")
     private String cronExpression;
 
-    @NotBlank(message = "A time zone is required.")
+    @NotBlank(message = "{validation.timeZone.required}")
     private String cronTimeZone;
 
     public String getCronExpression() {

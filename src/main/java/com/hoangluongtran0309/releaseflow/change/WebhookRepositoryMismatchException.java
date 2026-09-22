@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class WebhookRepositoryMismatchException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class WebhookRepositoryMismatchException extends LocalizedException {
 
     public WebhookRepositoryMismatchException() {
-        super("The delivery does not belong to the repository configured for this webhook.");
+        super("error.webhook_repository_mismatch");
     }
 }

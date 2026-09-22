@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class InvalidSensitivePathsException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    InvalidSensitivePathsException(String message) {
-        super(message);
+public class InvalidSensitivePathsException extends LocalizedException {
+
+    InvalidSensitivePathsException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

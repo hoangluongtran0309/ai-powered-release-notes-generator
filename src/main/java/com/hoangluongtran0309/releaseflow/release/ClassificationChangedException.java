@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-public class ClassificationChangedException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ClassificationChangedException extends LocalizedException {
 
     public ClassificationChangedException() {
-        super("This change's classification changed since you loaded it. Review the current classification again.");
+        super("error.classification_changed");
     }
 }

@@ -67,9 +67,11 @@ class MergedPullRequestTest {
     }
 
     private static void assertMalformed(String payload, String field) {
+        // The field a delivery got wrong is an argument of the sentence, not part of it.
         assertThatThrownBy(() -> MergedPullRequest.from(json(payload)))
                 .isInstanceOf(MalformedWebhookPayloadException.class)
-                .hasMessageContaining(field);
+                .hasMessage("error.webhook_payload_malformed.field")
+                .extracting("arguments").isEqualTo(new Object[]{"pull request", field});
     }
 
     private static JsonNode json(String value) {

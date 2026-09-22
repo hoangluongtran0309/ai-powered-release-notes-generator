@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class SourceSyncInProgressException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class SourceSyncInProgressException extends LocalizedException {
 
     public SourceSyncInProgressException() {
-        super("An import of this source is already under way.");
+        super("error.source_sync_in_progress");
     }
 }

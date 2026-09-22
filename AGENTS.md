@@ -10,9 +10,9 @@ human review, release review lifecycle, Release Note publication,
 changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
 source, GitLab source, Linear source, Jira source, automation, automation
-trigger, public changelog, wiki page action, chat and help centre action, and
-deployment observability slices: one
-Spring Boot application, PostgreSQL/Flyway V1-V26,
+trigger, public changelog, wiki page action, chat and help centre action,
+deployment observability, and UI localization slices: one
+Spring Boot application, PostgreSQL/Flyway V1-V27,
 administrator
 registration, member
 invitations with administrator and member roles, session
@@ -45,8 +45,9 @@ call, a public changelog of immutable entries with an RSS feed that anybody may 
 REST/UI paths, and Testcontainers tests. A private management port with four
 finite-cardinality metrics, a non-root container image, a Docker Compose demo
 stack with Prometheus and Grafana, and GitHub Actions security and test gates are
-also in place.
-The decisions behind all of it are ADR-0001 through ADR-0026. Read `README.md`,
+also in place. Every page, form message, and error explanation is written in
+English or Vietnamese, chosen per person.
+The decisions behind all of it are ADR-0001 through ADR-0027. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -58,7 +59,10 @@ behavior.
 - Keep REST and Thymeleaf controllers on the same application behavior.
 - Build pages from the Layout Dialect layouts with Tailwind and DaisyUI classes.
   Use Alpine.js only for presentation behavior; forms stay server-rendered.
-  Never interpolate server data into Alpine expressions.
+  Never interpolate server data into Alpine expressions, and never leave wording
+  in JavaScript: a label comes from a `data-` attribute the template rendered.
+- Every word a person reads comes from `messages/ui.properties` and its
+  translations. A new page, message, or failure adds its key to both.
 - Do not add an interface, event, worker, provider abstraction, or deployment
   component for a future use case.
 - Keep developer documentation in English and aligned with runnable code.
@@ -227,6 +231,19 @@ behavior.
   transaction returns, a delivery once its outcome is durable and only while
   this worker held the claim. `FAILED` and `UNKNOWN` are never added together,
   because an unconfirmed delivery may have arrived.
+- A person's interface language and an Organization's output language are two
+  different things and never mix. The interface language is picked per request —
+  cookie, then account, then `Accept-Language`, then the first configured
+  language — each step narrowed to a language the deployment ships. It decides
+  nothing about what ReleaseFlow writes: a published note keeps the language it
+  was published in.
+- A failure a person reads carries a bundle key and the values its sentence
+  fills in, never a finished sentence. Only a Problem Details `title` and
+  `detail` are translated; the `code` is what a caller matches on and never
+  changes. Recorded evidence — a stored AI failure, a classification reason, a
+  trigger's detail, a provider's own name — stays as it was recorded.
+- A missing translation is served as its key, so a gap shows on the page and in
+  tests rather than falling back to another language.
 
 ## Commands
 

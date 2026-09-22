@@ -1,6 +1,8 @@
 package com.hoangluongtran0309.releaseflow.audience;
 
-public class InvalidAudienceTemplateException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class InvalidAudienceTemplateException extends LocalizedException {
 
     public static final String INVALID = "template_invalid";
     public static final String NARRATIVES_PATH = "template_narratives_path";
@@ -8,15 +10,16 @@ public class InvalidAudienceTemplateException extends RuntimeException {
 
     private final String code;
 
-    InvalidAudienceTemplateException(String code, String message) {
-        super(message);
+    InvalidAudienceTemplateException(String code, String messageKey, Object... arguments) {
+        super(messageKey, arguments);
         this.code = code;
     }
 
     static InvalidAudienceTemplateException languageNotTargeted(String language) {
         return new InvalidAudienceTemplateException(
                 LANGUAGE_NOT_TARGETED,
-                "\"" + language.strip() + "\" is not one of the Organization's release note languages."
+                "error.template_language_not_targeted",
+                language.strip()
         );
     }
 

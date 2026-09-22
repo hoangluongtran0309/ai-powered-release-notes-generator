@@ -1,9 +1,11 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-/** A delivery larger than a provider ever sends is refused before anything is looked up. */
-public class WebhookPayloadTooLargeException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+/** The delivery was refused before it was read, so nothing about it is trusted. */
+public class WebhookPayloadTooLargeException extends LocalizedException {
 
     public WebhookPayloadTooLargeException(int maxBytes) {
-        super("A webhook delivery must not exceed " + maxBytes + " bytes.");
+        super("error.webhook_payload_too_large", maxBytes);
     }
 }

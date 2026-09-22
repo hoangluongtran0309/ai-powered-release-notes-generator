@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class DuplicateCandidateNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class DuplicateCandidateNotFoundException extends LocalizedException {
 
     public DuplicateCandidateNotFoundException() {
-        super("Possible duplicate was not found.");
+        super("error.duplicate_candidate_not_found");
     }
 }

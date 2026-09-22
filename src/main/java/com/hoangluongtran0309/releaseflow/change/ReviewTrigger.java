@@ -49,17 +49,16 @@ public record ReviewTrigger(ReviewTriggerType type, String detail) {
         return new ReviewTrigger(ReviewTriggerType.DUPLICATE_CANDIDATE, earlierChangeId.toString());
     }
 
-    // Not a getter, so it is never written into the stored JSON.
-    public String describe() {
-        return switch (type) {
-            case SENSITIVE_PATH -> "Sensitive file " + detail;
-            case CHANGED_FILES_UNAVAILABLE -> "Changed files unavailable";
-            case SENSITIVE_KEYWORD -> "Sensitive word " + detail;
-            case CLASSIFIER_FALLBACK -> "AI classification failed";
-            case CATEGORY_SUGGESTION_PENDING -> "AI proposed a new category " + detail;
-            case CONTEXT_INSUFFICIENT -> detail == null ? "Not enough context" : "Not enough context: " + detail;
-            case LINKED_CONTEXT_UNAVAILABLE -> "Linked issues incomplete";
-            case DUPLICATE_CANDIDATE -> "Possible duplicate of an earlier change";
-        };
+    /**
+     * The bundle key of the sentence a reviewer reads. Not a getter, so it is never
+     * written into the stored JSON; the stored trigger keeps only its type and detail.
+     */
+    public String messageKey() {
+        if (type == ReviewTriggerType.CONTEXT_INSUFFICIENT) {
+            return detail == null
+                    ? "ui.reviewTrigger.CONTEXT_INSUFFICIENT.plain"
+                    : "ui.reviewTrigger.CONTEXT_INSUFFICIENT.detailed";
+        }
+        return "ui.reviewTrigger." + type.name();
     }
 }

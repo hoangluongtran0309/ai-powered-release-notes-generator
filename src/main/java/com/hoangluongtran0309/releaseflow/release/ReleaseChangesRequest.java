@@ -27,7 +27,7 @@ public class ReleaseChangesRequest {
         this.allAvailable = allAvailable;
     }
 
-    @AssertTrue(message = "Choose changes to add, or add all available changes.")
+    @AssertTrue(message = "{validation.releaseChanges.required}")
     public boolean isSelection() {
         boolean hasIds = changeIds != null && !changeIds.isEmpty();
         return hasIds != allAvailable;

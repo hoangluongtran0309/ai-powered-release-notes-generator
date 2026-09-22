@@ -1,11 +1,15 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-/**
- * Thrown after a failed AI attempt has already been recorded on the change.
- */
-public class AiClassificationFailedException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public AiClassificationFailedException(String message) {
-        super(message);
+/**
+ * Thrown after a failed AI attempt has already been recorded on the change. The recorded
+ * failure is a fixed English sentence kept as it was stored; the wording around it is the
+ * reader's own.
+ */
+public class AiClassificationFailedException extends LocalizedException {
+
+    public AiClassificationFailedException(String recordedFailure) {
+        super("error.ai_classification_failed", recordedFailure);
     }
 }

@@ -48,9 +48,14 @@ class GitLabBaseUrlTest {
 
     @Test
     void refusesAHostTheDeploymentDoesNotAllow() {
+        // The origin refused is an argument of the sentence, not part of it.
         assertThatThrownBy(() -> defaults.validated("https://gitlab.internal"))
                 .isInstanceOf(GitLabHostNotAllowedException.class)
-                .hasMessageContaining("gitlab.internal");
+                .hasMessage("error.gitlab_host_not_allowed")
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(GitLabHostNotAllowedException.class))
+                .extracting(GitLabHostNotAllowedException::arguments)
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.array(Object[].class))
+                .containsExactly("https://gitlab.internal");
         // A port is part of the origin, so the default entry does not cover one.
         assertThatThrownBy(() -> defaults.validated("https://gitlab.com:8443"))
                 .isInstanceOf(GitLabHostNotAllowedException.class);

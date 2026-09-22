@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.gitlab;
 
-public class GitLabHostNotAllowedException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public GitLabHostNotAllowedException(String message) {
-        super(message);
+public class GitLabHostNotAllowedException extends LocalizedException {
+
+    public GitLabHostNotAllowedException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

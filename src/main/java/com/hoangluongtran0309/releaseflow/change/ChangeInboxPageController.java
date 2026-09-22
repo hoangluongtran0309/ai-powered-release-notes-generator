@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.category.CategoryService;
 import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.SourceNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
@@ -37,6 +38,7 @@ public class ChangeInboxPageController {
     private final CategorySuggestionService suggestionService;
     private final DuplicateCandidateService duplicateService;
     private final SourceImportService importService;
+    private final UiMessages messages;
 
     ChangeInboxPageController(
             ProjectService projectService,
@@ -46,7 +48,8 @@ public class ChangeInboxPageController {
             CategoryService categoryService,
             CategorySuggestionService suggestionService,
             DuplicateCandidateService duplicateService,
-            SourceImportService importService
+            SourceImportService importService,
+            UiMessages messages
     ) {
         this.projectService = projectService;
         this.inboxService = inboxService;
@@ -56,6 +59,7 @@ public class ChangeInboxPageController {
         this.suggestionService = suggestionService;
         this.duplicateService = duplicateService;
         this.importService = importService;
+        this.messages = messages;
     }
 
     /** Queues an import of a repository's last 90 days, then returns to the Inbox. */
@@ -94,11 +98,11 @@ public class ChangeInboxPageController {
             action.run();
         } catch (ProjectNotFoundException | SourceNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, null, null, null, model, response);
         } catch (SourceTokenMissingException | SourceSyncInProgressException | SourceImportNotResumableException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, null, null, null, model, response);
         }
         return "redirect:" + UriComponentsBuilder.fromPath("/changes")
@@ -142,11 +146,11 @@ public class ChangeInboxPageController {
             reviewService.review(principal, projectId, changeId, request);
         } catch (ChangeNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         } catch (InvalidChangeReviewException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         }
         return redirectToCard(projectId, changeId, returnCategory, returnStatus, returnContext);
@@ -169,11 +173,11 @@ public class ChangeInboxPageController {
             // The card shows the recorded failure, or the classification that already exists.
         } catch (ChangeNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         } catch (AiClassificationUnavailableException exception) {
             response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         }
         return redirectToCard(projectId, changeId, returnCategory, returnStatus, returnContext);
@@ -203,11 +207,11 @@ public class ChangeInboxPageController {
             duplicateService.decide(principal, projectId, candidateId, request);
         } catch (DuplicateCandidateNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         } catch (DuplicateCandidateDecidedException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         }
         return redirectToCard(projectId, changeId, returnCategory, returnStatus, returnContext);
@@ -270,10 +274,10 @@ public class ChangeInboxPageController {
             model.addAttribute("imports", importService.status(principal.organizationId(), selectedProjectId));
         } catch (ProjectNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
         } catch (InvalidChangeFilterException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
         }
         return "changes";
     }

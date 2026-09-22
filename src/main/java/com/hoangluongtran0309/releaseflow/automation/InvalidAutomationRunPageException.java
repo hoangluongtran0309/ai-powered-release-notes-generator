@@ -1,9 +1,11 @@
 package com.hoangluongtran0309.releaseflow.automation;
 
-/** A run history page nobody can ask for. */
-public class InvalidAutomationRunPageException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    InvalidAutomationRunPageException(String message) {
-        super(message);
+/** A run history page nobody can ask for. */
+public class InvalidAutomationRunPageException extends LocalizedException {
+
+    InvalidAutomationRunPageException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

@@ -6,25 +6,25 @@ import jakarta.validation.constraints.Size;
 
 public class RegistrationRequest {
 
-    @NotBlank
-    @Size(max = 120)
+    @NotBlank(message = "{validation.organizationName.required}")
+    @Size(max = 120, message = "{validation.organizationName.tooLong}")
     private String organizationName;
 
-    @NotBlank
-    @Size(max = 120)
+    @NotBlank(message = "{validation.displayName.required}")
+    @Size(max = 120, message = "{validation.displayName.tooLong}")
     private String displayName;
 
-    @NotBlank
-    @Email
-    @Size(max = 254)
+    @NotBlank(message = "{validation.email.required}")
+    @Email(message = "{validation.email.format}")
+    @Size(max = 254, message = "{validation.email.tooLong}")
     private String email;
 
-    @NotBlank
+    @NotBlank(message = "{validation.password.required}")
     @ValidPassword
     private String password;
 
     // Optional; English when omitted. Validated as a language tag by the service.
-    @Size(max = 64)
+    @Size(max = 64, message = "{validation.outputLanguage.tooLong}")
     private String outputLanguage;
 
     public String getOrganizationName() {

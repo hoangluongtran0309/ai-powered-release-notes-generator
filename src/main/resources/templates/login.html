@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout/auth}">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/auth}">
 <head>
-    <title>Sign in</title>
+    <title th:text="#{ui.login.title}">Sign in</title>
 </head>
 <body>
 <main layout:fragment="content" class="grid min-h-screen lg:grid-cols-2">
@@ -12,11 +12,11 @@
                  width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
         </a>
         <div class="max-w-xl">
-            <p class="auth-showcase-accent mb-5 text-sm font-semibold uppercase tracking-[0.24em]">Release confidence, built in</p>
-            <h1 class="text-5xl font-bold leading-tight">Turn every change into release notes your audiences can trust.</h1>
-            <p class="auth-showcase-copy mt-6 text-lg leading-8">Connect a repository, review what changed, and publish notes that people approved.</p>
+            <p class="auth-showcase-accent mb-5 text-sm font-semibold uppercase tracking-[0.24em]" th:text="#{ui.login.eyebrow}">Release confidence, built in</p>
+            <h1 class="text-5xl font-bold leading-tight" th:text="#{ui.login.heading}">Turn every change into release notes your audiences can trust.</h1>
+            <p class="auth-showcase-copy mt-6 text-lg leading-8" th:text="#{ui.login.body}">Connect a repository, review what changed, and publish approved notes.</p>
         </div>
-        <p class="auth-showcase-copy text-sm">Breaking changes always require human review.</p>
+        <p class="auth-showcase-copy text-sm" th:text="#{ui.login.footnote}">Breaking changes always require human review.</p>
     </section>
     <section class="theme-canvas flex items-center justify-center p-5 sm:p-10">
         <div class="w-full max-w-md">
@@ -25,27 +25,29 @@
                      width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
             </a>
             <div class="auth-card">
-                <p class="text-sm font-semibold text-indigo-600">Welcome back</p>
-                <h2 class="mt-2 text-3xl font-bold tracking-tight">Sign in to your workspace</h2>
-                <p class="mt-2 text-sm text-slate-600">Manage projects and the repositories that feed your releases.</p>
-                <div th:if="${param.error}" class="alert alert-error mt-6" role="alert"><span>The email or password is incorrect.</span></div>
-                <div th:if="${param.logout}" class="alert alert-success mt-6" role="status"><span>You have signed out.</span></div>
-                <div th:if="${param.registered}" class="alert alert-success mt-6" role="status"><span>Your organization is ready. Sign in to continue.</span></div>
-                <div th:if="${param.invited}" class="alert alert-success mt-6" role="status"><span>Your account is ready. Sign in to join your organization.</span></div>
+                <p class="text-sm font-semibold text-indigo-600" th:text="#{ui.login.welcomeBack}">Welcome back</p>
+                <h2 class="mt-2 text-3xl font-bold tracking-tight" th:text="#{ui.login.cardHeading}">Sign in to your workspace</h2>
+                <p class="mt-2 text-sm text-slate-600" th:text="#{ui.login.cardBody}">Manage projects and their repositories.</p>
+                <div th:if="${param.error}" class="alert alert-error mt-6" role="alert"><span th:text="#{ui.login.badCredentials}">The email or password is incorrect.</span></div>
+                <div th:if="${param.logout}" class="alert alert-success mt-6" role="status"><span th:text="#{ui.login.signedOut}">You have signed out.</span></div>
+                <div th:if="${param.registered}" class="alert alert-success mt-6" role="status"><span th:text="#{ui.login.registered}">Your organization is ready.</span></div>
+                <div th:if="${param.invited}" class="alert alert-success mt-6" role="status"><span th:text="#{ui.login.invited}">Your account is ready.</span></div>
                 <form method="post" th:action="@{/login}" class="mt-7 flex flex-col gap-4">
-                    <label class="form-control"><span class="label-text font-medium">Email</span>
+                    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.common.email}">Email</span>
                         <input type="email" name="email" maxlength="254" autocomplete="email" class="input input-bordered w-full" required autofocus>
                     </label>
-                    <label class="form-control" x-data="passwordField()"><span class="label-text font-medium">Password</span>
+                    <label class="form-control" x-data="passwordField()" th:data-label-show="#{ui.common.show}" th:data-label-hide="#{ui.common.hide}"><span class="label-text font-medium" th:text="#{ui.common.password}">Password</span>
                         <span class="join w-full">
                             <input :type="visible ? 'text' : 'password'" type="password" name="password" maxlength="72"
                                    autocomplete="current-password" class="input input-bordered join-item w-full" required>
                             <button type="button" class="btn btn-outline join-item" @click="toggle" x-text="label">Show</button>
                         </span>
                     </label>
-                    <button type="submit" class="btn btn-primary mt-2 min-h-12">Sign in</button>
+                    <button type="submit" class="btn btn-primary mt-2 min-h-12" th:text="#{ui.login.submit}">Sign in</button>
                 </form>
-                <p class="mt-6 text-center text-sm text-slate-600">New to ReleaseFlow? <a th:href="@{/register}" class="link link-primary font-semibold">Create an organization</a></p>
+                <p class="mt-6 text-center text-sm text-slate-600"><span th:text="#{ui.login.newHere}">New to ReleaseFlow?</span>
+                    <a th:href="@{/register}" class="link link-primary font-semibold"
+                       th:text="#{ui.login.createOrganization}">Create an organization</a></p>
             </div>
         </div>
     </section>

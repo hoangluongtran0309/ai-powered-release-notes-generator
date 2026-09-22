@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class WebhookSignatureInvalidException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class WebhookSignatureInvalidException extends LocalizedException {
 
     public WebhookSignatureInvalidException() {
-        super("The webhook delivery could not be verified.");
+        super("error.webhook_signature_invalid");
     }
 }

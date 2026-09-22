@@ -5,8 +5,8 @@ import jakarta.validation.constraints.Size;
 
 public class OutputLanguageRequest {
 
-    @NotBlank(message = "An output language is required.")
-    @Size(max = 64, message = "The output language is too long.")
+    @NotBlank(message = "{validation.outputLanguage.required}")
+    @Size(max = 64, message = "{validation.outputLanguage.tooLong}")
     private String outputLanguage;
 
     public String getOutputLanguage() {

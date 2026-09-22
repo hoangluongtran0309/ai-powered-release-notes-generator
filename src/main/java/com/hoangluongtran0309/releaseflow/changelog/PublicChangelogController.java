@@ -47,6 +47,9 @@ class PublicChangelogController {
             .cachePublic()
             .immutable()
             .getHeaderValue();
+    // The note is the same for everybody; the chrome around it follows the reader, so a
+    // shared cache must keep one reader's language out of another's response.
+    private static final String CHROME_VARIES_BY = "Accept-Language, Cookie";
 
     private final PublicChangelogService changelog;
     private final PublicChangelogUrls urls;
@@ -65,6 +68,7 @@ class PublicChangelogController {
         model.addAttribute("feedUrl", urls.feedUrl(feed.slug()));
         model.addAttribute("publishedOn", PUBLISHED_ON);
         response.setHeader("Cache-Control", LIST_CACHE);
+        response.setHeader("Vary", CHROME_VARIES_BY);
         return "changelog/index";
     }
 
@@ -81,6 +85,7 @@ class PublicChangelogController {
         // An entry never changes, so its identifier is a complete validator.
         String etag = "\"" + found.entry().id() + "\"";
         response.setHeader("Cache-Control", ENTRY_CACHE);
+        response.setHeader("Vary", CHROME_VARIES_BY);
         if (new ServletWebRequest(request, response).checkNotModified(etag)) {
             return null;
         }
@@ -103,7 +108,8 @@ class PublicChangelogController {
     }
 
     // RSS 2.0, written with the JDK's own XML writer so every value is escaped by the
-    // same code that puts it there.
+    // same code that puts it there. Its own two sentences stay English: a feed is one
+    // shared, cached document, and a reader's client says nothing about who subscribed.
     private String rss(PublicChangelogService.Feed feed) {
         String root = urls.rootUrl(feed.slug());
         try {

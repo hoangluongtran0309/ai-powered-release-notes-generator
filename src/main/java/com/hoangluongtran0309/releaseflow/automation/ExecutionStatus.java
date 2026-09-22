@@ -23,6 +23,14 @@ public enum ExecutionStatus {
         return label;
     }
 
+    /**
+     * The bundle key of this ExecutionStatus's name, so a page says it in the reader's language.
+     * {@link #getLabel()} stays the English wording that recorded evidence keeps.
+     */
+    public String getLabelKey() {
+        return "ui.enum.executionStatus." + name();
+    }
+
     public boolean isTerminal() {
         return this == SUCCEEDED || this == FAILED || this == UNKNOWN || this == CANCELLED;
     }

@@ -404,7 +404,7 @@ class ReleaseService {
         Release release = find(editor.organizationId(), projectId, releaseId);
         release.requireUnpublished();
         if (release.getStatus() != ReleaseStatus.APPROVED) {
-            throw new ReleaseStatusException("Release notes are written at approval and can be edited while the release is approved.");
+            throw new ReleaseStatusException("error.release_status_conflict.notesAtApproval");
         }
         AudienceReleaseNote note = noteRepository
                 .findByIdAndReleaseIdAndOrganizationId(noteId, releaseId, editor.organizationId())
@@ -432,7 +432,7 @@ class ReleaseService {
         Release release = find(editor.organizationId(), projectId, releaseId);
         release.requireUnpublished();
         if (release.getStatus() != ReleaseStatus.IN_REVIEW && release.getStatus() != ReleaseStatus.APPROVED) {
-            throw new ReleaseStatusException("Summaries are edited during review or after approval. Request review first.");
+            throw new ReleaseStatusException("error.release_status_conflict.summaryStage");
         }
         if (includedChanges(release).stream().noneMatch(change -> change.id().equals(changeId))) {
             throw new ChangeNotFoundException();
@@ -455,7 +455,7 @@ class ReleaseService {
     ReleaseView retryTranslations(UUID organizationId, UUID projectId, UUID releaseId) {
         Release release = find(organizationId, projectId, releaseId);
         if (release.getStatus() != ReleaseStatus.APPROVED) {
-            throw new ReleaseStatusException("Translations are retried while a release is approved.");
+            throw new ReleaseStatusException("error.release_status_conflict.translationStage");
         }
         List<ChangeView> changes = includedChanges(release);
         Instant now = clock.instant();

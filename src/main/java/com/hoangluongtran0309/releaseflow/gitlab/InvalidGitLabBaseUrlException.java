@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.gitlab;
 
-public class InvalidGitLabBaseUrlException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public InvalidGitLabBaseUrlException(String message) {
-        super(message);
+public class InvalidGitLabBaseUrlException extends LocalizedException {
+
+    public InvalidGitLabBaseUrlException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

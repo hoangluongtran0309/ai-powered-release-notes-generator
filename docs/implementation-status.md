@@ -332,9 +332,38 @@
   - a container workflow that proves the management port is private and that all four
     metric families reach Prometheus.
 
+- **UI localization** ([ADR-0027](adr/0027-ui-localization.md), migration `V27`):
+  - an English or Vietnamese interface, chosen per person, from one bundle per language
+    holding every page, form message, and error explanation;
+  - `UiLanguages`, which reads `RELEASEFLOW_UI_LANGUAGES` once at startup, narrows each
+    entry to a primary subtag, and refuses a list that names no usable language;
+  - `UiLocaleResolver`, which picks a request's language from the `releaseflow_lang`
+    cookie, then `app_users.ui_locale`, then `Accept-Language`, then the first configured
+    language, narrowing each step and reading the account from the session's principal so
+    resolving a locale costs no query;
+  - `GET|PUT /api/me/ui-locale` and a picker in the user menu; a change saves the account
+    column and writes the cookie, which outranks it, and null means the browser decides;
+  - `LocalizedException`, which every user-facing failure extends, carrying a bundle key
+    and the values its sentence fills in, so a new failure that forgets its key does not
+    compile;
+  - localized `title` and `detail` on every Problem Details response, including the 401
+    and 403 the security filter chain writes, with every error `code` unchanged;
+  - localized Bean Validation, through a validator wired to a message source over the same
+    bundle;
+  - a public changelog whose chrome follows the reader while each published note keeps the
+    language it was published in, still without a session or an account read;
+  - `getLabelKey()` on the six enums a page names and `messageKey()` on a review trigger,
+    with the English label left where recorded evidence keeps it;
+  - `app.js` with no wording left in it: the three components that show a label read it
+    from a `data-` attribute the template rendered;
+  - tests that hold the bundle to its promises — the two languages carry the same keys,
+    every key a template or a constraint asks for exists, every pattern with a placeholder
+    can be filled in — and one that renders every page in Vietnamese and fails on any key
+    that reaches the HTML.
+
 ## In progress
 
-- Nothing. The deployment observability slice is complete and awaiting review.
+- Nothing. The UI localization slice is complete and awaiting review.
 
 ## Planned
 
@@ -353,8 +382,11 @@ deliberately deferred list below, one reviewed slice at a time.
 - Validating a repository with GitHub when it is connected, disconnecting or
   replacing a source, rotating a Linear signing secret without reconnecting, and
   secret or token rotation reminders.
-- Localization of the UI, translation providers other than DeepL, and
-  asynchronous note generation.
+- Interface languages other than English and Vietnamese, a language picker for
+  anonymous pages (they follow `Accept-Language`), an RSS feed whose channel
+  title and description follow the reader rather than staying English, localized
+  dates and numbers beyond what the bundle's own patterns give, translation
+  providers other than DeepL, and asynchronous note generation.
 - Automation actions other than GitHub Releases, Slack, email, the public
   changelog, Notion, Confluence Cloud, Microsoft Teams, and Zendesk.
 - Confluence Data Center, Confluence OAuth, and reading a Notion, Confluence, or

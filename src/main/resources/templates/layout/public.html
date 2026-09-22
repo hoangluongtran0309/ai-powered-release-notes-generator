@@ -1,14 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="referrer" content="no-referrer">
-    <title layout:title-pattern="$CONTENT_TITLE">Release notes</title>
+    <title layout:title-pattern="$CONTENT_TITLE" th:text="#{ui.changelog.documentTitle}">Release notes</title>
     <link rel="icon" type="image/svg+xml" th:href="@{/svg/releaseflow-mark.svg}">
     <link rel="icon" type="image/x-icon" th:href="@{/favicon.ico}">
     <link rel="canonical" th:href="${canonicalUrl}">
-    <link rel="alternate" type="application/rss+xml" th:title="|${organizationName} releases|" th:href="${feedUrl}">
+    <link rel="alternate" type="application/rss+xml" th:title="#{ui.public.feedTitle(${organizationName})}" th:href="${feedUrl}">
     <script>
         (() => {
             let saved = null;
@@ -22,7 +23,7 @@
 <!-- Nobody is signed in here, so there is no navigation, no account menu, and nothing
      that would make the page depend on a session. -->
 <body class="theme-canvas min-h-screen">
-<a href="#changelog-content" class="skip-link">Skip to the release notes</a>
+<a href="#changelog-content" class="skip-link" th:text="#{ui.public.skipToNotes}">Skip to the release notes</a>
 <header class="border-b theme-border">
     <div class="mx-auto flex min-h-16 max-w-4xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <a class="flex items-center gap-3 font-bold tracking-tight" th:href="${changelogUrl} ?: ${canonicalUrl}">
@@ -35,7 +36,7 @@
 <main id="changelog-content" class="mx-auto max-w-4xl px-4 py-10 sm:px-6" tabindex="-1"
       layout:fragment="content"></main>
 <footer class="mx-auto max-w-4xl px-4 pb-10 text-sm text-slate-500 sm:px-6">
-    <p>Published with ReleaseFlow.</p>
+    <p th:text="#{ui.public.publishedWith}">Published with ReleaseFlow.</p>
 </footer>
 </body>
 </html>

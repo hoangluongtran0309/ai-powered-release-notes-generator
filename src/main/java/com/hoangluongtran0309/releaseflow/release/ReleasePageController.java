@@ -8,6 +8,8 @@ import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
 import com.hoangluongtran0309.releaseflow.change.ChangeSummaryRequest;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.ProjectView;
@@ -37,19 +39,22 @@ public class ReleasePageController {
     private final AudienceService audienceService;
     private final OutputLanguageService outputLanguageService;
     private final CategoryService categoryService;
+    private final UiMessages messages;
 
     ReleasePageController(
             ProjectService projectService,
             ReleaseService releaseService,
             AudienceService audienceService,
             OutputLanguageService outputLanguageService,
-            CategoryService categoryService
+            CategoryService categoryService,
+            UiMessages messages
     ) {
         this.categoryService = categoryService;
         this.projectService = projectService;
         this.releaseService = releaseService;
         this.audienceService = audienceService;
         this.outputLanguageService = outputLanguageService;
+        this.messages = messages;
     }
 
     @GetMapping("/releases")
@@ -376,7 +381,7 @@ public class ReleasePageController {
                 model.addAttribute("projectFound", true);
             } catch (ProjectNotFoundException exception) {
                 response.setStatus(HttpStatus.NOT_FOUND.value());
-                model.addAttribute("pageError", exception.getMessage());
+                model.addAttribute("pageError", messages.of(exception));
             }
         }
         return "releases";
@@ -386,12 +391,12 @@ public class ReleasePageController {
             ReleaseFlowPrincipal principal,
             UUID projectId,
             HttpStatus status,
-            RuntimeException exception,
+            LocalizedException exception,
             Model model,
             HttpServletResponse response
     ) {
         response.setStatus(status.value());
-        model.addAttribute("pageError", exception.getMessage());
+        model.addAttribute("pageError", messages.of(exception));
         return renderReleases(principal, projectId, null, model, response);
     }
 
@@ -426,7 +431,7 @@ public class ReleasePageController {
             }
         } catch (ReleaseNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
         }
         return "release";
     }
@@ -445,7 +450,7 @@ public class ReleasePageController {
             return releaseService.previewNotes(principal.organizationId(), projectId, release.id());
         } catch (ReleaseNoteRenderException exception) {
             if (!model.containsAttribute("pageError")) {
-                model.addAttribute("pageError", exception.getMessage());
+                model.addAttribute("pageError", messages.of(exception));
             }
             return List.of();
         }
@@ -470,12 +475,12 @@ public class ReleasePageController {
             UUID projectId,
             UUID releaseId,
             HttpStatus status,
-            RuntimeException exception,
+            LocalizedException exception,
             Model model,
             HttpServletResponse response
     ) {
         response.setStatus(status.value());
-        model.addAttribute("pageError", exception.getMessage());
+        model.addAttribute("pageError", messages.of(exception));
         return renderRelease(principal, projectId, releaseId, model, response);
     }
 

@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 
 public class DuplicateDecisionRequest {
 
-    @NotNull(message = "Choose CONFIRMED or DISMISSED.")
+    @NotNull(message = "{validation.duplicateDecision.required}")
     private DuplicateCandidateStatus decision;
 
     public DuplicateCandidateStatus getDecision() {
@@ -16,7 +16,7 @@ public class DuplicateDecisionRequest {
         this.decision = decision;
     }
 
-    @AssertTrue(message = "Choose CONFIRMED or DISMISSED.")
+    @AssertTrue(message = "{validation.duplicateDecision.required}")
     public boolean isDecisionFinal() {
         return decision != DuplicateCandidateStatus.OPEN;
     }

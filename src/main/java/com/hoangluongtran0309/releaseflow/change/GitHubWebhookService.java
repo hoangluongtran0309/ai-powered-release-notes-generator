@@ -44,7 +44,7 @@ class GitHubWebhookService {
         VerifiedWebhook webhook = verifier.verify(webhookId, signature, body)
                 .orElseThrow(WebhookSignatureInvalidException::new);
         if (event == null || event.isBlank()) {
-            throw new MalformedWebhookPayloadException("The X-GitHub-Event header is required.");
+            throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.githubEventHeader");
         }
         JsonNode payload = parse(body);
         requireConfiguredRepository(webhook, event, payload);
@@ -64,11 +64,11 @@ class GitHubWebhookService {
         try {
             JsonNode payload = objectMapper.readTree(body);
             if (payload == null || !payload.isObject()) {
-                throw new MalformedWebhookPayloadException("The webhook payload must be a JSON object.");
+                throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.notObject");
             }
             return payload;
         } catch (JacksonException exception) {
-            throw new MalformedWebhookPayloadException("The webhook payload is not valid JSON.");
+            throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.notJson");
         }
     }
 
@@ -99,7 +99,7 @@ class GitHubWebhookService {
                 // Reported below with the same message as a missing header.
             }
         }
-        throw new MalformedWebhookPayloadException("The X-GitHub-Delivery header must be a delivery GUID.");
+        throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.githubDeliveryHeader");
     }
 
     private WebhookOutcome recordChange(VerifiedWebhook webhook, MergedPullRequest pullRequest, UUID deliveryId) {

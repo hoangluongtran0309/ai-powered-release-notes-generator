@@ -63,11 +63,11 @@ class LinearWebhookService {
         try {
             JsonNode payload = objectMapper.readTree(body);
             if (payload == null || !payload.isObject()) {
-                throw new MalformedWebhookPayloadException("The webhook payload must be a JSON object.");
+                throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.notObject");
             }
             return payload;
         } catch (JacksonException exception) {
-            throw new MalformedWebhookPayloadException("The webhook payload is not valid JSON.");
+            throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.notJson");
         }
     }
 
