@@ -19,9 +19,11 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.tokenSaved}"><span th:text="#{ui.projects.tokenSaved}">Access token saved.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.languageSaved}"><span th:text="#{ui.projects.languageSaved}">Output language saved.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.changelogSaved}"><span th:text="#{ui.projects.changelogSaved}">Changelog address saved.</span></div>
+    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+        <div th:replace="~{fragments/toast :: toast(#{ui.projects.tokenSaved})}" th:if="${param.tokenSaved}">Access token saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.projects.languageSaved})}" th:if="${param.languageSaved}">Output language saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.projects.changelogSaved})}" th:if="${param.changelogSaved}">Changelog address saved.</div>
+    </div>
 
     <ol class="grid gap-3 md:grid-cols-3" th:aria-label="#{ui.projects.setupProgress}" aria-label="Setup progress">
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasProjects} ? 'border-emerald-200' : 'border-indigo-300'">

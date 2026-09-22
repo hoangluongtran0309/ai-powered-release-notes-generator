@@ -26,11 +26,13 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Audience was not found.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.saved != null}"><span th:text="#{ui.audiences.saved}">Audience saved.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.reset != null}"><span th:text="#{ui.audiences.reset}">Audience reset to its shipped preset.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.deleted != null}"><span th:text="#{ui.audiences.deleted}">Audience deleted.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.languagesSaved != null}"><span th:text="#{ui.audiences.languagesSaved}">Release note languages saved.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.templateSaved != null}"><span th:text="#{ui.audiences.templateSaved}">Language template saved.</span></div>
+    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.saved})}" th:if="${param.saved != null}">Audience saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.reset})}" th:if="${param.reset != null}">Audience reset to its shipped preset.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.deleted})}" th:if="${param.deleted != null}">Audience deleted.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.languagesSaved})}" th:if="${param.languagesSaved != null}">Release note languages saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.templateSaved})}" th:if="${param.templateSaved != null}">Language template saved.</div>
+    </div>
 
     <section class="surface-card mb-6 p-6" id="release-languages">
         <div class="flex flex-wrap items-start justify-between gap-4">
@@ -80,7 +82,7 @@
                        th:attr="aria-current=${selected != null and selected.id == audience.id} ? 'page' : null">
                         <span class="min-w-0">
                             <span class="block truncate" th:text="${audience.displayName}">Operator</span>
-                            <span class="block truncate font-mono text-xs text-slate-500" th:text="${audience.code}">operator</span>
+                            <span class="audience-code block truncate font-mono text-xs" th:text="${audience.code}">operator</span>
                         </span>
                         <span class="badge badge-ghost badge-sm" th:if="${audience.preset}" th:text="#{ui.audiences.preset}">Preset</span>
                     </a>

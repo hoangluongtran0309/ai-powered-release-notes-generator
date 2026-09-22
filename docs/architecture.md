@@ -4,7 +4,7 @@
 
 ReleaseFlow is one Spring Boot application built from one Maven module and
 packaged as one executable JAR. The implemented capabilities are `status`,
-`account`, `project`, `change`, `category`, `audience`, `release`,
+`account`, `project`, `change`, `category`, `audience`, `release`, `overview`,
 `translation`, the provider-neutral `source` vocabulary, the `github`, `gitlab`,
 `linear`, and `jira` API clients that `project` and `change` share, and shared
 `configuration`:
@@ -18,6 +18,7 @@ POST /login                   -> Spring Security authentication
 POST /logout                  -> Spring Security logout
 GET  /api/session             -> authenticated principal identity
 GET  /api/csrf                -> CSRF token for session-based REST clients
+GET  /                        -> OverviewService when signed in (figures and the next step)
 GET|PUT /api/me/ui-locale     -> UiLocaleService (the signed-in person's own language)
 POST /settings/ui-locale      -> UiLocaleService (the picker in the user menu)
 GET  /api/status              -> JSON status
@@ -1182,6 +1183,34 @@ who have no account. See [ADR-0022](adr/0022-public-changelog.md).
   sees the request. A `Host` header chooses which slug to look up and decides nothing
   else; no link ReleaseFlow writes ever comes from a request.
 
+## Workspace overview
+
+`OverviewService` in the `overview` capability owns no data: it asks `ProjectService`,
+`ChangeInboxService` and `ReleaseService` for counts and composes them
+([ADR-0028](adr/0028-parity-ui-and-browser-tests.md)). Both counts are aggregate queries
+rather than lists counted in Java.
+
+`NextStep.of(...)` decides the one step a person is offered, in a fixed order: no project,
+no source, no changes, changes in no release, a review to finish, a release to publish, a
+draft to continue, nothing waiting. The order belongs to the step rather than to the page,
+so a unit test covers every branch.
+
+`SelectedProject` remembers the Project somebody was last looking at in the
+`releaseflow_project` cookie, so a page reached without `?project=` opens on it instead of
+on whichever Project is first. The cookie carries no authority: the Project is still looked
+up against the principal's Organization, and one that does not belong there is simply not
+among those offered. Only the overview and the two list pages consult it; a URL that names
+a Project always wins.
+
+## Error pages
+
+`UnknownAddressAdvice` answers an address that matches nothing in the kind the caller asked
+for: a browser that names `text/html` gets the error page, and a fetch, a REST client, or
+anything under `/api` keeps the Problem Details that `spring.mvc.problemdetails.enabled`
+produces. `HtmlErrorController` renders what the container's error dispatch forwards —
+a refusal from the security chain, or a fault. Three statuses have wording of their own;
+anything else is shown as a fault, and the exception behind it never reaches the page.
+
 ## User interface
 
 Pages are server-rendered Thymeleaf templates composed with the Layout Dialect:
@@ -1197,6 +1226,18 @@ to the same controllers and application services as before. `app.js` holds no
 wording at all: the three components that show a label read it from a `data-`
 attribute the template rendered, which is also how server data stays out of an
 Alpine expression. See [ADR-0003](adr/0003-frontend-toolchain.md).
+
+A dense table becomes one card per row below 640 px, each cell carrying its own
+heading, and a 44 px touch-target floor is a stylesheet rule rather than a habit.
+What just happened is said in a toast that is dismissed by hand: WCAG 2.2.1 asks
+that nothing disappear on somebody who reads slowly.
+
+Playwright drives the real application through the demo Compose stack, with
+`@axe-core/playwright` failing the build on any WCAG 2 A/AA, 2.1 A/AA or 2.2 AA
+violation, at 360 px in the light theme and 1440 px in the dark one. Three suites
+cover the release pipeline, invitations, and every page. There are no JavaScript
+unit tests, and deliberately so: what is left in `app.js` only means anything in a
+page.
 
 ## Interface language
 

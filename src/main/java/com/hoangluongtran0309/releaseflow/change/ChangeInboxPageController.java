@@ -3,11 +3,14 @@ package com.hoangluongtran0309.releaseflow.change;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
 import com.hoangluongtran0309.releaseflow.category.CategoryService;
 import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
+import com.hoangluongtran0309.releaseflow.overview.OverviewService;
+import com.hoangluongtran0309.releaseflow.overview.SelectedProject;
 import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.SourceNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.ProjectView;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -39,6 +42,10 @@ public class ChangeInboxPageController {
     private final DuplicateCandidateService duplicateService;
     private final SourceImportService importService;
     private final UiMessages messages;
+    private final SelectedProject selectedProject;
+    private final OverviewService overviewService;
+
+
 
     ChangeInboxPageController(
             ProjectService projectService,
@@ -49,7 +56,9 @@ public class ChangeInboxPageController {
             CategorySuggestionService suggestionService,
             DuplicateCandidateService duplicateService,
             SourceImportService importService,
-            UiMessages messages
+            UiMessages messages,
+            SelectedProject selectedProject,
+            OverviewService overviewService
     ) {
         this.projectService = projectService;
         this.inboxService = inboxService;
@@ -60,6 +69,8 @@ public class ChangeInboxPageController {
         this.duplicateService = duplicateService;
         this.importService = importService;
         this.messages = messages;
+        this.selectedProject = selectedProject;
+        this.overviewService = overviewService;
     }
 
     /** Queues an import of a repository's last 90 days, then returns to the Inbox. */
@@ -112,6 +123,7 @@ public class ChangeInboxPageController {
                 .toUriString();
     }
 
+    // A URL that names no Project opens on the one this person was last looking at.
     @GetMapping("/changes")
     String changes(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
@@ -120,9 +132,21 @@ public class ChangeInboxPageController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String context,
             Model model,
+            HttpServletRequest request,
             HttpServletResponse response
     ) {
-        return renderInbox(principal, projectId, category, status, context, model, response);
+        // A URL that names a Project is answered as it stands: one of another Organization
+        // is reported as not found, never swapped for one of this Organization's.
+        UUID selected = projectId != null
+                ? projectId
+                : overviewService.rememberedOrFirstProject(
+                        principal.organizationId(),
+                        selectedProject.remembered(request).orElse(null)
+                ).orElse(null);
+        if (overviewService.owns(principal.organizationId(), selected)) {
+            selectedProject.remember(request, response, selected);
+        }
+        return renderInbox(principal, selected, category, status, context, model, response);
     }
 
     // Both card actions carry the inbox filters as returnCategory/returnStatus so the

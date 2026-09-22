@@ -6,12 +6,15 @@
 </head>
 <body>
 <p layout:fragment="page-title" th:text="#{ui.overview.title}">Overview</p>
-<div layout:fragment="content">
+<div layout:fragment="content" th:with="step=${overview.step()}">
     <header class="page-header">
         <div>
             <p class="page-eyebrow" th:text="#{ui.overview.eyebrow}">Workspace overview</p>
             <h1 class="page-heading" th:text="#{ui.overview.welcome(${viewer.displayName})}">Welcome</h1>
-            <p class="page-subtitle" th:text="#{ui.overview.subtitle}">Start by connecting repositories.</p>
+            <p class="page-subtitle" th:if="${overview.projectName() != null}"
+               th:text="${overview.projectName()}">Checkout</p>
+            <p class="page-subtitle" th:if="${overview.projectName() == null}"
+               th:text="#{ui.overview.noProjectYet}">No project yet</p>
         </div>
         <div class="page-actions">
             <a class="btn btn-primary" th:href="@{/projects}">
@@ -21,26 +24,62 @@
         </div>
     </header>
 
-    <section class="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <article class="surface-card overflow-hidden">
+    <!--/* Four figures, each a link to the page that can do something about it. */-->
+    <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" th:aria-label="#{ui.overview.statsLabel}"
+             aria-label="Workspace figures" th:if="${overview.projectId() != null}">
+        <a class="stat-card" th:href="@{/changes(project=${overview.projectId()})}">
+            <span class="stat-card-figure" th:text="${overview.changes()}">0</span>
+            <span class="stat-card-label" th:text="#{ui.overview.stat.changes}">Changes</span>
+        </a>
+        <a class="stat-card" th:classappend="${overview.needsReview() > 0} ? 'stat-card-attention'"
+           th:href="@{/changes(project=${overview.projectId()},status='needs-review')}">
+            <span class="stat-card-figure" th:text="${overview.needsReview()}">0</span>
+            <span class="stat-card-label" th:text="#{ui.overview.stat.needsReview}">Need review</span>
+        </a>
+        <a class="stat-card" th:classappend="${overview.breaking() > 0} ? 'stat-card-warning'"
+           th:href="@{/changes(project=${overview.projectId()})}">
+            <span class="stat-card-figure" th:text="${overview.breaking()}">0</span>
+            <span class="stat-card-label" th:text="#{ui.overview.stat.breaking}">Breaking</span>
+        </a>
+        <a class="stat-card" th:href="@{/releases(project=${overview.projectId()})}">
+            <span class="stat-card-figure" th:text="${overview.releases()}">0</span>
+            <span class="stat-card-label" th:text="#{ui.overview.stat.releases}">Releases</span>
+        </a>
+    </section>
+
+    <section class="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <!--/* One next step, never a list of everything that could be done. */-->
+        <article class="surface-card overflow-hidden" id="next-step">
             <div class="p-6">
                 <p class="text-sm font-semibold text-indigo-600" th:text="#{ui.overview.nextStep}">Recommended next step</p>
-                <h2 class="mt-1 text-xl font-bold" th:text="#{ui.overview.connectSource}">Connect a source</h2>
-                <p class="mt-2 text-sm text-slate-600" th:text="#{ui.overview.connectBody}">Create a project, then generate webhook credentials.</p>
-                <a class="btn btn-primary mt-5" th:href="@{/projects}" th:text="#{ui.overview.openProjects}">Open projects</a>
+                <h2 class="mt-1 text-xl font-bold" th:text="#{${step.labelKey}}">Connect a source</h2>
+                <p class="mt-2 text-sm text-slate-600" th:text="#{${step.bodyKey}}">Create a project first.</p>
+                <a class="btn btn-primary mt-5"
+                   th:with="project=${overview.projectId()}"
+                   th:href="${step.name() == 'CREATE_PROJECT' or step.name() == 'CONNECT_SOURCE'}
+                            ? @{/projects}
+                            : (${step.name() == 'AWAIT_CHANGES' or step.name() == 'NOTHING_WAITING'}
+                               ? @{/changes(project=${project})}
+                               : @{/releases(project=${project})})"
+                   th:text="#{${step.actionKey}}">Open projects</a>
             </div>
-            <div class="grid grid-cols-4 border-t border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-500">
-                <div><strong class="block text-base text-slate-900">1</strong><span th:text="#{ui.overview.step.connect}">Connect</span></div>
-                <div><strong class="block text-base text-slate-900">2</strong><span th:text="#{ui.overview.step.collect}">Collect</span></div>
-                <div><strong class="block text-base text-slate-900">3</strong><span th:text="#{ui.overview.step.review}">Review</span></div>
-                <div><strong class="block text-base text-slate-900">4</strong><span th:text="#{ui.overview.step.publish}">Publish</span></div>
-            </div>
+            <ol class="step-strip" th:aria-label="#{ui.overview.stepsLabel}" aria-label="How a release is made"
+                th:with="stage=${overview.stage()}">
+                <li th:each="name, row : ${ {'connect', 'collect', 'review', 'publish'} }"
+                    th:classappend="${stage > row.index} ? 'is-done' : (${stage == row.index} ? 'is-current')"
+                    th:attr="aria-current=${stage == row.index} ? 'step' : null">
+                    <strong th:text="${row.count}">1</strong>
+                    <span th:text="#{'ui.overview.step.' + ${name}}">Connect</span>
+                </li>
+            </ol>
         </article>
+
         <article class="surface-card p-6">
             <h2 class="font-bold" th:text="#{ui.overview.statusHeading}">Application status</h2>
             <p class="mt-2 text-sm text-slate-600" th:text="#{ui.overview.statusBody}">The public health endpoint reports whether ReleaseFlow is running.</p>
             <a class="btn btn-outline btn-sm mt-5" th:href="@{/api/status}">
-                <span class="status-dot text-emerald-600"></span> <span th:text="#{ui.overview.viewStatus}">View status</span>
+                <span class="status-dot text-emerald-600"></span>
+                <span th:text="#{ui.overview.viewStatus}">View status</span>
             </a>
         </article>
     </section>

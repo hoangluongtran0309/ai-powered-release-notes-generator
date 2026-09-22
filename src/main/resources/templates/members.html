@@ -37,18 +37,18 @@
 
     <section class="surface-card mt-6 p-6" id="members">
         <h2 class="section-heading" th:text="#{ui.members.listHeading}">Members</h2>
-        <div class="mt-4 overflow-x-auto">
-            <table class="table">
+        <div class="mt-4">
+            <table class="stacking-table">
                 <thead><tr><th th:text="#{ui.members.column.name}">Name</th><th th:text="#{ui.members.column.email}">Email</th>
                     <th th:text="#{ui.members.column.role}">Role</th><th th:text="#{ui.members.column.joined}">Joined</th></tr></thead>
                 <tbody>
                 <tr th:each="member : ${members}">
-                    <td class="font-semibold" th:text="${member.displayName}">Mai Tran</td>
-                    <td th:text="${member.email}">mai@example.com</td>
-                    <td><span class="badge badge-soft font-semibold"
+                    <td class="font-semibold" th:data-heading="#{ui.members.column.name}" th:text="${member.displayName}">Mai Tran</td>
+                    <td th:data-heading="#{ui.members.column.email}" th:text="${member.email}">mai@example.com</td>
+                    <td th:data-heading="#{ui.members.column.role}"><span class="badge badge-soft font-semibold"
                               th:classappend="${member.role.name() == 'ADMIN'} ? 'badge-primary' : 'badge-ghost'"
                               th:text="${member.role.name() == 'ADMIN'} ? #{ui.members.role.admin} : #{ui.members.role.member}">Admin</span></td>
-                    <td><time th:datetime="${member.createdAt}"
+                    <td th:data-heading="#{ui.members.column.joined}"><time th:datetime="${member.createdAt}"
                               th:text="|${#temporals.format(member.createdAt, 'd MMM yyyy', 'UTC')}|">11 Sep 2026</time></td>
                 </tr>
                 </tbody>
@@ -59,24 +59,24 @@
     <section class="surface-card mt-6 p-6" id="invitations">
         <h2 class="section-heading" th:text="#{ui.members.invitationsHeading}">Invitations</h2>
         <p class="section-copy" th:if="${#lists.isEmpty(invitations)}" th:text="#{ui.members.noInvitations}">No invitations yet.</p>
-        <div class="mt-4 overflow-x-auto" th:unless="${#lists.isEmpty(invitations)}">
-            <table class="table">
+        <div class="mt-4" th:unless="${#lists.isEmpty(invitations)}">
+            <table class="stacking-table">
                 <thead><tr><th th:text="#{ui.members.column.email}">Email</th><th th:text="#{ui.members.column.status}">Status</th>
                     <th th:text="#{ui.members.column.expires}">Expires</th><th th:text="#{ui.members.column.invitedBy}">Invited by</th>
                     <th><span class="sr-only" th:text="#{ui.members.column.actions}">Actions</span></th></tr></thead>
                 <tbody>
                 <tr th:each="invitation : ${invitations}" th:id="|invitation-${invitation.id}|">
-                    <td th:text="${invitation.email}">teammate@example.com</td>
-                    <td th:switch="${invitation.status.name()}">
+                    <td th:data-heading="#{ui.members.column.email}" th:text="${invitation.email}">teammate@example.com</td>
+                    <td th:data-heading="#{ui.members.column.status}" th:switch="${invitation.status.name()}">
                         <span th:case="'PENDING'" class="badge badge-warning badge-soft font-semibold" th:text="#{ui.members.status.pending}">Pending</span>
                         <span th:case="'ACCEPTED'" class="badge badge-success badge-soft font-semibold" th:text="#{ui.members.status.accepted}">Accepted</span>
                         <span th:case="'REVOKED'" class="badge badge-ghost font-semibold" th:text="#{ui.members.status.revoked}">Revoked</span>
                         <span th:case="*" class="badge badge-ghost font-semibold" th:text="#{ui.members.status.expired}">Expired</span>
                     </td>
-                    <td><time th:datetime="${invitation.expiresAt}"
+                    <td th:data-heading="#{ui.members.column.expires}"><time th:datetime="${invitation.expiresAt}"
                               th:text="|${#temporals.format(invitation.expiresAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">18 Sep 2026, 09:14 UTC</time></td>
-                    <td th:text="${invitation.createdByName}">Mai Tran</td>
-                    <td class="flex flex-wrap justify-end gap-2">
+                    <td th:data-heading="#{ui.members.column.invitedBy}" th:text="${invitation.createdByName}">Mai Tran</td>
+                    <td class="flex flex-wrap justify-end gap-2" th:data-heading="#{ui.members.column.actions}">
                         <form method="post" th:unless="${invitation.status.name() == 'ACCEPTED'}"
                               th:action="@{/members/invitations/{id}/reissue(id=${invitation.id})}">
                             <button type="submit" class="btn btn-outline btn-sm" th:text="#{ui.members.reissue}">Reissue</button>

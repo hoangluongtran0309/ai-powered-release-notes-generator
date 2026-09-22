@@ -71,6 +71,50 @@ jobs:
       - name: Audit all npm dependencies
         run: npm audit --audit-level=high
 
+  # The browser suite drives the demo stack, which brings its own PostgreSQL. It is the
+  # only gate that can see an accessibility violation or a page that needs JavaScript.
+  ui:
+    name: Browser and accessibility tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npm run e2e:install
+      - name: Write the Compose secrets this run needs
+        run: |
+          set -euo pipefail
+          {
+            echo "RELEASEFLOW_DB_PASSWORD=$(openssl rand -hex 16)"
+            echo "RELEASEFLOW_CREDENTIAL_MASTER_KEY=$(openssl rand -base64 32)"
+            echo "RELEASEFLOW_GRAFANA_PASSWORD=$(openssl rand -hex 16)"
+          } > .env
+      - name: Run the browser and accessibility suite
+        run: npm run e2e
+      - name: Upload the Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report/**
+            test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop the demo stack
+        if: always()
+        run: docker compose -f docker-compose.demo.yml down --volumes
+
   backend:
     name: Maven verification
     runs-on: ubuntu-24.04

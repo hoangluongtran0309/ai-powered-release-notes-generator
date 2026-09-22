@@ -72,6 +72,9 @@ The application currently provides:
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme;
 - an English or Vietnamese interface, chosen per person, with every page,
   form message, and error explanation written in the reader's own language;
+- a workspace overview with four figures and the one next step that is
+  unfinished, a Project switcher the server remembers, error pages for a
+  mistyped or forbidden address, and tables that become cards on a phone;
 - a non-root container image and a Docker Compose demo stack with PostgreSQL,
   Prometheus, and Grafana, with metrics on a private management port;
 - automation rules that deliver a published release note to a GitHub Release, a
@@ -726,6 +729,28 @@ automatic AI. The failure trigger stays, so a person still reviews the change.
 | The provider failed; the failure is stored and shown | `502 ai_classification_failed` |
 | AI not configured | `503 ai_classification_unavailable` |
 
+## Workspace overview
+
+Signing in opens an overview of one Project: how many changes it has, how many
+need review, how many are breaking, and how many releases it has — each a link to
+the page that can act on it. Beside them is the **one** next step that is
+unfinished, in a fixed order: create a project, connect a source, wait for the
+first change, collect changes into a release, finish a review, publish an approved
+release, continue a draft, or nothing waiting. A workspace with an open draft and
+no changes at all is still waiting for its first change, because there is nothing
+to put in the draft.
+
+The header switches between Projects. ReleaseFlow remembers the last one in the
+`releaseflow_project` cookie, so a page reached without `?project=` opens on it
+rather than on whichever Project happens to be first. A URL that names a Project
+always wins, the cookie is `HttpOnly`, and it carries no authority: the Project is
+still looked up against your Organization, so a cookie naming somebody else's is
+ignored.
+
+A mistyped address answers a browser with a page rather than raw JSON, and one
+your role does not reach says so without showing any of it. A REST client, and
+anything under `/api`, keeps the `application/problem+json` it had.
+
 ## Interface language
 
 Each person reads ReleaseFlow in English or Vietnamese. The language is picked
@@ -1355,6 +1380,20 @@ an in-memory substitute.
 ./mvnw test
 ./mvnw verify
 ```
+
+The browser suite runs separately, because it drives the demo Compose stack:
+
+```bash
+npm ci
+npm run e2e:install   # downloads Chromium, once
+npm run e2e
+```
+
+It brings the stack up itself, so `.env` must be filled in first. It checks the
+release pipeline, invitations, and every page, at 360 px in the light theme and
+1440 px in the dark one, and **fails on any WCAG 2 A/AA, 2.1 A/AA or 2.2 AA
+violation Axe can see**. Point it at an application already running with
+`RELEASEFLOW_E2E_BASE_URL`.
 
 While changing templates or styles, rebuild the stylesheet on every save in a
 second terminal:

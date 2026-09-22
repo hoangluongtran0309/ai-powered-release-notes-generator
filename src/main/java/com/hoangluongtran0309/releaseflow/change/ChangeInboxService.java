@@ -40,6 +40,12 @@ public class ChangeInboxService {
                 .toList();
     }
 
+    /** What the workspace overview says about this Project, read as counts, not as rows. */
+    @Transactional(readOnly = true)
+    public ChangeCounts counts(UUID organizationId, UUID projectId) {
+        return changeRepository.countInbox(organizationId, projectId);
+    }
+
     /**
      * Changes that have finished processing, oldest merge first. They may still need
      * review; a release's review settles them before it can be approved.

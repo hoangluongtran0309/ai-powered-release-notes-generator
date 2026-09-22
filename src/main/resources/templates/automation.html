@@ -18,19 +18,21 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Rule was not found.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.saved != null}"><span th:text="#{ui.automation.saved}">Rule saved.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.enabled != null}"><span th:text="#{ui.automation.enabled}">Rule enabled.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.disabled != null}"><span th:text="#{ui.automation.disabled}">Rule disabled.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.archived != null}"><span th:text="#{ui.automation.archived}">Rule archived.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.executed != null}"><span th:text="#{ui.automation.executed}">Run queued.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.retried != null}"><span th:text="#{ui.automation.retried}">The failed action will run again.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.cancelled != null}"><span th:text="#{ui.automation.cancelled}">Run cancelled.</span></div>
+    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+        <div th:replace="~{fragments/toast :: toast(#{ui.automation.saved})}" th:if="${param.saved != null}">Rule saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.automation.enabled})}" th:if="${param.enabled != null}">Rule enabled.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.automation.disabled})}" th:if="${param.disabled != null}">Rule disabled.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.automation.archived})}" th:if="${param.archived != null}">Rule archived.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.automation.executed})}" th:if="${param.executed != null}">Run queued.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.automation.retried})}" th:if="${param.retried != null}">The failed action will run again.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.automation.cancelled})}" th:if="${param.cancelled != null}">Run cancelled.</div>
+    </div>
 
     <section class="surface-card p-6" id="automation-rules">
         <h2 class="section-heading" th:text="#{ui.automation.rulesHeading}">Rules</h2>
         <p class="section-copy" th:if="${#lists.isEmpty(rules)}" th:text="#{ui.automation.noRules}">No rules yet.</p>
-        <div class="mt-4 overflow-x-auto" th:unless="${#lists.isEmpty(rules)}">
-            <table class="table">
+        <div class="mt-4" th:unless="${#lists.isEmpty(rules)}">
+            <table class="stacking-table">
                 <thead>
                 <tr><th th:text="#{ui.automation.column.name}">Name</th><th th:text="#{ui.automation.column.runsWhen}">Runs when</th>
                     <th th:text="#{ui.automation.column.scope}">Scope</th><th th:text="#{ui.automation.column.actions}">Actions</th>
@@ -39,8 +41,8 @@
                 </thead>
                 <tbody>
                 <tr th:each="rule : ${rules}" th:id="|rule-${rule.id}|">
-                    <td class="font-semibold" th:text="${rule.name}">Announce to Slack</td>
-                    <td>
+                    <td class="font-semibold" th:data-heading="#{ui.automation.column.name}" th:text="${rule.name}">Announce to Slack</td>
+                    <td th:data-heading="#{ui.automation.column.runsWhen}">
                         <span th:text="#{${rule.triggerType.labelKey}}">Release published</span>
                         <div class="text-xs text-slate-500" th:if="${rule.cronExpression != null}"
                              th:text="|${rule.cronExpression} · ${rule.cronTimeZone}|">0 0 9 * * MON · Europe/Berlin</div>
@@ -56,11 +58,11 @@
                         <div class="font-mono text-xs text-slate-500" th:if="${rule.webhookPath != null}"
                              th:text="${rule.webhookPath}">/webhooks/automation/…</div>
                     </td>
-                    <td>
+                    <td th:data-heading="#{ui.automation.column.scope}">
                         <span th:if="${rule.organizationWide()}" th:text="#{ui.automation.everyProject}">Every project</span>
                         <span th:unless="${rule.organizationWide()}" th:text="${rule.projectName}">Checkout</span>
                     </td>
-                    <td>
+                    <td th:data-heading="#{ui.automation.column.actions}">
                         <ol class="text-sm">
                             <li th:each="action : ${rule.actions}"
                                 th:text="#{ui.automation.actionLine(${action.position + 1},#{${action.actionType.labelKey}},${action.audienceName},${action.language})}">
@@ -68,11 +70,11 @@
                             </li>
                         </ol>
                     </td>
-                    <td>
+                    <td th:data-heading="#{ui.automation.column.status}">
                         <span class="badge badge-sm badge-success badge-soft" th:if="${rule.enabled}" th:text="#{ui.automation.enabledBadge}">Enabled</span>
                         <span class="badge badge-sm badge-ghost" th:unless="${rule.enabled}" th:text="#{ui.automation.disabledBadge}">Disabled</span>
                     </td>
-                    <td>
+                    <td th:data-heading="#{ui.automation.column.manage}">
                         <div class="flex flex-wrap justify-end gap-2">
                             <a class="btn btn-ghost btn-sm" th:href="@{/automation/{id}(id=${rule.id})}" th:text="#{ui.automation.edit}">Edit</a>
                             <form method="post" th:action="@{/automation/{id}/enable(id=${rule.id})}" th:unless="${rule.enabled}">
@@ -308,8 +310,8 @@
     <section class="surface-card mt-6 p-6" id="automation-runs">
         <h2 class="section-heading" th:text="#{ui.automation.runsHeading}">Run history</h2>
         <p class="section-copy" th:if="${#lists.isEmpty(runs.items)}" th:text="#{ui.automation.noRuns}">Nothing has run yet.</p>
-        <div class="mt-4 overflow-x-auto" th:unless="${#lists.isEmpty(runs.items)}">
-            <table class="table">
+        <div class="mt-4" th:unless="${#lists.isEmpty(runs.items)}">
+            <table class="stacking-table">
                 <thead>
                 <tr><th th:text="#{ui.automation.column.rule}">Rule</th><th th:text="#{ui.automation.column.release}">Release</th>
                     <th th:text="#{ui.automation.column.ranBecause}">Ran because</th>
@@ -320,18 +322,18 @@
                 </thead>
                 <tbody>
                 <tr th:each="run : ${runs.items}" th:id="|run-${run.id}|">
-                    <td class="font-semibold" th:text="${run.ruleName}">Announce to Slack</td>
-                    <td th:text="${run.releaseVersion}">1.4.0</td>
-                    <td th:text="#{${run.triggerType.labelKey}}">Release published</td>
-                    <td th:text="${run.initiatorName} ?: '—'">Ada</td>
-                    <td>
+                    <td class="font-semibold" th:data-heading="#{ui.automation.column.rule}" th:text="${run.ruleName}">Announce to Slack</td>
+                    <td th:data-heading="#{ui.automation.column.release}" th:text="${run.releaseVersion}">1.4.0</td>
+                    <td th:data-heading="#{ui.automation.column.ranBecause}" th:text="#{${run.triggerType.labelKey}}">Release published</td>
+                    <td th:data-heading="#{ui.automation.column.startedBy}" th:text="${run.initiatorName} ?: '—'">Ada</td>
+                    <td th:data-heading="#{ui.automation.column.status}">
                         <span class="badge badge-sm badge-success badge-soft" th:if="${run.status.name() == 'SUCCEEDED'}" th:text="#{${run.status.labelKey}}">Succeeded</span>
                         <span class="badge badge-sm badge-error badge-soft" th:if="${run.status.name() == 'FAILED'}" th:text="#{${run.status.labelKey}}">Failed</span>
                         <span class="badge badge-sm badge-warning badge-soft" th:if="${run.status.name() == 'UNKNOWN'}" th:text="#{${run.status.labelKey}}">Outcome unknown</span>
                         <span class="badge badge-sm badge-ghost" th:if="${run.status.name() == 'PENDING' or run.status.name() == 'RUNNING' or run.status.name() == 'CANCELLED'}"
                               th:text="#{${run.status.labelKey}}">Pending</span>
                     </td>
-                    <td>
+                    <td th:data-heading="#{ui.automation.column.deliveries}">
                         <ol class="text-sm">
                             <li th:each="action : ${run.actions}" th:id="|action-run-${action.id}|">
                                 <span th:text="#{ui.automation.runActionLine(${action.position + 1},#{${action.actionType.labelKey}},#{${action.status.labelKey}})}">1. Slack — Succeeded</span>
@@ -341,7 +343,7 @@
                             </li>
                         </ol>
                     </td>
-                    <td>
+                    <td th:data-heading="#{ui.automation.column.manage}">
                         <div class="flex flex-wrap justify-end gap-2">
                             <form method="post" th:action="@{/automation/runs/{id}/retry(id=${run.id})}" th:if="${run.retryable()}">
                                 <label class="label-text mr-2" th:if="${run.needsUnknownConfirmation()}">

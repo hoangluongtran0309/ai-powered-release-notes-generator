@@ -26,15 +26,29 @@
            aria-label="Open navigation">
     <div class="drawer-content min-w-0">
         <header class="app-header sticky top-0 z-30 flex h-16 items-center gap-3 border-b px-4 backdrop-blur lg:px-8">
-            <label for="app-drawer" class="icon-button lg:hidden" th:aria-label="#{ui.layout.openNavigation}"
-                   aria-label="Open navigation">
+            <!--/* The name is inside the label, not an aria-label: a label has no role
+                   that permits one, which Axe reports as a prohibited attribute. */-->
+            <label for="app-drawer" class="icon-button lg:hidden">
                 <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#menu}"></use></svg>
+                <span class="sr-only" th:text="#{ui.layout.openNavigation}">Open navigation</span>
             </label>
             <div class="min-w-0 flex-1">
                 <p class="truncate text-xs font-semibold uppercase tracking-wider text-slate-500"
                    th:text="#{ui.layout.workspace}">Workspace</p>
                 <p class="truncate text-sm font-semibold" layout:fragment="page-title">ReleaseFlow</p>
             </div>
+            <!--/* A GET form, so switching Project needs no JavaScript. The server remembers
+                   the choice in a cookie; nothing here depends on browser storage. */-->
+            <form method="get" class="hidden items-center gap-2 sm:flex" th:action="@{${currentPath}}"
+                  th:unless="${#lists.isEmpty(projectSwitcher)}">
+                <label class="sr-only" for="project-switcher"
+                       th:text="#{ui.overview.switchProjectLabel}">Switch project</label>
+                <select id="project-switcher" name="project" class="select select-bordered select-sm max-w-48">
+                    <option th:each="option : ${projectSwitcher}" th:value="${option.id()}"
+                            th:text="${option.name()}" th:selected="${option.selected()}">Checkout</option>
+                </select>
+                <button type="submit" class="btn btn-outline btn-sm" th:text="#{ui.overview.switch}">Switch</button>
+            </form>
             <button type="button" class="icon-button" x-data="themeToggle()" @click="toggle"
                     :aria-label="label" :title="label" th:aria-label="#{ui.layout.themeToggle}" aria-label="Toggle theme"
                     th:data-label-light="#{ui.layout.themeToLight}" th:data-label-dark="#{ui.layout.themeToDark}">

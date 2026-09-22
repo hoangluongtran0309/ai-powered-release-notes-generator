@@ -361,9 +361,32 @@
     can be filled in — and one that renders every page in Vietnamese and fails on any key
     that reaches the HTML.
 
+- **Parity UI and browser tests** ([ADR-0028](adr/0028-parity-ui-and-browser-tests.md),
+  no migration):
+  - a workspace overview that reads the workspace — four figures, each linking to the page
+    that can act on them, and the one next step that is unfinished, chosen in a fixed
+    order by `NextStep.of(...)` and covered branch by branch by a unit test;
+  - `OverviewService`, which owns no data and composes aggregate counts from the change,
+    release and project capabilities;
+  - a Project switcher in the header, with the last Project remembered in an `HttpOnly`
+    cookie that carries no authority: a URL that names one wins, and one naming another
+    Organization's Project is ignored rather than refused;
+  - error pages for a mistyped address, a page a role does not reach, and a fault, with
+    `UnknownAddressAdvice` answering a browser with a page and everybody else with the
+    Problem Details they had;
+  - a toast dismissed by hand rather than on a timer, as WCAG 2.2.1 asks;
+  - tables that become one card per row below 640 px with each cell keeping its heading,
+    and a 44 px touch-target floor everywhere;
+  - Playwright with `@axe-core/playwright` against the demo Compose stack — the release
+    pipeline, invitations, and every page, at 360 px light and 1440 px dark, failing on
+    any WCAG 2 A/AA, 2.1 A/AA or 2.2 AA violation — as a fifth CI job;
+  - the accessibility defects that gate found on its first run, all older than it: badge
+    contrast in both themes, an `aria-label` on a `<label>`, `role="tablist"` around
+    panels a tablist may not contain, and two colours that failed against their surfaces.
+
 ## In progress
 
-- Nothing. The UI localization slice is complete and awaiting review.
+- Nothing. The parity UI slice is complete and awaiting review.
 
 ## Planned
 
@@ -393,15 +416,16 @@ deliberately deferred list below, one reviewed slice at a time.
   Zendesk page back to recognise one a previous run wrote.
 - Office 365 connectors, sovereign-cloud Teams endpoints, Graph bots, and
   Entra-authenticated Teams flows; Zendesk API tokens in place of OAuth.
-- Client-rendered pages, JavaScript bundling and tests, browser end-to-end
-  tests, image publication, release automation, and an open-core/enterprise
-  module split.
+- Client-rendered pages, JavaScript bundling, JavaScript unit tests (what is left
+  in `app.js` only means anything in a page, which the browser suite drives),
+  image publication, release automation, and an open-core/enterprise module split.
 - Alerting, durable metric storage, a retention policy beyond the demo's seven
   days, and access control for the demo dashboards; per-Organization analytics,
   which need a product feature with an authorization story rather than a metric
   label.
 - Multi-repository aggregation.
 - Change Inbox pagination and search.
+- A dashboard beyond one Project at a time, and figures on it that are not counts.
 - Review history, comments, reviewer roles, and bulk review.
 - Item reordering.
 - Unpublishing or correcting published release notes.

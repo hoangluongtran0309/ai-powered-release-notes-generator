@@ -37,6 +37,20 @@ interface ChangeRepository extends JpaRepository<Change, UUID> {
     );
 
     @Query("""
+            select new com.hoangluongtran0309.releaseflow.change.ChangeCounts(
+                       count(change),
+                       coalesce(sum(case when change.needsReview = true then 1 else 0 end), 0),
+                       coalesce(sum(case when change.breaking = true then 1 else 0 end), 0))
+            from Change change
+            where change.organizationId = :organizationId
+              and change.projectId = :projectId
+            """)
+    ChangeCounts countInbox(
+            @Param("organizationId") UUID organizationId,
+            @Param("projectId") UUID projectId
+    );
+
+    @Query("""
             select change from Change change
             where change.organizationId = :organizationId
               and change.projectId = :projectId
