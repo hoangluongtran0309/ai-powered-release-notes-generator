@@ -568,6 +568,16 @@ version has been released.
   640 px, each cell keeping its own heading, and a 44 px touch-target floor (WCAG 2.5.8)
   applies everywhere.
 
+- A licence: the **Apache License 2.0** for the whole repository (ADR-0029), copied into
+  the JAR's `META-INF` beside a `NOTICE`, so somebody holding only the binary has both.
+  The repository had been public with no licence, which meant all rights reserved.
+- POM metadata naming the licence, the author, the project URL, its source, and where to
+  raise an issue.
+- `SECURITY.md`: how to report a weakness privately, what is in scope, and what this
+  project is — one person, no rota, no bounty — so a reporter knows what to expect.
+- A note in `CONTRIBUTING.md` that a contribution is licensed under the same Apache-2.0,
+  with no separate agreement to sign.
+
 ### Changed
 
 - `ReviewTrigger.describe()` becomes `messageKey()`: a trigger now answers with a bundle
@@ -590,6 +600,12 @@ version has been released.
   reads. Nothing else about it changed.
 - `StatusWebTest` is a full integration test rather than a web-layer slice, because every
   page now resolves a language and reads the bundle.
+
+- Decision D1 is settled (ADR-0029): ReleaseFlow stays one Maven module, and the
+  open-core/enterprise split the earlier project had is **abandoned rather than deferred**.
+  The capabilities that project sold separately — audiences and templates, automation, the
+  public changelog — stay beside every other capability under the same licence. `S24` is
+  now only release automation.
 
 - The container health check now calls the management port instead of the public
   `GET /api/status`, so a container whose database has gone is unhealthy rather than

@@ -1437,3 +1437,24 @@ See [ADR-0007](docs/adr/0007-ci-and-container-supply-chain.md) and
 Development uses `main` as the releasable branch, `develop` as the integration
 branch, and short-lived branches for one reviewed change at a time. See the
 [contributor guide](CONTRIBUTING.md) for branch and Conventional Commit rules.
+
+## Security
+
+ReleaseFlow holds webhook signing secrets, provider access tokens, and the
+credentials its automation actions deliver with, and it answers unauthenticated
+webhooks. If you find a weakness, please report it privately rather than in an
+issue: see the [security policy](SECURITY.md).
+
+## Licence
+
+ReleaseFlow is one Maven module under the [Apache License 2.0](LICENSE)
+([ADR-0029](docs/adr/0029-one-module-and-the-apache-licence.md)). You may use,
+modify and redistribute it, including commercially, provided you keep the licence
+and the [notice](NOTICE) and state what you changed.
+
+There is no open-core or enterprise split. The earlier project this one was
+rebuilt from sold its template, automation and distribution capabilities from a
+separate proprietary module; here they sit beside every other capability, under
+the same licence as the rest.
+
+Copyright 2026 Luong Tran Chu Hoang.
