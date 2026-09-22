@@ -16,6 +16,35 @@
     <version>0.1.0-SNAPSHOT</version>
     <name>ReleaseFlow</name>
     <description>Human-reviewed release notes, built one vertical slice at a time.</description>
+    <url>https://github.com/hoangluongtran0309/ai-powered-release-notes-generator</url>
+    <inceptionYear>2026</inceptionYear>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>hoangluongtran0309</id>
+            <name>Luong Tran Chu Hoang</name>
+            <url>https://github.com/hoangluongtran0309</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/hoangluongtran0309/ai-powered-release-notes-generator.git</connection>
+        <developerConnection>scm:git:git@github.com:hoangluongtran0309/ai-powered-release-notes-generator.git</developerConnection>
+        <url>https://github.com/hoangluongtran0309/ai-powered-release-notes-generator</url>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/issues</url>
+    </issueManagement>
 
     <properties>
         <java.version>21</java.version>
@@ -147,6 +176,16 @@
                 <excludes>
                     <exclude>static/css/application.css</exclude>
                 </excludes>
+            </resource>
+            <!-- Apache-2.0 §4.4: the licence and the notice travel with the artifact,
+                 so somebody who has only the JAR still has both. -->
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF</targetPath>
+                <includes>
+                    <include>LICENSE</include>
+                    <include>NOTICE</include>
+                </includes>
             </resource>
         </resources>
         <plugins>

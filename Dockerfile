@@ -15,8 +15,9 @@ COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw && ./mvnw -B --no-transfer-progress dependency:go-offline
 
-# frontend-maven-plugin runs the Tailwind build during `package`.
-COPY package.json package-lock.json postcss.config.cjs ./
+# frontend-maven-plugin runs the Tailwind build during `package`. The licence and
+# notice are copied into the JAR's META-INF, so the build needs them here too.
+COPY package.json package-lock.json postcss.config.cjs LICENSE NOTICE ./
 COPY src/ src/
 RUN ./mvnw -B --no-transfer-progress clean package -DskipTests -Prelease
 

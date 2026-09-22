@@ -384,9 +384,16 @@
     contrast in both themes, an `aria-label` on a `<label>`, `role="tablist"` around
     panels a tablist may not contain, and two colours that failed against their surfaces.
 
+- **Licence and project metadata**
+  ([ADR-0029](adr/0029-one-module-and-the-apache-licence.md), no migration): the Apache
+  License 2.0 for the whole repository, copied into the JAR's `META-INF` beside a
+  `NOTICE`; POM metadata naming the licence, the author, the project and its source; a
+  security policy for reporting a weakness privately; and decision **D1 settled** — one
+  Maven module, with the open-core/enterprise split abandoned rather than deferred.
+
 ## In progress
 
-- Nothing. The parity UI slice is complete and awaiting review.
+- Nothing. The licence and project metadata slice is complete and awaiting review.
 
 ## Planned
 
@@ -418,7 +425,7 @@ deliberately deferred list below, one reviewed slice at a time.
   Entra-authenticated Teams flows; Zendesk API tokens in place of OAuth.
 - Client-rendered pages, JavaScript bundling, JavaScript unit tests (what is left
   in `app.js` only means anything in a page, which the browser suite drives),
-  image publication, release automation, and an open-core/enterprise module split.
+  image publication, and release automation.
 - Alerting, durable metric storage, a retention policy beyond the demo's seven
   days, and access control for the demo dashboards; per-Organization analytics,
   which need a product feature with an authorization story rather than a metric

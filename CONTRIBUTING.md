@@ -70,6 +70,10 @@ convention above, and the `CI`, `CodeQL`, `Dependency Review`, `Secret Scan`,
 and `Container` workflows must pass. Keep new actions pinned to a commit SHA
 and new images to a digest.
 
+By contributing, you agree that your contribution is licensed under the
+[Apache License 2.0](LICENSE), the same licence as the rest of the project. There
+is no separate contributor agreement to sign.
+
 Merges into `main` represent a reviewed release decision. Tags, release
 artifacts, and deployment automation are added only when a real publication
 process exists.

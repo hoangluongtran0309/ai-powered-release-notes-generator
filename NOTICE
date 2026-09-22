@@ -1,0 +1,21 @@
+ReleaseFlow
+Copyright 2026 Luong Tran Chu Hoang
+
+Licensed under the Apache License, Version 2.0. See LICENSE for the full terms.
+
+This repository contains no third-party source code. The executable JAR it builds
+is a Spring Boot archive, which bundles its dependencies under BOOT-INF/lib; each
+of those artifacts carries its own licence and notice inside it. The dependency
+tree is declared in pom.xml and package-lock.json, and
+
+    ./mvnw org.codehaus.mojo:license-maven-plugin:2.6.0:add-third-party \
+        -DexcludeTransitiveDependencies=false
+
+writes the whole list, with licences, to target/generated-sources/license.
+
+At the time of writing that list is Apache-2.0 and MIT almost throughout, with
+EPL-2.0, EDL/BSD, and a few artifacts offered under more than one licence
+(Logback under EPL-2.0 or LGPL-2.1; the Jakarta APIs under EPL-2.0 or GPL-2.0
+with the Classpath Exception; JNA and Javassist under Apache-2.0 among others).
+Nothing in the tree is under a licence that would restrict how this project may
+be licensed.

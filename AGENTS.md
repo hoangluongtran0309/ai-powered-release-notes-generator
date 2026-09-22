@@ -49,14 +49,16 @@ also in place. Every page, form message, and error explanation is written in
 English or Vietnamese, chosen per person, and a Playwright suite drives the whole
 application in a browser at two sizes and both themes, failing on any
 accessibility violation Axe can see.
-The decisions behind all of it are ADR-0001 through ADR-0028. Read `README.md`,
+The decisions behind all of it are ADR-0001 through ADR-0029. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
 ## Working rules
 
 - Implement one complete vertical slice at a time and stop for review.
-- Keep code in one Maven module and package it by product capability.
+- Keep code in one Maven module and package it by product capability. There is no
+  open-core/enterprise split and none is coming (ADR-0029); the whole repository is
+  Apache-2.0, and `LICENSE` and `NOTICE` ship inside the JAR.
 - Add a dependency only when the current slice uses it.
 - Keep REST and Thymeleaf controllers on the same application behavior.
 - Build pages from the Layout Dialect layouts with Tailwind and DaisyUI classes.
