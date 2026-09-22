@@ -149,9 +149,9 @@
                     </form>
                 </section>
 
-                <div class="tabs tabs-lift" role="tablist" th:aria-label="#{ui.release.changesTabsLabel}" aria-label="Release changes">
-                    <input type="radio" name="release-tabs" class="tab" role="tab" th:aria-label="#{ui.release.tabChanges}" aria-label="Changes" th:checked="${draft}">
-                    <div class="tab-content border-base-300 bg-base-100 p-6" role="tabpanel" id="included-changes">
+                <div class="tabs tabs-lift" role="radiogroup" th:aria-label="#{ui.release.changesTabsLabel}" aria-label="Release changes">
+                    <input type="radio" name="release-tabs" class="tab" th:aria-label="#{ui.release.tabChanges}" aria-label="Changes" th:checked="${draft}">
+                    <div class="tab-content border-base-300 bg-base-100 p-6" id="included-changes">
                         <h2 class="section-heading" th:text="#{ui.release.includedHeading}">Included changes</h2>
                         <p class="section-copy" th:if="${#lists.isEmpty(release.changes)}" th:text="#{ui.release.noneIncluded}">No changes yet.</p>
                         <ul class="mt-4 divide-y divide-slate-200" th:unless="${#lists.isEmpty(release.changes)}">
@@ -213,8 +213,8 @@
                         <p class="mt-4 text-xs text-slate-500" th:unless="${draft}" th:text="#{ui.release.returnToChange}">Return the release to draft to add or remove changes.</p>
                     </div>
 
-                    <input type="radio" name="release-tabs" class="tab" role="tab" th:aria-label="#{ui.release.tabReview}" aria-label="Review" th:checked="${!draft}">
-                    <div class="tab-content border-base-300 bg-base-100 p-6" role="tabpanel" id="review-changes">
+                    <input type="radio" name="release-tabs" class="tab" th:aria-label="#{ui.release.tabReview}" aria-label="Review" th:checked="${!draft}">
+                    <div class="tab-content border-base-300 bg-base-100 p-6" id="review-changes">
                         <h2 class="section-heading" th:text="#{ui.release.reviewHeading}">Review</h2>
                         <p class="section-copy" th:if="${draft}" th:text="#{ui.release.requestReviewFirst}">Request review to record a decision on each change.</p>
                         <ul class="mt-4 divide-y divide-slate-200" th:unless="${draft}">
@@ -358,11 +358,11 @@
                                 th:text="#{ui.release.previewCopyAfter}">. Other languages are translated after approval.</span>
                     </p>
                     <p class="mt-4 text-sm text-slate-500" th:if="${#lists.isEmpty(notePreviews)}" th:text="#{ui.release.addChangesToPreview}">Add changes to see the release notes.</p>
-                    <div class="tabs tabs-border mt-4" role="tablist" th:aria-label="#{ui.release.audiencesLabel}" aria-label="Audiences" th:unless="${#lists.isEmpty(notePreviews)}">
+                    <div class="tabs tabs-border mt-4" role="radiogroup" th:aria-label="#{ui.release.audiencesLabel}" aria-label="Audiences" th:unless="${#lists.isEmpty(notePreviews)}">
                         <th:block th:each="preview, state : ${notePreviews}">
-                            <input type="radio" name="note-preview-tabs" class="tab" role="tab"
+                            <input type="radio" name="note-preview-tabs" class="tab"
                                    th:aria-label="${preview.audienceName}" th:checked="${state.first}">
-                            <div class="tab-content pt-4" role="tabpanel" th:id="|preview-${preview.audienceCode}|">
+                            <div class="tab-content pt-4" th:id="|preview-${preview.audienceCode}|">
                                 <div class="release-note-body" th:lang="${language}" th:utext="${preview.html()}"></div>
                             </div>
                         </th:block>
@@ -387,11 +387,11 @@
                             <button type="submit" class="btn btn-sm" th:text="#{ui.release.retryTranslations}">Retry translations</button>
                         </form>
                     </div>
-                    <div class="tabs tabs-border mt-4" role="tablist" th:aria-label="#{ui.release.audiencesAndLanguages}" aria-label="Audiences and languages">
+                    <div class="tabs tabs-border mt-4" role="radiogroup" th:aria-label="#{ui.release.audiencesAndLanguages}" aria-label="Audiences and languages">
                         <th:block th:each="note, state : ${release.notes}">
-                            <input type="radio" name="note-tabs" class="tab" role="tab"
+                            <input type="radio" name="note-tabs" class="tab"
                                    th:aria-label="|${note.audienceName} · ${note.language}|" th:checked="${state.first}">
-                            <div class="tab-content pt-4" role="tabpanel" th:id="|note-${note.audienceCode}-${note.language}|" x-data="copyText()" th:data-label-copy="#{ui.common.copy}" th:data-label-copied="#{ui.common.copied}">
+                            <div class="tab-content pt-4" th:id="|note-${note.audienceCode}-${note.language}|" x-data="copyText()" th:data-label-copy="#{ui.common.copy}" th:data-label-copied="#{ui.common.copied}">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span class="badge badge-sm" th:classappend="${note.autoRerender} ? 'badge-ghost' : 'badge-info'"
                                           th:text="${note.autoRerender} ? #{ui.release.noteAutomatic} : #{ui.release.noteManual}">Automatic</span>

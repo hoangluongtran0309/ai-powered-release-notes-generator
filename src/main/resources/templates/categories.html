@@ -18,10 +18,12 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Category was not found.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.saved != null}"><span th:text="#{ui.categories.saved}">Category saved.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.archived != null}"><span th:text="#{ui.categories.archived}">Category archived.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.restored != null}"><span th:text="#{ui.categories.restored}">Category restored.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.decided != null}"><span th:text="#{ui.categories.decided}">Suggestion decided.</span></div>
+    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+        <div th:replace="~{fragments/toast :: toast(#{ui.categories.saved})}" th:if="${param.saved != null}">Category saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.categories.archived})}" th:if="${param.archived != null}">Category archived.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.categories.restored})}" th:if="${param.restored != null}">Category restored.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.categories.decided})}" th:if="${param.decided != null}">Suggestion decided.</div>
+    </div>
 
     <section class="surface-card p-6" id="category-suggestions" th:with="pending=${suggestions.?[pending()]}">
         <h2 class="section-heading" th:text="#{ui.categories.proposedHeading}">Proposed categories</h2>
@@ -63,22 +65,22 @@
 
     <section class="surface-card mt-6 p-6" id="category-catalog">
         <h2 class="section-heading" th:text="#{ui.categories.catalogHeading}">Catalog</h2>
-        <div class="mt-4 overflow-x-auto">
-            <table class="table">
+        <div class="mt-4">
+            <table class="stacking-table">
                 <thead><tr><th th:text="#{ui.categories.column.name}">Name</th><th th:text="#{ui.categories.column.code}">Code</th>
                     <th th:text="#{ui.categories.column.group}">Group</th><th th:text="#{ui.categories.column.status}">Status</th>
                     <th><span class="sr-only" th:text="#{ui.categories.column.actions}">Actions</span></th></tr></thead>
                 <tbody>
                 <tr th:each="category : ${categories}" th:id="|category-${category.code}|">
-                    <td class="font-semibold" th:text="${category.displayName}">Feature</td>
-                    <td><code class="text-xs" th:text="${category.code}">FEATURE</code></td>
-                    <td th:text="#{${category.group.labelKey}}">Feature</td>
-                    <td>
+                    <td class="font-semibold" th:data-heading="#{ui.categories.column.name}" th:text="${category.displayName}">Feature</td>
+                    <td th:data-heading="#{ui.categories.column.code}"><code class="text-xs" th:text="${category.code}">FEATURE</code></td>
+                    <td th:data-heading="#{ui.categories.column.group}" th:text="#{${category.group.labelKey}}">Feature</td>
+                    <td th:data-heading="#{ui.categories.column.status}">
                         <span class="badge badge-sm" th:if="${category.systemCategory}" th:text="#{ui.categories.system}">System</span>
                         <span class="badge badge-sm badge-success badge-soft" th:if="${category.active and !category.systemCategory}" th:text="#{ui.categories.active}">Active</span>
                         <span class="badge badge-sm badge-ghost" th:unless="${category.active}" th:text="#{ui.categories.archivedBadge}">Archived</span>
                     </td>
-                    <td>
+                    <td th:data-heading="#{ui.categories.column.actions}">
                         <div class="flex flex-wrap justify-end gap-2">
                             <details>
                                 <summary class="btn btn-ghost btn-sm" th:text="#{ui.categories.edit}">Edit</summary>

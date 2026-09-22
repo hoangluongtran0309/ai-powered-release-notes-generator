@@ -9,3 +9,7 @@ target/
 .DS_Store
 node/
 node_modules/
+
+# Playwright's own output, written on a failing run.
+/playwright-report/
+/test-results/

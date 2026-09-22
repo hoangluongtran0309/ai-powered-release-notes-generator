@@ -547,6 +547,27 @@ version has been released.
   can be filled in, and every page renders in Vietnamese without a single key reaching
   the HTML.
 
+- A workspace overview that reads the workspace (ADR-0028): four figures — changes,
+  needing review, breaking, releases — each linking to the page that can act on them, and
+  the one next step that is unfinished, chosen in a fixed order. A workspace with an open
+  draft and no changes at all is still waiting for its first change.
+- A Project switcher in the header. The last Project looked at is remembered in the
+  `releaseflow_project` cookie, so a page reached without `?project=` opens on it. A URL
+  that names a Project wins; the cookie is `HttpOnly` and carries no authority, so one
+  naming another Organization's Project is ignored rather than refused.
+- Error pages for a mistyped address, a page a role does not reach, and a fault. A browser
+  that names `text/html` gets the page; a REST client, and anything under `/api`, keeps
+  the Problem Details it had, now including `404 not_found`.
+- A toast for what just happened: dismissed by hand rather than on a timer, because
+  WCAG 2.2.1 asks that nothing disappear on somebody who reads slowly.
+- A browser and accessibility suite: Playwright with `@axe-core/playwright` against the
+  demo Compose stack, covering the release pipeline, invitations, and every page, at
+  360 px in the light theme and 1440 px in the dark one. It fails on any WCAG 2 A/AA,
+  2.1 A/AA or 2.2 AA violation. CI runs it as a fifth job.
+- Tables on the members, categories and automation pages become one card per row below
+  640 px, each cell keeping its own heading, and a 44 px touch-target floor (WCAG 2.5.8)
+  applies everywhere.
+
 ### Changed
 
 - `ReviewTrigger.describe()` becomes `messageKey()`: a trigger now answers with a bundle
@@ -562,6 +583,13 @@ version has been released.
   attributes the template rendered. No wording is left in `app.js`.
 - `SourceType` gained `displayName()`, so a provider is named "GitHub" rather than
   "Github" wherever a sentence includes it.
+
+- `postcss.config.js` is now `postcss.config.cjs`: the package became an ES module for
+  Playwright's sake, and the PostCSS configuration is CommonJS.
+- `ReleaseService` is public where it was package-private, for the counts the overview
+  reads. Nothing else about it changed.
+- `StatusWebTest` is a full integration test rather than a web-layer slice, because every
+  page now resolves a language and reads the bundle.
 
 - The container health check now calls the management port instead of the public
   `GET /api/status`, so a container whose database has gone is unhealthy rather than
@@ -682,6 +710,13 @@ version has been released.
   CVE-2026-68525 until the Spring Boot parent manages a fixed version.
 
 ### Fixed
+
+- Accessibility defects the new gate found on its first run, all of them older than it:
+  DaisyUI's soft, ghost and outline badges missed 4.5:1 in both themes; the navigation
+  drawer's `<label>` carried an `aria-label`, which no label role permits; the release
+  page's radio tabs declared `role="tablist"` around panels a tablist may not contain;
+  and a warning colour and a muted code label failed against the surfaces they sit on.
+- A mistyped address no longer answers a browser with raw Problem Details JSON.
 
 - A blank registration password reports one required-field error instead of
   two.

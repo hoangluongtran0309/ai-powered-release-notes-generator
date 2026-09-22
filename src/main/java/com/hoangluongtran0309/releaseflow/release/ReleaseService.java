@@ -44,7 +44,9 @@ import java.util.stream.Collectors;
  * freezes them.
  */
 @Service
-class ReleaseService {
+// Public only for the counts the workspace overview reads; everything else stays
+// package-private, and the class is still reached through its own controllers.
+public class ReleaseService {
 
     private static final String VERSION_CONSTRAINT = "releases_project_version_unique";
     private static final String CHANGE_UNIQUE_CONSTRAINT = "release_changes_change_unique";
@@ -123,6 +125,28 @@ class ReleaseService {
                         release.getPublishedAt()
                 ))
                 .toList();
+    }
+
+    /**
+     * What the workspace overview says about this Project. The unassigned count is the
+     * processed changes that belong to no release yet, which is what the overview offers
+     * to do something about.
+     */
+    @Transactional(readOnly = true)
+    public ReleaseCounts counts(UUID organizationId, UUID projectId) {
+        ReleaseStatusCounts releases = releaseRepository.countByStatus(organizationId, projectId);
+        Set<UUID> inAnyRelease = membership(organizationId, projectId).keySet();
+        long unassigned = changeService.releasableChanges(organizationId, projectId).stream()
+                .filter(change -> !inAnyRelease.contains(change.id()))
+                .count();
+        return new ReleaseCounts(
+                releases.total(),
+                releases.drafts(),
+                releases.inReview(),
+                releases.approved(),
+                releases.published(),
+                unassigned
+        );
     }
 
     @Transactional

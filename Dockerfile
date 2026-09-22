@@ -16,7 +16,7 @@ COPY mvnw pom.xml ./
 RUN chmod +x mvnw && ./mvnw -B --no-transfer-progress dependency:go-offline
 
 # frontend-maven-plugin runs the Tailwind build during `package`.
-COPY package.json package-lock.json postcss.config.js ./
+COPY package.json package-lock.json postcss.config.cjs ./
 COPY src/ src/
 RUN ./mvnw -B --no-transfer-progress clean package -DskipTests -Prelease
 

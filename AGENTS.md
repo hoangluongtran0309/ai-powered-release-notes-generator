@@ -11,7 +11,7 @@ changed-file review, audience release note, category catalog, review
 signal, Project sensitive path, multilingual release note, integration
 source, GitLab source, Linear source, Jira source, automation, automation
 trigger, public changelog, wiki page action, chat and help centre action,
-deployment observability, and UI localization slices: one
+deployment observability, UI localization, and parity UI slices: one
 Spring Boot application, PostgreSQL/Flyway V1-V27,
 administrator
 registration, member
@@ -46,8 +46,10 @@ REST/UI paths, and Testcontainers tests. A private management port with four
 finite-cardinality metrics, a non-root container image, a Docker Compose demo
 stack with Prometheus and Grafana, and GitHub Actions security and test gates are
 also in place. Every page, form message, and error explanation is written in
-English or Vietnamese, chosen per person.
-The decisions behind all of it are ADR-0001 through ADR-0027. Read `README.md`,
+English or Vietnamese, chosen per person, and a Playwright suite drives the whole
+application in a browser at two sizes and both themes, failing on any
+accessibility violation Axe can see.
+The decisions behind all of it are ADR-0001 through ADR-0028. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -63,6 +65,8 @@ behavior.
   in JavaScript: a label comes from a `data-` attribute the template rendered.
 - Every word a person reads comes from `messages/ui.properties` and its
   translations. A new page, message, or failure adds its key to both.
+- A new or changed page keeps the browser suite green, accessibility included.
+  Run it with `npm run e2e`; it needs `.env` and Docker.
 - Do not add an interface, event, worker, provider abstraction, or deployment
   component for a future use case.
 - Keep developer documentation in English and aligned with runnable code.
@@ -227,6 +231,12 @@ behavior.
   Project, release, rule, run, action, model, external reference, or error text
   is ever a label, and every series is registered at zero at startup so a query
   never meets a series that is not there.
+- The workspace overview offers one next step, never a list, and the order that
+  picks it belongs to the step rather than to the page. Which Project a page
+  opens on may be remembered, but a remembered Project is never authority: it is
+  looked up against the principal's Organization like any other.
+- A page answers a browser with a page. Problem Details are for a caller that
+  asked for them, and for everything under `/api`.
 - A metric is recorded after the write it describes: a classification once its
   transaction returns, a delivery once its outcome is durable and only while
   this worker held the claim. `FAILED` and `UNKNOWN` are never added together,
@@ -257,6 +267,7 @@ variables documented in `README.md`.
 ```bash
 ./mvnw test
 ./mvnw verify
+npm ci && npm run e2e:install && npm run e2e
 ./mvnw spring-boot:run
 PATH="$PWD/node:$PATH" ./node/npm run watch
 docker compose -f docker-compose.demo.yml up --build

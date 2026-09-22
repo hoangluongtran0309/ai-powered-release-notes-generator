@@ -8,11 +8,14 @@ import com.hoangluongtran0309.releaseflow.change.ChangeNotFoundException;
 import com.hoangluongtran0309.releaseflow.change.ChangeProcessingException;
 import com.hoangluongtran0309.releaseflow.change.ChangeSummaryRequest;
 import com.hoangluongtran0309.releaseflow.change.InvalidChangeReviewException;
+import com.hoangluongtran0309.releaseflow.overview.OverviewService;
+import com.hoangluongtran0309.releaseflow.overview.SelectedProject;
 import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import com.hoangluongtran0309.releaseflow.project.ProjectView;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -40,6 +43,10 @@ public class ReleasePageController {
     private final OutputLanguageService outputLanguageService;
     private final CategoryService categoryService;
     private final UiMessages messages;
+    private final SelectedProject selectedProject;
+    private final OverviewService overviewService;
+
+
 
     ReleasePageController(
             ProjectService projectService,
@@ -47,7 +54,9 @@ public class ReleasePageController {
             AudienceService audienceService,
             OutputLanguageService outputLanguageService,
             CategoryService categoryService,
-            UiMessages messages
+            UiMessages messages,
+            SelectedProject selectedProject,
+            OverviewService overviewService
     ) {
         this.categoryService = categoryService;
         this.projectService = projectService;
@@ -55,17 +64,32 @@ public class ReleasePageController {
         this.audienceService = audienceService;
         this.outputLanguageService = outputLanguageService;
         this.messages = messages;
+        this.selectedProject = selectedProject;
+        this.overviewService = overviewService;
     }
 
+    // A URL that names no Project opens on the one this person was last looking at.
     @GetMapping("/releases")
     String releases(
             @AuthenticationPrincipal ReleaseFlowPrincipal principal,
             @RequestParam(name = "project", required = false) UUID projectId,
             @RequestParam(name = "status", required = false) String status,
             Model model,
+            HttpServletRequest request,
             HttpServletResponse response
     ) {
-        return renderReleases(principal, projectId, status, model, response);
+        // A URL that names a Project is answered as it stands: one of another Organization
+        // is reported as not found, never swapped for one of this Organization's.
+        UUID selected = projectId != null
+                ? projectId
+                : overviewService.rememberedOrFirstProject(
+                        principal.organizationId(),
+                        selectedProject.remembered(request).orElse(null)
+                ).orElse(null);
+        if (overviewService.owns(principal.organizationId(), selected)) {
+            selectedProject.remember(request, response, selected);
+        }
+        return renderReleases(principal, selected, status, model, response);
     }
 
     @PostMapping("/projects/{projectId}/releases")

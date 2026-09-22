@@ -30,6 +30,7 @@
         --rf-showcase-accent: #4338ca;
         --rf-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.05);
         --rf-shadow-md: 0 12px 32px -16px rgb(15 23 42 / 0.28);
+        --rf-warning-text: #b45309;
     }
     html[data-theme="dark"] {
         color-scheme: dark;
@@ -53,6 +54,7 @@
         --rf-showcase-start: #0f172a;
         --rf-showcase-end: #020617;
         --rf-showcase-accent: #a5b4fc;
+        --rf-warning-text: #fcd34d;
     }
     body {
         background:
@@ -109,6 +111,58 @@
     .icon-button { @apply btn btn-ghost btn-square min-h-11 h-11 min-w-11 w-11; }
     .icon { @apply h-5 w-5 shrink-0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .status-dot { @apply h-1.5 w-1.5 rounded-full bg-current; }
+
+    /* The workspace overview: four figures and the strip that says where a release is. */
+    .stat-card { @apply flex flex-col gap-1 rounded-2xl border p-5 transition; border-color: var(--rf-border); background-color: var(--rf-surface); color: var(--rf-text); box-shadow: var(--rf-shadow-sm); }
+    .stat-card:hover { border-color: var(--rf-border-strong); box-shadow: var(--rf-shadow-md); }
+    .stat-card-figure { @apply text-3xl font-bold tracking-tight; }
+    .stat-card-label { @apply text-sm font-medium; color: var(--rf-text-muted); }
+    .stat-card-attention { border-color: color-mix(in srgb, var(--rf-primary) 45%, var(--rf-border)); }
+    .stat-card-attention .stat-card-figure { color: var(--rf-primary); }
+    .stat-card-warning { border-color: color-mix(in srgb, oklch(0.63 0.2 25) 45%, var(--rf-border)); }
+    .stat-card-warning .stat-card-figure { color: oklch(0.55 0.2 25); }
+    .step-strip { @apply grid grid-cols-2 border-t text-center text-xs sm:grid-cols-4; border-color: var(--rf-border); background: var(--rf-surface-muted); color: var(--rf-text-muted); }
+    .step-strip > li { @apply flex min-h-16 flex-col items-center justify-center gap-0.5 p-3; }
+    .step-strip > li + li { border-inline-start: 1px solid var(--rf-border); }
+    .step-strip > li > strong { @apply text-base font-bold; color: var(--rf-text-muted); }
+    .step-strip > li.is-done > strong, .step-strip > li.is-current > strong { color: var(--rf-primary); }
+    .step-strip > li.is-current { color: var(--rf-text); font-weight: 600; }
+
+    /* A dense table becomes one card per row below the small breakpoint. Each cell keeps
+       its own heading, so nothing depends on a column header that is no longer beside it. */
+    .stacking-table { @apply w-full text-sm; }
+    .stacking-table th, .stacking-table td { @apply px-3 py-2 text-start align-top; }
+    .stacking-table > thead th { @apply text-xs font-semibold uppercase tracking-wider; color: var(--rf-text-muted); }
+    .stacking-table > tbody > tr { border-top: 1px solid var(--rf-border); }
+    @media (max-width: 639px) {
+        .stacking-table, .stacking-table > tbody, .stacking-table > tbody > tr, .stacking-table > tbody > tr > td { display: block; }
+        .stacking-table > thead { @apply sr-only; }
+        .stacking-table > tbody > tr { @apply mt-3 rounded-xl border p-3; border-color: var(--rf-border); background: var(--rf-surface); }
+        .stacking-table > tbody > tr > td { @apply flex flex-wrap items-baseline justify-between gap-3 px-0 py-1.5; }
+        .stacking-table > tbody > tr > td::before { content: attr(data-heading); @apply text-xs font-semibold uppercase tracking-wider; color: var(--rf-text-muted); }
+        .stacking-table > tbody > tr > td:empty { display: none; }
+    }
+
+    /* What just happened, said once and put away by hand. Nothing times out: WCAG 2.2.1
+       asks that a message not disappear on somebody who reads slowly. In the flow of the
+       page on a phone, where an overlay would cover the thing just acted on; floating
+       above the corner on a wider screen. */
+    .toast-region { @apply grid gap-2; }
+    .toast-region:empty { display: none; }
+    .toast-item { @apply flex items-center gap-3 rounded-xl border p-3 text-sm shadow-lg; border-color: var(--rf-border-strong); background-color: var(--rf-surface); color: var(--rf-text); }
+    @media (min-width: 640px) {
+        .toast-region { @apply fixed inset-x-auto bottom-4 right-4 z-50 w-auto max-w-sm; }
+    }
+
+    /* Text on the audience list's selected row, which sets its own background. */
+    .audience-code { color: var(--rf-text-muted); }
+
+    /* WCAG 2.5.8: anything a finger has to hit is at least 44 px in both directions. */
+    .btn, .select, .input, .textarea, summary.btn { min-height: 2.75rem; }
+    .btn-sm, .select-sm, .input-sm { min-height: 2.75rem; }
+    .btn-xs { min-height: 2rem; }
+    .checkbox { @apply h-5 w-5; }
+    .label.cursor-pointer { @apply min-h-11; }
 
     /* Rendered release-note Markdown. The preflight reset removes element styles. */
     .release-note-body { @apply text-sm leading-6; overflow-wrap: anywhere; }
@@ -192,3 +246,13 @@
     .status-dot { forced-color-adjust: none; }
     .app-nav-link.is-active { outline: 2px solid CanvasText; }
 }
+
+/* DaisyUI's soft, ghost and outline badges do not clear 4.5:1 in either theme — Axe
+   reports it on the role, status and category badges. A badge keeps its meaning in its
+   own background and border; its text takes the theme's foreground, which every surface
+   is already checked against. Unlayered, so it wins over the plugin's own layer. */
+.badge-soft, .badge-ghost, .badge-outline { color: var(--rf-text); }
+
+/* The same for the one warning colour a page writes in prose: slate-on-amber is legible
+   on white and not on the dark canvas. */
+.text-amber-700 { color: var(--rf-warning-text); }
