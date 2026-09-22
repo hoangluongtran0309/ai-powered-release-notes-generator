@@ -10,7 +10,7 @@ import java.util.UUID;
  */
 public class ExecuteRuleRequest {
 
-    @NotNull(message = "Choose a release.")
+    @NotNull(message = "{validation.release.required}")
     private UUID releaseId;
 
     private UUID requestId;

@@ -19,13 +19,12 @@ public record OrganizationSlug(String value) {
 
     public static OrganizationSlug parse(String value) {
         if (value == null || value.isBlank()) {
-            throw new InvalidOrganizationSlugException("A changelog address is required.");
+            throw new InvalidOrganizationSlugException("error.organization_slug_invalid.required");
         }
         String candidate = value.strip().toLowerCase(Locale.ROOT);
         if (candidate.length() > MAX_LENGTH || !LABEL.matcher(candidate).matches()) {
             throw new InvalidOrganizationSlugException(
-                    "\"" + value.strip() + "\" cannot be a changelog address. Use up to " + MAX_LENGTH
-                            + " lowercase letters, digits, and hyphens, starting and ending with a letter or digit."
+                    "error.organization_slug_invalid.format", value.strip(), MAX_LENGTH
             );
         }
         return new OrganizationSlug(candidate);

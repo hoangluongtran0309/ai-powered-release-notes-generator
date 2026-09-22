@@ -29,6 +29,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -181,7 +182,7 @@ class ProjectSensitivePathIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(get("/projects/{projectId}/sensitive-paths", project).session(admin.session()).param("saved", ""))
                 .andExpect(content().string(containsString("Patterns saved.")))
                 .andExpect(content().string(containsString("**/billing/**\ninfra/**</textarea>")))
-                .andExpect(content().string(containsString("Last changed by <span>Mai Tran</span>")));
+                .andExpect(content().string(matchesPattern("(?s).*Last changed by</span>\\s*<span>Mai Tran</span>.*")));
 
         mockMvc.perform(post("/projects/{projectId}/sensitive-paths", project).session(admin.session()).with(csrf())
                         .param("additions", "**/billing/**\nsrc/[unclosed"))

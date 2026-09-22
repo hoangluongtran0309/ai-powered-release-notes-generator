@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.category;
 
-public class CategorySuggestionNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class CategorySuggestionNotFoundException extends LocalizedException {
 
     public CategorySuggestionNotFoundException() {
-        super("Category suggestion was not found.");
+        super("error.category_suggestion_not_found");
     }
 }

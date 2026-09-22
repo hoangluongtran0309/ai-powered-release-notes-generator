@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.jira;
 
-public class InvalidJiraSiteException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public InvalidJiraSiteException(String message) {
-        super(message);
+public class InvalidJiraSiteException extends LocalizedException {
+
+    public InvalidJiraSiteException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

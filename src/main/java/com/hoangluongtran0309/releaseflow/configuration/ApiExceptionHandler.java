@@ -2,6 +2,7 @@ package com.hoangluongtran0309.releaseflow.configuration;
 
 import com.hoangluongtran0309.releaseflow.account.DuplicateEmailException;
 import com.hoangluongtran0309.releaseflow.account.InvalidOutputLanguageException;
+import com.hoangluongtran0309.releaseflow.account.InvalidUiLocaleException;
 import com.hoangluongtran0309.releaseflow.account.InvalidInvitationException;
 import com.hoangluongtran0309.releaseflow.account.InvitationAlreadyPendingException;
 import com.hoangluongtran0309.releaseflow.account.InvitationEmailUnavailableException;
@@ -14,6 +15,7 @@ import com.hoangluongtran0309.releaseflow.account.OutputLanguageApiController;
 import com.hoangluongtran0309.releaseflow.account.PublicInvitationApiController;
 import com.hoangluongtran0309.releaseflow.account.RegistrationApiController;
 import com.hoangluongtran0309.releaseflow.account.SessionApiController;
+import com.hoangluongtran0309.releaseflow.account.UiLocaleApiController;
 import com.hoangluongtran0309.releaseflow.audience.AudienceApiController;
 import com.hoangluongtran0309.releaseflow.audience.AudienceConflictException;
 import com.hoangluongtran0309.releaseflow.audience.AudienceNotFoundException;
@@ -98,6 +100,7 @@ import java.util.Map;
         SessionApiController.class,
         OrganizationMemberApiController.class,
         OutputLanguageApiController.class,
+        UiLocaleApiController.class,
         OrganizationSlugApiController.class,
         PublicInvitationApiController.class,
         ProjectApiController.class,
@@ -118,6 +121,12 @@ import java.util.Map;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
 
+    private final UiMessages messages;
+
+    ApiExceptionHandler(UiMessages messages) {
+        this.messages = messages;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ProblemDetail> validationFailed(MethodArgumentNotValidException exception) {
         Map<String, String> errors = new LinkedHashMap<>();
@@ -125,599 +134,333 @@ public class ApiExceptionHandler {
                 errors.putIfAbsent(error.getField(), error.getDefaultMessage())
         );
 
-        ProblemDetail problem = problem(
-                HttpStatus.BAD_REQUEST,
-                "Validation failed",
-                "One or more request fields are invalid.",
-                "validation_failed"
-        );
+        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "validation_failed");
         problem.setProperty("errors", errors);
         return response(problem);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ProblemDetail> unreadableRequest() {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Malformed request",
-                "The request body is missing or malformed.",
-                "malformed_request"
-        ));
+        return response(problem(HttpStatus.BAD_REQUEST, "malformed_request"));
     }
 
     @ExceptionHandler(DuplicateEmailException.class)
     ResponseEntity<ProblemDetail> duplicateEmail(DuplicateEmailException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Email already registered",
-                exception.getMessage(),
-                "email_already_registered"
-        ));
+        return localized(HttpStatus.CONFLICT, "email_already_registered", exception);
     }
 
     @ExceptionHandler(InvalidOutputLanguageException.class)
     ResponseEntity<ProblemDetail> invalidOutputLanguage(InvalidOutputLanguageException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid output language",
-                exception.getMessage(),
-                "output_language_invalid"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "output_language_invalid", exception);
+    }
+
+    @ExceptionHandler(InvalidUiLocaleException.class)
+    ResponseEntity<ProblemDetail> invalidUiLocale(InvalidUiLocaleException exception) {
+        return localized(HttpStatus.BAD_REQUEST, "ui_locale_invalid", exception);
     }
 
     @ExceptionHandler(InvalidInvitationException.class)
     ResponseEntity<ProblemDetail> invalidInvitation(InvalidInvitationException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid invitation",
-                exception.getMessage(),
-                "invitation_invalid"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "invitation_invalid", exception);
     }
 
     @ExceptionHandler(InvitationEmailUnavailableException.class)
     ResponseEntity<ProblemDetail> invitationEmailUnavailable(InvitationEmailUnavailableException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Email unavailable",
-                exception.getMessage(),
-                "invitation_email_unavailable"
-        ));
+        return localized(HttpStatus.CONFLICT, "invitation_email_unavailable", exception);
     }
 
     @ExceptionHandler(InvitationAlreadyPendingException.class)
     ResponseEntity<ProblemDetail> invitationAlreadyPending(InvitationAlreadyPendingException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Invitation already pending",
-                exception.getMessage(),
-                "invitation_already_pending"
-        ));
+        return localized(HttpStatus.CONFLICT, "invitation_already_pending", exception);
     }
 
     @ExceptionHandler(InvitationNotFoundException.class)
     ResponseEntity<ProblemDetail> invitationNotFound(InvitationNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Invitation not found",
-                exception.getMessage(),
-                "invitation_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "invitation_not_found", exception);
     }
 
     @ExceptionHandler(ProjectNotFoundException.class)
     ResponseEntity<ProblemDetail> projectNotFound(ProjectNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Project not found",
-                exception.getMessage(),
-                "project_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "project_not_found", exception);
     }
 
     @ExceptionHandler(SourceAlreadyConnectedException.class)
     ResponseEntity<ProblemDetail> sourceAlreadyConnected(SourceAlreadyConnectedException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Source already connected",
-                exception.getMessage(),
-                exception.code()
-        ));
+        return localized(HttpStatus.CONFLICT, exception.code(), exception);
     }
 
     @ExceptionHandler(SourceNotFoundException.class)
     ResponseEntity<ProblemDetail> sourceNotFound(SourceNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Source not found",
-                exception.getMessage(),
-                "source_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "source_not_found", exception);
     }
 
     @ExceptionHandler(SourceTokenRejectedException.class)
     ResponseEntity<ProblemDetail> sourceTokenRejected(SourceTokenRejectedException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Access token rejected",
-                exception.getMessage(),
-                exception.code()
-        ));
+        return localized(HttpStatus.BAD_REQUEST, exception.code(), exception);
     }
 
     @ExceptionHandler(SourceUnavailableException.class)
     ResponseEntity<ProblemDetail> sourceUnavailable(SourceUnavailableException exception) {
-        return response(problem(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "Source unavailable",
-                exception.getMessage(),
-                exception.code()
-        ));
+        return localized(HttpStatus.SERVICE_UNAVAILABLE, exception.code(), exception);
     }
 
     @ExceptionHandler(InvalidGitLabBaseUrlException.class)
     ResponseEntity<ProblemDetail> invalidGitLabBaseUrl(InvalidGitLabBaseUrlException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid GitLab instance URL",
-                exception.getMessage(),
-                "gitlab_base_url_invalid"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "gitlab_base_url_invalid", exception);
     }
 
     @ExceptionHandler(GitLabHostNotAllowedException.class)
     ResponseEntity<ProblemDetail> gitLabHostNotAllowed(GitLabHostNotAllowedException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "GitLab host not allowed",
-                exception.getMessage(),
-                "gitlab_host_not_allowed"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "gitlab_host_not_allowed", exception);
     }
 
     @ExceptionHandler(InvalidJiraSiteException.class)
     ResponseEntity<ProblemDetail> invalidJiraSite(InvalidJiraSiteException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid Jira site URL",
-                exception.getMessage(),
-                "jira_site_invalid"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "jira_site_invalid", exception);
     }
 
     @ExceptionHandler(ChangeProcessingException.class)
     ResponseEntity<ProblemDetail> changeProcessing(ChangeProcessingException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Change still processing",
-                exception.getMessage(),
-                "change_processing"
-        ));
+        return localized(HttpStatus.CONFLICT, "change_processing", exception);
     }
 
     @ExceptionHandler(ReleaseNotFoundException.class)
     ResponseEntity<ProblemDetail> releaseNotFound(ReleaseNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Release not found",
-                exception.getMessage(),
-                "release_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "release_not_found", exception);
     }
 
     @ExceptionHandler(ReleaseStatusException.class)
     ResponseEntity<ProblemDetail> releaseStatusConflict(ReleaseStatusException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Release status conflict",
-                exception.getMessage(),
-                "release_status_conflict"
-        ));
+        return localized(HttpStatus.CONFLICT, "release_status_conflict", exception);
     }
 
     @ExceptionHandler(ReleaseReviewIncompleteException.class)
     ResponseEntity<ProblemDetail> releaseReviewIncomplete(ReleaseReviewIncompleteException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Release review incomplete",
-                exception.getMessage(),
-                "release_review_incomplete"
-        ));
+        return localized(HttpStatus.CONFLICT, "release_review_incomplete", exception);
     }
 
     @ExceptionHandler(ClassificationChangedException.class)
     ResponseEntity<ProblemDetail> classificationChanged(ClassificationChangedException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Classification changed",
-                exception.getMessage(),
-                "classification_changed"
-        ));
+        return localized(HttpStatus.CONFLICT, "classification_changed", exception);
     }
 
     @ExceptionHandler(InvalidReleaseScheduleException.class)
     ResponseEntity<ProblemDetail> invalidReleaseSchedule(InvalidReleaseScheduleException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid release schedule",
-                exception.getMessage(),
-                "invalid_release_schedule"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "invalid_release_schedule", exception);
     }
 
     @ExceptionHandler(ReleasePublishedException.class)
     ResponseEntity<ProblemDetail> releasePublished(ReleasePublishedException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Release published",
-                exception.getMessage(),
-                "release_published"
-        ));
+        return localized(HttpStatus.CONFLICT, "release_published", exception);
     }
 
     @ExceptionHandler(ReleaseEmptyException.class)
     ResponseEntity<ProblemDetail> releaseEmpty(ReleaseEmptyException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Release empty",
-                exception.getMessage(),
-                "release_empty"
-        ));
+        return localized(HttpStatus.CONFLICT, "release_empty", exception);
     }
 
     @ExceptionHandler(ReleaseVersionTakenException.class)
     ResponseEntity<ProblemDetail> releaseVersionTaken(ReleaseVersionTakenException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Release version taken",
-                exception.getMessage(),
-                "release_version_taken"
-        ));
+        return localized(HttpStatus.CONFLICT, "release_version_taken", exception);
     }
 
     @ExceptionHandler(ChangeNotReleasableException.class)
     ResponseEntity<ProblemDetail> changeNotReleasable(ChangeNotReleasableException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Change not releasable",
-                exception.getMessage(),
-                "change_not_releasable"
-        ));
+        return localized(HttpStatus.CONFLICT, "change_not_releasable", exception);
     }
 
     @ExceptionHandler(ChangeNotFoundException.class)
     ResponseEntity<ProblemDetail> changeNotFound(ChangeNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Change not found",
-                exception.getMessage(),
-                "change_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "change_not_found", exception);
     }
 
     @ExceptionHandler(ChangeNotEligibleForAiException.class)
     ResponseEntity<ProblemDetail> changeNotEligibleForAi(ChangeNotEligibleForAiException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Change not eligible for AI classification",
-                exception.getMessage(),
-                "change_not_eligible_for_ai"
-        ));
+        return localized(HttpStatus.CONFLICT, "change_not_eligible_for_ai", exception);
     }
 
     @ExceptionHandler(AiClassificationFailedException.class)
     ResponseEntity<ProblemDetail> aiClassificationFailed(AiClassificationFailedException exception) {
-        return response(problem(
-                HttpStatus.BAD_GATEWAY,
-                "AI classification failed",
-                exception.getMessage(),
-                "ai_classification_failed"
-        ));
+        return localized(HttpStatus.BAD_GATEWAY, "ai_classification_failed", exception);
     }
 
     @ExceptionHandler(AiClassificationUnavailableException.class)
     ResponseEntity<ProblemDetail> aiClassificationUnavailable(AiClassificationUnavailableException exception) {
-        return response(problem(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "AI classification unavailable",
-                exception.getMessage(),
-                "ai_classification_unavailable"
-        ));
+        return localized(HttpStatus.SERVICE_UNAVAILABLE, "ai_classification_unavailable", exception);
     }
 
     @ExceptionHandler(InvalidChangeReviewException.class)
     ResponseEntity<ProblemDetail> invalidChangeReview(InvalidChangeReviewException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid change review",
-                exception.getMessage(),
-                "invalid_change_review"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "invalid_change_review", exception);
     }
 
     @ExceptionHandler(InvalidChangeFilterException.class)
     ResponseEntity<ProblemDetail> invalidChangeFilter(InvalidChangeFilterException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid change filter",
-                exception.getMessage(),
-                "invalid_change_filter"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "invalid_change_filter", exception);
     }
 
     @ExceptionHandler(InvalidOrganizationSlugException.class)
     ResponseEntity<ProblemDetail> invalidOrganizationSlug(InvalidOrganizationSlugException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Changelog address invalid",
-                exception.getMessage(),
-                "organization_slug_invalid"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "organization_slug_invalid", exception);
     }
 
     @ExceptionHandler(OrganizationSlugTakenException.class)
     ResponseEntity<ProblemDetail> organizationSlugTaken(OrganizationSlugTakenException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Changelog address taken",
-                exception.getMessage(),
-                "organization_slug_taken"
-        ));
+        return localized(HttpStatus.CONFLICT, "organization_slug_taken", exception);
     }
 
     @ExceptionHandler(WebhookSignatureInvalidException.class)
     ResponseEntity<ProblemDetail> webhookSignatureInvalid(WebhookSignatureInvalidException exception) {
-        return response(problem(
-                HttpStatus.UNAUTHORIZED,
-                "Webhook signature invalid",
-                exception.getMessage(),
-                "webhook_signature_invalid"
-        ));
+        return localized(HttpStatus.UNAUTHORIZED, "webhook_signature_invalid", exception);
     }
 
     @ExceptionHandler(WebhookRepositoryMismatchException.class)
     ResponseEntity<ProblemDetail> webhookRepositoryMismatch(WebhookRepositoryMismatchException exception) {
-        return response(problem(
-                HttpStatus.UNPROCESSABLE_CONTENT,
-                "Webhook repository mismatch",
-                exception.getMessage(),
-                "webhook_repository_mismatch"
-        ));
+        return localized(HttpStatus.UNPROCESSABLE_CONTENT, "webhook_repository_mismatch", exception);
     }
 
     @ExceptionHandler(WebhookPayloadTooLargeException.class)
     ResponseEntity<ProblemDetail> webhookPayloadTooLarge(WebhookPayloadTooLargeException exception) {
-        return response(problem(
-                HttpStatus.PAYLOAD_TOO_LARGE,
-                "Webhook payload too large",
-                exception.getMessage(),
-                "webhook_payload_too_large"
-        ));
+        return localized(HttpStatus.PAYLOAD_TOO_LARGE, "webhook_payload_too_large", exception);
     }
 
     @ExceptionHandler(MalformedWebhookPayloadException.class)
     ResponseEntity<ProblemDetail> malformedWebhookPayload(MalformedWebhookPayloadException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Webhook payload malformed",
-                exception.getMessage(),
-                "webhook_payload_malformed"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "webhook_payload_malformed", exception);
     }
 
     @ExceptionHandler(ReleaseNoteNotFoundException.class)
     ResponseEntity<ProblemDetail> releaseNoteNotFound(ReleaseNoteNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Release note not found",
-                exception.getMessage(),
-                "release_note_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "release_note_not_found", exception);
     }
 
     @ExceptionHandler(ReleaseNotesMissingException.class)
     ResponseEntity<ProblemDetail> releaseNotesMissing(ReleaseNotesMissingException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Release notes missing",
-                exception.getMessage(),
-                "release_notes_missing"
-        ));
+        return localized(HttpStatus.CONFLICT, "release_notes_missing", exception);
     }
 
     @ExceptionHandler(ReleaseNoteRenderException.class)
     ResponseEntity<ProblemDetail> releaseNoteRenderFailed(ReleaseNoteRenderException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Release note could not be rendered",
-                exception.getMessage(),
-                "release_note_render_failed"
-        ));
+        return localized(HttpStatus.CONFLICT, "release_note_render_failed", exception);
     }
 
     @ExceptionHandler(AudienceNotFoundException.class)
     ResponseEntity<ProblemDetail> audienceNotFound(AudienceNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Audience not found",
-                exception.getMessage(),
-                "audience_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "audience_not_found", exception);
     }
 
     @ExceptionHandler(AudienceConflictException.class)
     ResponseEntity<ProblemDetail> audienceConflict(AudienceConflictException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Audience conflict",
-                exception.getMessage(),
-                exception.code()
-        ));
+        return localized(HttpStatus.CONFLICT, exception.code(), exception);
     }
 
     @ExceptionHandler(InvalidAudienceTemplateException.class)
     ResponseEntity<ProblemDetail> invalidAudienceTemplate(InvalidAudienceTemplateException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid audience template",
-                exception.getMessage(),
-                exception.code()
-        ));
+        return localized(HttpStatus.BAD_REQUEST, exception.code(), exception);
     }
 
     @ExceptionHandler(CategoryNotFoundException.class)
     ResponseEntity<ProblemDetail> categoryNotFound(CategoryNotFoundException exception) {
-        return response(problem(HttpStatus.NOT_FOUND, "Category not found", exception.getMessage(), "category_not_found"));
+        return localized(HttpStatus.NOT_FOUND, "category_not_found", exception);
     }
 
     @ExceptionHandler(CategorySuggestionNotFoundException.class)
     ResponseEntity<ProblemDetail> categorySuggestionNotFound(CategorySuggestionNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Category suggestion not found",
-                exception.getMessage(),
-                "category_suggestion_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "category_suggestion_not_found", exception);
     }
 
     @ExceptionHandler(CategoryConflictException.class)
     ResponseEntity<ProblemDetail> categoryConflict(CategoryConflictException exception) {
-        return response(problem(HttpStatus.CONFLICT, "Category conflict", exception.getMessage(), exception.code()));
+        return localized(HttpStatus.CONFLICT, exception.code(), exception);
     }
 
     @ExceptionHandler(DuplicateCandidateNotFoundException.class)
     ResponseEntity<ProblemDetail> duplicateCandidateNotFound(DuplicateCandidateNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Possible duplicate not found",
-                exception.getMessage(),
-                "duplicate_candidate_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "duplicate_candidate_not_found", exception);
     }
 
     @ExceptionHandler(DuplicateCandidateDecidedException.class)
     ResponseEntity<ProblemDetail> duplicateCandidateDecided(DuplicateCandidateDecidedException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Possible duplicate already decided",
-                exception.getMessage(),
-                "duplicate_candidate_decided"
-        ));
+        return localized(HttpStatus.CONFLICT, "duplicate_candidate_decided", exception);
     }
 
     @ExceptionHandler(InvalidSensitivePathsException.class)
     ResponseEntity<ProblemDetail> invalidSensitivePaths(InvalidSensitivePathsException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid sensitive paths",
-                exception.getMessage(),
-                "invalid_sensitive_paths"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "invalid_sensitive_paths", exception);
     }
 
     @ExceptionHandler(InvalidReleaseLanguagesException.class)
     ResponseEntity<ProblemDetail> invalidReleaseLanguages(InvalidReleaseLanguagesException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid release note languages",
-                exception.getMessage(),
-                "invalid_release_languages"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "invalid_release_languages", exception);
     }
 
     @ExceptionHandler(TranslationsNotReadyException.class)
     ResponseEntity<ProblemDetail> translationsNotReady(TranslationsNotReadyException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Translations not ready",
-                exception.getMessage(),
-                "translations_not_ready"
-        ));
+        return localized(HttpStatus.CONFLICT, "translations_not_ready", exception);
     }
 
     @ExceptionHandler(SourceTokenMissingException.class)
     ResponseEntity<ProblemDetail> sourceTokenMissing(SourceTokenMissingException exception) {
-        return response(problem(HttpStatus.CONFLICT, "Access token missing", exception.getMessage(), "source_token_missing"));
+        return localized(HttpStatus.CONFLICT, "source_token_missing", exception);
     }
 
     @ExceptionHandler(SourceSyncInProgressException.class)
     ResponseEntity<ProblemDetail> sourceSyncInProgress(SourceSyncInProgressException exception) {
-        return response(problem(HttpStatus.CONFLICT, "Import in progress", exception.getMessage(), "source_sync_in_progress"));
+        return localized(HttpStatus.CONFLICT, "source_sync_in_progress", exception);
     }
 
     @ExceptionHandler(SourceImportNotSupportedException.class)
     ResponseEntity<ProblemDetail> sourceImportNotSupported(SourceImportNotSupportedException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Import not supported",
-                exception.getMessage(),
-                "source_import_not_supported"
-        ));
+        return localized(HttpStatus.CONFLICT, "source_import_not_supported", exception);
     }
 
     @ExceptionHandler(SourceImportNotResumableException.class)
     ResponseEntity<ProblemDetail> sourceImportNotResumable(SourceImportNotResumableException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Import not resumable",
-                exception.getMessage(),
-                "source_import_not_resumable"
-        ));
+        return localized(HttpStatus.CONFLICT, "source_import_not_resumable", exception);
     }
 
     @ExceptionHandler(AutomationRuleNotFoundException.class)
     ResponseEntity<ProblemDetail> automationRuleNotFound(AutomationRuleNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Automation rule not found",
-                exception.getMessage(),
-                "automation_rule_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "automation_rule_not_found", exception);
     }
 
     @ExceptionHandler(AutomationRunNotFoundException.class)
     ResponseEntity<ProblemDetail> automationRunNotFound(AutomationRunNotFoundException exception) {
-        return response(problem(
-                HttpStatus.NOT_FOUND,
-                "Automation run not found",
-                exception.getMessage(),
-                "automation_run_not_found"
-        ));
+        return localized(HttpStatus.NOT_FOUND, "automation_run_not_found", exception);
     }
 
     @ExceptionHandler(AutomationConflictException.class)
     ResponseEntity<ProblemDetail> automationConflict(AutomationConflictException exception) {
-        return response(problem(
-                HttpStatus.CONFLICT,
-                "Automation conflict",
-                exception.getMessage(),
-                exception.code()
-        ));
+        return localized(HttpStatus.CONFLICT, exception.code(), exception);
     }
 
     @ExceptionHandler(AutomationActionInvalidException.class)
     ResponseEntity<ProblemDetail> automationActionInvalid(AutomationActionInvalidException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid automation rule",
-                exception.getMessage(),
-                exception.code()
-        ));
+        return localized(HttpStatus.BAD_REQUEST, exception.code(), exception);
     }
 
     @ExceptionHandler(InvalidAutomationRunPageException.class)
     ResponseEntity<ProblemDetail> invalidAutomationRunPage(InvalidAutomationRunPageException exception) {
-        return response(problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid run page",
-                exception.getMessage(),
-                "invalid_automation_run_page"
-        ));
+        return localized(HttpStatus.BAD_REQUEST, "invalid_automation_run_page", exception);
     }
 
-    private static ProblemDetail problem(HttpStatus status, String title, String detail, String code) {
+    /**
+     * The same failure in the reader's own language. The {@code code} is what a caller
+     * matches on and never changes; only the title and the detail are translated, and the
+     * detail is the key the failure itself carried.
+     */
+    private ResponseEntity<ProblemDetail> localized(HttpStatus status, String code, LocalizedException exception) {
+        return response(problem(status, code, messages.of(exception)));
+    }
+
+    /** A failure whose only wording is the one its code stands for. */
+    private ProblemDetail problem(HttpStatus status, String code) {
+        return problem(status, code, messages.get("error." + code));
+    }
+
+    private ProblemDetail problem(HttpStatus status, String code, String detail) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setTitle(title);
+        problem.setTitle(messages.get("error." + code + ".title"));
         problem.setProperty("code", code);
         return problem;
     }

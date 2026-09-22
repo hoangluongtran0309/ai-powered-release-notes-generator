@@ -64,7 +64,7 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("release"))
                 .andExpect(content().string(containsString("Add at least one change before requesting review.")))
-                .andExpect(content().string(matchesPattern("(?s).*Planned for\\s*<time[^>]*>1 Oct 2099, 09:00 UTC</time>.*")))
+                .andExpect(content().string(matchesPattern("(?s).*Planned for</span>\\s*<time[^>]*>1 Oct 2099, 09:00 UTC</time>.*")))
                 .andExpect(content().string(containsString("value=\"2099-10-01T09:00\"")));
         mockMvc.perform(post(releasePath + "/request-review").session(owner.session()).with(csrf()))
                 .andExpect(status().isConflict())
@@ -117,7 +117,7 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(redirectedUrl(releasePath));
         mockMvc.perform(get(releasePath).session(owner.session()))
                 .andExpect(content().string(containsString("aria-current=\"step\">Approved</li>")))
-                .andExpect(content().string(matchesPattern("(?s).*Approved by <span class=\"font-semibold\">Mai Tran</span>.*")))
+                .andExpect(content().string(matchesPattern("(?s).*Approved by</span>\\s*<span class=\"font-semibold\">Mai Tran</span>.*")))
                 .andExpect(content().string(containsString("Publish 1.4.0")))
                 .andExpect(content().string(not(containsString("Approve as shown"))))
                 .andExpect(content().string(matchesPattern(
@@ -132,8 +132,8 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(get(releasePath).session(owner.session()))
                 .andExpect(status().isOk())
                 .andExpect(view().name("release-note"))
-                .andExpect(content().string(matchesPattern("(?s).*Published by <span class=\"font-semibold\">Mai Tran</span>.*")))
-                .andExpect(content().string(matchesPattern("(?s).*Approved by <span class=\"font-semibold\">Mai Tran</span>.*")))
+                .andExpect(content().string(matchesPattern("(?s).*Published by</span>\\s*<span class=\"font-semibold\">Mai Tran</span>.*")))
+                .andExpect(content().string(matchesPattern("(?s).*Approved by</span>\\s*<span class=\"font-semibold\">Mai Tran</span>.*")))
                 .andExpect(content().string(containsString("<h2>✨ New Features</h2>")))
                 .andExpect(content().string(containsString("<h2>🔧 Maintenance</h2>")))
                 .andExpect(content().string(containsString("<strong>add the *inbox*</strong>")))
@@ -196,7 +196,7 @@ class ReleasePublicationPageIntegrationTest extends PostgreSqlIntegrationTest {
                         .param("plannedReleaseAt", "2099-12-24T18:30"))
                 .andExpect(redirectedUrl(releasePath));
         mockMvc.perform(get("/releases").session(owner.session()))
-                .andExpect(content().string(matchesPattern("(?s).*planned\\s*<time[^>]*>24 Dec 2099, 18:30 UTC</time>.*")));
+                .andExpect(content().string(matchesPattern("(?s).*planned</span>\\s*<time[^>]*>24 Dec 2099, 18:30 UTC</time>.*")));
         mockMvc.perform(post(releasePath + "/schedule").session(owner.session()).with(csrf())
                         .param("plannedReleaseAt", "not a date"))
                 .andExpect(status().isBadRequest())

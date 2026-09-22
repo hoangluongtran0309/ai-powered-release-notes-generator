@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class AiClassificationUnavailableException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class AiClassificationUnavailableException extends LocalizedException {
 
     public AiClassificationUnavailableException() {
-        super("AI classification is not configured.");
+        super("error.ai_classification_unavailable");
     }
 }

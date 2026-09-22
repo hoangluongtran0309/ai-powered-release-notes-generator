@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.account;
 
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -15,13 +16,16 @@ public class RegistrationPageController {
 
     private final RegistrationService registrationService;
     private final OutputLanguageService outputLanguageService;
+    private final UiMessages messages;
 
     public RegistrationPageController(
             RegistrationService registrationService,
-            OutputLanguageService outputLanguageService
+            OutputLanguageService outputLanguageService,
+            UiMessages messages
     ) {
         this.registrationService = registrationService;
         this.outputLanguageService = outputLanguageService;
+        this.messages = messages;
     }
 
     @ModelAttribute("outputLanguageOptions")
@@ -51,10 +55,10 @@ public class RegistrationPageController {
         try {
             registrationService.register(request);
         } catch (DuplicateEmailException exception) {
-            bindingResult.rejectValue("email", "email.duplicate", exception.getMessage());
+            bindingResult.rejectValue("email", "email.duplicate", messages.of(exception));
             return "register";
         } catch (InvalidOutputLanguageException exception) {
-            bindingResult.rejectValue("outputLanguage", "outputLanguage.invalid", exception.getMessage());
+            bindingResult.rejectValue("outputLanguage", "outputLanguage.invalid", messages.of(exception));
             return "register";
         }
         return "redirect:/login?registered";

@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.category;
 
-public class CategoryNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class CategoryNotFoundException extends LocalizedException {
 
     public CategoryNotFoundException() {
-        super("Category was not found.");
+        super("error.category_not_found");
     }
 }

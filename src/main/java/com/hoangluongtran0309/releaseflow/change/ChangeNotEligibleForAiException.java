@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class ChangeNotEligibleForAiException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ChangeNotEligibleForAiException extends LocalizedException {
 
     public ChangeNotEligibleForAiException() {
-        super("Only a change whose AI classification failed, or an Unknown change recorded before automatic AI, can be sent to AI.");
+        super("error.change_not_eligible_for_ai");
     }
 }

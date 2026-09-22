@@ -6,7 +6,7 @@ import java.util.List;
 
 public class ReleaseLanguagesRequest {
 
-    @NotNull(message = "List the release note languages.")
+    @NotNull(message = "{validation.releaseLanguages.required}")
     private List<String> targetLanguages;
 
     public List<String> getTargetLanguages() {

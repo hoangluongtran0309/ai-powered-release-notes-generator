@@ -20,6 +20,7 @@ public final class ReleaseFlowPrincipal implements UserDetails {
     private final String email;
     private final String passwordHash;
     private final AppUserRole role;
+    private final String uiLocale;
 
     ReleaseFlowPrincipal(AppUser user) {
         this.userId = user.getId();
@@ -28,6 +29,7 @@ public final class ReleaseFlowPrincipal implements UserDetails {
         this.email = user.getEmail();
         this.passwordHash = user.passwordHash();
         this.role = user.getRole();
+        this.uiLocale = user.getUiLocale();
     }
 
     public UUID userId() {
@@ -44,6 +46,15 @@ public final class ReleaseFlowPrincipal implements UserDetails {
 
     public AppUserRole role() {
         return role;
+    }
+
+    /**
+     * The UI language saved on this account, or null when the browser decides. It is a
+     * snapshot taken when the session began; a change also writes the language cookie,
+     * which outranks it, so the person never waits for a new session to see it.
+     */
+    public String uiLocale() {
+        return uiLocale;
     }
 
     @Override

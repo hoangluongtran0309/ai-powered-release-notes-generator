@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.account;
 
-public class InvalidOutputLanguageException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public InvalidOutputLanguageException(String message) {
-        super(message);
+public class InvalidOutputLanguageException extends LocalizedException {
+
+    public InvalidOutputLanguageException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

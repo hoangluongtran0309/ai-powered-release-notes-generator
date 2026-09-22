@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.audience;
 
-public class InvalidReleaseLanguagesException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    InvalidReleaseLanguagesException(String message) {
-        super(message);
+public class InvalidReleaseLanguagesException extends LocalizedException {
+
+    InvalidReleaseLanguagesException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

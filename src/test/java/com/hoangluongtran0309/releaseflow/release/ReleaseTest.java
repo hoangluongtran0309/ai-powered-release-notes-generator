@@ -90,7 +90,7 @@ class ReleaseTest {
         assertThat(release.getPlannedReleaseAt()).isEqualTo(NOW.plusSeconds(1));
         assertThatThrownBy(() -> release.schedule(NOW, NOW))
                 .isInstanceOf(InvalidReleaseScheduleException.class)
-                .hasMessage("The planned release time must be in the future.");
+                .hasMessage("error.invalid_release_schedule.past");
         assertThatThrownBy(() -> release.schedule(NOW.minusSeconds(1), NOW)).isInstanceOf(InvalidReleaseScheduleException.class);
         assertThat(release.getPlannedReleaseAt()).isEqualTo(NOW.plusSeconds(1));
 

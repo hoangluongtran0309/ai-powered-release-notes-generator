@@ -1,6 +1,7 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import com.hoangluongtran0309.releaseflow.project.ProjectNotFoundException;
 import com.hoangluongtran0309.releaseflow.project.ProjectService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,10 +23,16 @@ public class SensitivePathPageController {
 
     private final ProjectService projectService;
     private final ProjectSensitivePathService sensitivePathService;
+    private final UiMessages messages;
 
-    SensitivePathPageController(ProjectService projectService, ProjectSensitivePathService sensitivePathService) {
+    SensitivePathPageController(
+            ProjectService projectService,
+            ProjectSensitivePathService sensitivePathService,
+            UiMessages messages
+    ) {
         this.projectService = projectService;
         this.sensitivePathService = sensitivePathService;
+        this.messages = messages;
     }
 
     @GetMapping("/projects/{projectId}/sensitive-paths")
@@ -54,7 +61,7 @@ public class SensitivePathPageController {
             return "redirect:/projects/" + projectId + "/sensitive-paths?saved";
         } catch (InvalidSensitivePathsException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            model.addAttribute("additionsError", exception.getMessage());
+            model.addAttribute("additionsError", messages.of(exception));
             return render(principal, projectId, additions, model, response);
         } catch (ProjectNotFoundException exception) {
             return notFound(exception, model, response);
@@ -79,9 +86,9 @@ public class SensitivePathPageController {
         }
     }
 
-    private static String notFound(ProjectNotFoundException exception, Model model, HttpServletResponse response) {
+    private String notFound(ProjectNotFoundException exception, Model model, HttpServletResponse response) {
         response.setStatus(HttpStatus.NOT_FOUND.value());
-        model.addAttribute("pageError", exception.getMessage());
+        model.addAttribute("pageError", messages.of(exception));
         return "sensitive-paths";
     }
 }

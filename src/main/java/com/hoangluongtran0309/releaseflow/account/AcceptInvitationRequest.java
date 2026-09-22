@@ -5,15 +5,15 @@ import jakarta.validation.constraints.Size;
 
 public class AcceptInvitationRequest {
 
-    @NotBlank
-    @Size(max = 128)
+    @NotBlank(message = "{validation.invitationToken.required}")
+    @Size(max = 128, message = "{validation.invitationToken.tooLong}")
     private String token;
 
-    @NotBlank
-    @Size(max = 120)
+    @NotBlank(message = "{validation.displayName.required}")
+    @Size(max = 120, message = "{validation.displayName.tooLong}")
     private String displayName;
 
-    @NotBlank
+    @NotBlank(message = "{validation.password.required}")
     @ValidPassword
     private String password;
 

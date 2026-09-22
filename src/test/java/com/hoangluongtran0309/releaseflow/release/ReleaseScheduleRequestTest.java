@@ -33,7 +33,7 @@ class ReleaseScheduleRequestTest {
         for (String value : new String[]{"tomorrow", "2026-10-01", "2026-13-01T09:00", "1759309200"}) {
             assertThatThrownBy(() -> ReleaseScheduleRequest.parse(value))
                     .isInstanceOf(InvalidReleaseScheduleException.class)
-                    .hasMessageStartingWith("Enter the planned release time as an ISO-8601 date and time");
+                    .hasMessage("error.invalid_release_schedule.unreadable");
         }
     }
 }

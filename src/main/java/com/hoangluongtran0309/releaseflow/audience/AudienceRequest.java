@@ -6,11 +6,11 @@ import jakarta.validation.constraints.Size;
 /** The editable details of an audience. The template is checked by {@link AudienceTemplate}. */
 public class AudienceRequest {
 
-    @NotBlank(message = "Display name is required.")
-    @Size(max = 120, message = "Display name must not exceed 120 characters.")
+    @NotBlank(message = "{validation.displayName.required}")
+    @Size(max = 120, message = "{validation.displayName.tooLong}")
     private String displayName;
 
-    @Size(max = 1000, message = "Communication intent must not exceed 1000 characters.")
+    @Size(max = 1000, message = "{validation.communicationIntent.tooLong}")
     private String communicationIntent;
 
     private String templateBody;

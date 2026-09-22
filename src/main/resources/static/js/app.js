@@ -28,9 +28,16 @@
     });
 
     document.addEventListener('alpine:init', () => {
+        // Every label is rendered on the server and read from the element's data
+        // attributes, so no English wording is kept in this file.
         Alpine.data('themeToggle', () => ({
             theme: currentTheme(),
+            labels: { light: '', dark: '' },
             init() {
+                this.labels = {
+                    light: this.$el.dataset.labelLight ?? '',
+                    dark: this.$el.dataset.labelDark ?? '',
+                };
                 window.addEventListener('theme:changed', (event) => { this.theme = event.detail.theme; });
                 window.addEventListener('storage', (event) => {
                     if (event.key === themeKey && (event.newValue === 'dark' || event.newValue === 'light')) {
@@ -39,7 +46,7 @@
                     }
                 });
             },
-            get label() { return this.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'; },
+            get label() { return this.theme === 'dark' ? this.labels.light : this.labels.dark; },
             toggle() { this.theme = toggleTheme(); },
         }));
 
@@ -61,7 +68,14 @@
 
         Alpine.data('passwordField', () => ({
             visible: false,
-            get label() { return this.visible ? 'Hide' : 'Show'; },
+            labels: { show: '', hide: '' },
+            init() {
+                this.labels = {
+                    show: this.$el.dataset.labelShow ?? '',
+                    hide: this.$el.dataset.labelHide ?? '',
+                };
+            },
+            get label() { return this.visible ? this.labels.hide : this.labels.show; },
             toggle() { this.visible = !this.visible; },
         }));
 
@@ -119,6 +133,13 @@
         // never has to be interpolated into an Alpine expression.
         Alpine.data('copyText', () => ({
             copied: false,
+            labels: { copy: '', copied: '' },
+            init() {
+                this.labels = {
+                    copy: this.$el.dataset.labelCopy ?? '',
+                    copied: this.$el.dataset.labelCopied ?? '',
+                };
+            },
             async copy() {
                 const source = this.$refs.source;
                 try {
@@ -130,7 +151,7 @@
                 this.copied = true;
                 setTimeout(() => { this.copied = false; }, 2000);
             },
-            get label() { return this.copied ? 'Copied' : 'Copy'; },
+            get label() { return this.copied ? this.labels.copied : this.labels.copy; },
         }));
     });
 })();

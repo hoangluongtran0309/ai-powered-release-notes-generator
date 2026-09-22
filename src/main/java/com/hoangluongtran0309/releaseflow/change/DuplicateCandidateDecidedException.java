@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class DuplicateCandidateDecidedException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class DuplicateCandidateDecidedException extends LocalizedException {
 
     public DuplicateCandidateDecidedException() {
-        super("This possible duplicate has already been decided.");
+        super("error.duplicate_candidate_decided");
     }
 }

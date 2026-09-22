@@ -1,43 +1,43 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout/main}">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/main}">
 <head>
-    <title>Invitation link</title>
+    <title th:text="#{ui.invitationIssued.title}">Invitation link</title>
 </head>
 <body>
-<p layout:fragment="page-title">Members</p>
+<p layout:fragment="page-title" th:text="#{ui.nav.members}">Members</p>
 <div layout:fragment="content">
     <header class="page-header">
         <div>
-            <p class="page-eyebrow">Invitation created</p>
-            <h1 class="page-heading">Send this link to the invitee now</h1>
-            <p class="page-subtitle">ReleaseFlow stores only a hash of the link, so it cannot be shown again.</p>
+            <p class="page-eyebrow" th:text="#{ui.invitationIssued.created}">Invitation created</p>
+            <h1 class="page-heading" th:text="#{ui.invitationIssued.heading}">Send this link to the invitee now</h1>
+            <p class="page-subtitle" th:text="#{ui.invitationIssued.onceOnly}">ReleaseFlow stores only a hash of the link.</p>
         </div>
     </header>
 
     <article class="surface-card max-w-3xl p-6">
         <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
             <p class="text-sm font-semibold text-emerald-900">
-                <span>Invitation for</span> <span th:text="${invitation.email}">teammate@example.com</span>
+                <span th:text="#{ui.invitationIssued.invitationFor}">Invitation for</span> <span th:text="${invitation.email}">teammate@example.com</span>
             </p>
             <p class="mt-1 text-xs text-emerald-800">
-                The link works once and expires on
+                <span th:text="#{ui.invitationIssued.expiresBefore}">The link works once and expires on</span>
                 <time th:datetime="${invitation.expiresAt}"
-                      th:text="|${#temporals.format(invitation.expiresAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">18 Sep 2026, 09:14 UTC</time>.
-                Reissue it from the Members page if it is lost.
+                      th:text="|${#temporals.format(invitation.expiresAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">18 Sep 2026, 09:14 UTC</time><span
+                        th:text="#{ui.invitationIssued.expiresAfter}">. Reissue it from the Members page if it is lost.</span>
             </p>
         </div>
 
-        <div class="mt-6" x-data="copyText()">
-            <p class="text-sm text-slate-500">Invitation link</p>
+        <div class="mt-6" x-data="copyText()" th:data-label-copy="#{ui.common.copy}" th:data-label-copied="#{ui.common.copied}">
+            <p class="text-sm text-slate-500" th:text="#{ui.invitationIssued.link}">Invitation link</p>
             <div class="join mt-1 w-full">
                 <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
-                       autocomplete="off" spellcheck="false" th:value="${acceptanceUrl}" aria-label="Invitation link">
+                       autocomplete="off" spellcheck="false" th:value="${acceptanceUrl}" th:aria-label="#{ui.invitationIssued.link}" aria-label="Invitation link">
                 <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
             </div>
         </div>
 
-        <a class="btn btn-primary mt-6" th:href="@{/members}">I have sent the link</a>
+        <a class="btn btn-primary mt-6" th:href="@{/members}" th:text="#{ui.invitationIssued.done}">I have sent the link</a>
     </article>
 </div>
 </body>

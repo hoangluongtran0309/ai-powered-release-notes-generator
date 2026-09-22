@@ -1,9 +1,11 @@
 package com.hoangluongtran0309.releaseflow.automation;
 
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
 /** No automation Run with that ID belongs to the current Organization. */
-public class AutomationRunNotFoundException extends RuntimeException {
+public class AutomationRunNotFoundException extends LocalizedException {
 
     AutomationRunNotFoundException() {
-        super("Automation run not found.");
+        super("error.automation_run_not_found");
     }
 }

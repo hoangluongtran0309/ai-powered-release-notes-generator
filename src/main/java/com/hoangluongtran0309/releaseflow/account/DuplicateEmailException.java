@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.account;
 
-public class DuplicateEmailException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class DuplicateEmailException extends LocalizedException {
 
     public DuplicateEmailException() {
-        super("An account already exists for this email address.");
+        super("error.email_already_registered");
     }
 }

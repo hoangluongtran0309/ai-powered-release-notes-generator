@@ -1,6 +1,8 @@
 package com.hoangluongtran0309.releaseflow.category;
 
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,10 +27,12 @@ public class CategoryPageController {
 
     private final CategoryService categoryService;
     private final CategorySuggestionService suggestionService;
+    private final UiMessages messages;
 
-    CategoryPageController(CategoryService categoryService, CategorySuggestionService suggestionService) {
+    CategoryPageController(CategoryService categoryService, CategorySuggestionService suggestionService, UiMessages messages) {
         this.categoryService = categoryService;
         this.suggestionService = suggestionService;
+        this.messages = messages;
     }
 
     @GetMapping("/categories")
@@ -52,7 +56,7 @@ public class CategoryPageController {
             categoryService.create(principal.organizationId(), request);
         } catch (CategoryConflictException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
-            bindingResult.rejectValue("code", exception.code(), exception.getMessage());
+            bindingResult.rejectValue("code", exception.code(), messages.of(exception));
             return render(principal, model);
         }
         return "redirect:/categories?saved";
@@ -158,12 +162,12 @@ public class CategoryPageController {
     private String renderWithError(
             ReleaseFlowPrincipal principal,
             HttpStatus status,
-            RuntimeException exception,
+            LocalizedException exception,
             Model model,
             HttpServletResponse response
     ) {
         response.setStatus(status.value());
-        model.addAttribute("pageError", exception.getMessage());
+        model.addAttribute("pageError", messages.of(exception));
         return render(principal, model);
     }
 }

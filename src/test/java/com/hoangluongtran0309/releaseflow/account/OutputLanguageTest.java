@@ -33,8 +33,13 @@ class OutputLanguageTest {
     @ParameterizedTest
     @ValueSource(strings = {"zh-Hant-TW-u-ca-chinese"})
     void rejectsTagsLongerThanSixteenCharacters(String input) {
+        // The failure carries a key and the limit it names, not a finished sentence.
         assertThatThrownBy(() -> OutputLanguage.parse(input))
                 .isInstanceOf(InvalidOutputLanguageException.class)
-                .hasMessageContaining("16");
+                .hasMessage("error.output_language_invalid.tooLong")
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(InvalidOutputLanguageException.class))
+                .extracting(InvalidOutputLanguageException::arguments)
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.array(Object[].class))
+                .containsExactly(16);
     }
 }

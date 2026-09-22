@@ -15,7 +15,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ValidPassword {
 
-    String message() default "must contain at least 12 characters and at most 72 UTF-8 bytes";
+    String message() default "{validation.password.length}";
 
     Class<?>[] groups() default {};
 

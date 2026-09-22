@@ -1,5 +1,6 @@
 package com.hoangluongtran0309.releaseflow.account;
 
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
@@ -19,9 +20,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 public class AcceptInvitationPageController {
 
     private final InvitationService invitationService;
+    private final UiMessages messages;
 
-    AcceptInvitationPageController(InvitationService invitationService) {
+    AcceptInvitationPageController(InvitationService invitationService, UiMessages messages) {
         this.invitationService = invitationService;
+        this.messages = messages;
     }
 
     @GetMapping("/accept-invite")
@@ -61,7 +64,7 @@ public class AcceptInvitationPageController {
             return renderInvalid(model, response);
         } catch (InvitationEmailUnavailableException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
             return renderReview(request.getToken(), model, response);
         }
         return "redirect:/login?invited";
@@ -78,7 +81,7 @@ public class AcceptInvitationPageController {
 
     private String renderInvalid(Model model, HttpServletResponse response) {
         response.setStatus(HttpStatus.BAD_REQUEST.value());
-        model.addAttribute("invalid", new InvalidInvitationException().getMessage());
+        model.addAttribute("invalid", messages.of(new InvalidInvitationException()));
         model.addAttribute("tokenRequest", new InvitationTokenRequest());
         return "accept-invite";
     }

@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.account;
 
-public class InvitationAlreadyPendingException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class InvitationAlreadyPendingException extends LocalizedException {
 
     public InvitationAlreadyPendingException() {
-        super("This email address already has a pending invitation. Reissue or revoke it instead.");
+        super("error.invitation_already_pending");
     }
 }

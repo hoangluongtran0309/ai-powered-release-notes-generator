@@ -91,7 +91,7 @@ class InvitationPageIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(content().string(containsString("action=\"/accept-invite/review\"")));
         mockMvc.perform(post("/accept-invite/review").with(csrf()).param("token", token))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Join <span>Acme</span>")))
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern("(?s).*>Join Acme</h1>.*")))
                 .andExpect(content().string(containsString("teammate@example.com")))
                 .andExpect(content().string(containsString("name=\"displayName\"")));
         mockMvc.perform(post("/accept-invite").with(csrf())

@@ -8,7 +8,7 @@ import java.util.UUID;
 /** APPROVED adds the proposed category; MAPPED needs the existing category to use; REJECTED adds nothing. */
 public class CategorySuggestionDecisionRequest {
 
-    @NotNull(message = "Choose APPROVED, MAPPED, or REJECTED.")
+    @NotNull(message = "{validation.categorySuggestion.required}")
     private CategorySuggestionStatus decision;
 
     private UUID categoryId;
@@ -29,7 +29,7 @@ public class CategorySuggestionDecisionRequest {
         this.categoryId = categoryId;
     }
 
-    @AssertTrue(message = "A decision is APPROVED, MAPPED with a category, or REJECTED.")
+    @AssertTrue(message = "{validation.categorySuggestion.complete}")
     public boolean isDecisionComplete() {
         return decision == null
                 || (decision != CategorySuggestionStatus.PENDING_REVIEW

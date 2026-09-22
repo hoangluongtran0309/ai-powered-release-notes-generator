@@ -9,11 +9,11 @@ import java.util.Locale;
 /** A new audience. Its code is fixed once created. */
 public class NewAudienceRequest extends AudienceRequest {
 
-    @NotBlank(message = "Code is required.")
-    @Size(max = 64, message = "Code must not exceed 64 characters.")
+    @NotBlank(message = "{validation.code.required}")
+    @Size(max = 64, message = "{validation.code.tooLong}")
     @Pattern(
             regexp = "[a-z][a-z0-9_]*",
-            message = "Use lowercase letters, digits, and underscores, starting with a letter."
+            message = "{validation.code.lowercaseFormat}"
     )
     private String code;
 

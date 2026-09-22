@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.account;
 
-public class InvitationNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class InvitationNotFoundException extends LocalizedException {
 
     public InvitationNotFoundException() {
-        super("Invitation was not found.");
+        super("error.invitation_not_found");
     }
 }

@@ -9,6 +9,7 @@ import com.hoangluongtran0309.releaseflow.account.OrganizationSlugTakenException
 import com.hoangluongtran0309.releaseflow.account.OutputLanguageService;
 import com.hoangluongtran0309.releaseflow.changelog.PublicChangelogUrls;
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import com.hoangluongtran0309.releaseflow.gitlab.GitLabHostNotAllowedException;
 import com.hoangluongtran0309.releaseflow.gitlab.InvalidGitLabBaseUrlException;
 import com.hoangluongtran0309.releaseflow.jira.InvalidJiraSiteException;
@@ -35,19 +36,22 @@ public class ProjectPageController {
     private final OutputLanguageService outputLanguageService;
     private final OrganizationSlugService slugService;
     private final PublicChangelogUrls changelogUrls;
+    private final UiMessages messages;
 
     ProjectPageController(
             ProjectService projectService,
             IntegrationSourceService sourceService,
             OutputLanguageService outputLanguageService,
             OrganizationSlugService slugService,
-            PublicChangelogUrls changelogUrls
+            PublicChangelogUrls changelogUrls,
+            UiMessages messages
     ) {
         this.projectService = projectService;
         this.sourceService = sourceService;
         this.outputLanguageService = outputLanguageService;
         this.slugService = slugService;
         this.changelogUrls = changelogUrls;
+        this.messages = messages;
     }
 
     @GetMapping("/projects")
@@ -97,28 +101,28 @@ public class ProjectPageController {
         } catch (ProjectNotFoundException exception) {
             // The project is not in this tenant's list, so there is no card to attach the error to.
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            bindingResult.reject("project.notFound", exception.getMessage());
-            model.addAttribute("pageError", exception.getMessage());
+            bindingResult.reject("project.notFound", messages.of(exception));
+            model.addAttribute("pageError", messages.of(exception));
         } catch (SourceAlreadyConnectedException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
-            bindingResult.reject("source.conflict", exception.getMessage());
-            model.addAttribute("sourceError", exception.getMessage());
+            bindingResult.reject("source.conflict", messages.of(exception));
+            model.addAttribute("sourceError", messages.of(exception));
         } catch (InvalidGitLabBaseUrlException | GitLabHostNotAllowedException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            bindingResult.rejectValue("apiBaseUrl", "source.apiBaseUrl.invalid", exception.getMessage());
-            model.addAttribute("sourceError", exception.getMessage());
+            bindingResult.rejectValue("apiBaseUrl", "source.apiBaseUrl.invalid", messages.of(exception));
+            model.addAttribute("sourceError", messages.of(exception));
         } catch (InvalidJiraSiteException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            bindingResult.rejectValue("siteUrl", "source.siteUrl.invalid", exception.getMessage());
-            model.addAttribute("sourceError", exception.getMessage());
+            bindingResult.rejectValue("siteUrl", "source.siteUrl.invalid", messages.of(exception));
+            model.addAttribute("sourceError", messages.of(exception));
         } catch (SourceTokenRejectedException exception) {
             // The provider was asked before anything was written, so nothing was stored.
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            bindingResult.rejectValue("apiToken", "source.apiToken.rejected", exception.getMessage());
-            model.addAttribute("sourceError", exception.getMessage());
+            bindingResult.rejectValue("apiToken", "source.apiToken.rejected", messages.of(exception));
+            model.addAttribute("sourceError", messages.of(exception));
         } catch (SourceUnavailableException exception) {
             response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
-            model.addAttribute("sourceError", exception.getMessage());
+            model.addAttribute("sourceError", messages.of(exception));
         }
 
         model.addAttribute("sourceProjectId", projectId);
@@ -142,13 +146,13 @@ public class ProjectPageController {
                 return "redirect:/projects?tokenSaved";
             } catch (ProjectNotFoundException | SourceNotFoundException exception) {
                 response.setStatus(HttpStatus.NOT_FOUND.value());
-                model.addAttribute("pageError", exception.getMessage());
+                model.addAttribute("pageError", messages.of(exception));
             } catch (SourceTokenRejectedException exception) {
                 response.setStatus(HttpStatus.BAD_REQUEST.value());
-                model.addAttribute("tokenError", exception.getMessage());
+                model.addAttribute("tokenError", messages.of(exception));
             } catch (SourceUnavailableException exception) {
                 response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
-                model.addAttribute("tokenError", exception.getMessage());
+                model.addAttribute("tokenError", messages.of(exception));
             }
         }
         // The submitted token is never rendered back into the page.
@@ -172,7 +176,7 @@ public class ProjectPageController {
                 return "redirect:/projects?languageSaved";
             } catch (InvalidOutputLanguageException exception) {
                 response.setStatus(HttpStatus.BAD_REQUEST.value());
-                bindingResult.rejectValue("outputLanguage", "outputLanguage.invalid", exception.getMessage());
+                bindingResult.rejectValue("outputLanguage", "outputLanguage.invalid", messages.of(exception));
             }
         }
         addPageModel(principal, model);
@@ -197,10 +201,10 @@ public class ProjectPageController {
                 return "redirect:/projects?changelogSaved";
             } catch (InvalidOrganizationSlugException exception) {
                 response.setStatus(HttpStatus.BAD_REQUEST.value());
-                bindingResult.rejectValue("slug", "slug.invalid", exception.getMessage());
+                bindingResult.rejectValue("slug", "slug.invalid", messages.of(exception));
             } catch (OrganizationSlugTakenException exception) {
                 response.setStatus(HttpStatus.CONFLICT.value());
-                bindingResult.rejectValue("slug", "slug.taken", exception.getMessage());
+                bindingResult.rejectValue("slug", "slug.taken", messages.of(exception));
             }
         }
         addPageModel(principal, model);

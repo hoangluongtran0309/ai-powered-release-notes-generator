@@ -20,6 +20,14 @@ public enum ReleaseStatus {
         return label;
     }
 
+    /**
+     * The bundle key of this ReleaseStatus's name, so a page says it in the reader's language.
+     * {@link #getLabel()} stays the English wording that recorded evidence keeps.
+     */
+    public String getLabelKey() {
+        return "ui.enum.releaseStatus." + name();
+    }
+
     public String getValue() {
         return name().toLowerCase(Locale.ROOT).replace('_', '-');
     }

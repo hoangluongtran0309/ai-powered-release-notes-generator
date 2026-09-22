@@ -1,9 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-public class TranslationsNotReadyException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class TranslationsNotReadyException extends LocalizedException {
 
     public TranslationsNotReadyException() {
-        super("Some release notes are still being translated or could not be translated. "
-                + "Retry the translations or edit those notes, then publish.");
+        super("error.translations_not_ready");
     }
 }

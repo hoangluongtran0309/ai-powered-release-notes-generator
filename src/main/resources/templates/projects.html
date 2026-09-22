@@ -1,64 +1,67 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout/main}">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/main}">
 <head>
-    <title>Projects</title>
+    <title th:text="#{ui.projects.title}">Projects</title>
 </head>
 <body>
-<p layout:fragment="page-title">Projects</p>
+<p layout:fragment="page-title" th:text="#{ui.projects.title}">Projects</p>
 <div layout:fragment="content"
      th:with="hasProjects=${!#lists.isEmpty(projects)},
               hasIntegration=${!#lists.isEmpty(projects.?[!sources.isEmpty()])},
               hasDelivery=${!#lists.isEmpty(projects.?[!sources.?[lastDeliveryAt != null].isEmpty()])}">
     <header class="page-header">
         <div>
-            <p class="page-eyebrow">Project configuration</p>
-            <h1 class="page-heading">Projects and integrations</h1>
-            <p class="page-subtitle">Create a project, then connect the GitHub repositories and GitLab projects that will send its signed webhook deliveries.</p>
+            <p class="page-eyebrow" th:text="#{ui.projects.eyebrow}">Project configuration</p>
+            <h1 class="page-heading" th:text="#{ui.projects.heading}">Projects and integrations</h1>
+            <p class="page-subtitle" th:text="#{ui.projects.subtitle}">Create a project, then connect its sources.</p>
         </div>
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.tokenSaved}"><span>Access token saved. New changes will be checked for sensitive files.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.languageSaved}"><span>Output language saved. New changes will be summarized in it.</span></div>
-    <div class="alert alert-success mb-6" role="status" th:if="${param.changelogSaved}"><span>Changelog address saved. Links shared under the old address no longer work.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.tokenSaved}"><span th:text="#{ui.projects.tokenSaved}">Access token saved.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.languageSaved}"><span th:text="#{ui.projects.languageSaved}">Output language saved.</span></div>
+    <div class="alert alert-success mb-6" role="status" th:if="${param.changelogSaved}"><span th:text="#{ui.projects.changelogSaved}">Changelog address saved.</span></div>
 
-    <ol class="grid gap-3 md:grid-cols-3" aria-label="Setup progress">
+    <ol class="grid gap-3 md:grid-cols-3" th:aria-label="#{ui.projects.setupProgress}" aria-label="Setup progress">
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasProjects} ? 'border-emerald-200' : 'border-indigo-300'">
             <span class="flex h-9 w-9 items-center justify-center rounded-full font-bold"
                   th:classappend="${hasProjects} ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'"
                   th:text="${hasProjects} ? '✓' : '1'">1</span>
-            <div><p class="font-semibold">Create a project</p><p class="text-xs text-slate-500">Define a release workspace</p></div>
+            <div><p class="font-semibold" th:text="#{ui.projects.step1}">Create a project</p>
+                <p class="text-xs text-slate-500" th:text="#{ui.projects.step1Hint}">Define a release workspace</p></div>
         </li>
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasIntegration} ? 'border-emerald-200' : (${hasProjects} ? 'border-indigo-300' : '')">
             <span class="flex h-9 w-9 items-center justify-center rounded-full font-bold"
                   th:classappend="${hasIntegration} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
                   th:text="${hasIntegration} ? '✓' : '2'">2</span>
-            <div><p class="font-semibold">Connect a source</p><p class="text-xs text-slate-500">Generate webhook credentials</p></div>
+            <div><p class="font-semibold" th:text="#{ui.projects.step2}">Connect a source</p>
+                <p class="text-xs text-slate-500" th:text="#{ui.projects.step2Hint}">Generate webhook credentials</p></div>
         </li>
         <li class="surface-card flex items-center gap-4 p-4" th:classappend="${hasDelivery} ? 'border-emerald-200' : (${hasIntegration} ? 'border-indigo-300' : '')">
             <span class="flex h-9 w-9 items-center justify-center rounded-full font-bold"
                   th:classappend="${hasDelivery} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
                   th:text="${hasDelivery} ? '✓' : '3'">3</span>
-            <div><p class="font-semibold">Receive webhooks</p>
+            <div><p class="font-semibold" th:text="#{ui.projects.step3}">Receive webhooks</p>
                 <p class="text-xs text-slate-500"
-                   th:text="${hasDelivery} ? 'Signed deliveries arriving' : (${hasIntegration} ? 'Waiting for the first signed delivery' : 'Add the webhook at the provider')">Add the webhook at the provider</p></div>
+                   th:text="${hasDelivery} ? #{ui.projects.step3Done}
+                            : (${hasIntegration} ? #{ui.projects.step3Waiting} : #{ui.projects.step3Todo})">Add the webhook at the provider</p></div>
         </li>
     </ol>
 
     <section class="surface-card mt-6 p-6">
-        <h2 class="section-heading">Create a project</h2>
-        <p class="section-copy">Projects group source changes and releases for one product or repository.</p>
+        <h2 class="section-heading" th:text="#{ui.projects.createHeading}">Create a project</h2>
+        <p class="section-copy" th:text="#{ui.projects.createCopy}">Projects group source changes and releases.</p>
         <form class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start" th:action="@{/projects}" th:object="${projectRequest}" method="post">
             <label class="form-control sm:flex-1">
-                <span class="sr-only">Project name</span>
-                <input type="text" th:field="*{name}" maxlength="120" placeholder="Project name"
+                <span class="sr-only" th:text="#{ui.projects.name}">Project name</span>
+                <input type="text" th:field="*{name}" maxlength="120" th:placeholder="#{ui.projects.name}"
                        class="input input-bordered w-full" th:errorclass="input-error" required>
                 <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></span>
             </label>
             <button type="submit" class="btn btn-primary">
                 <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#plus}"></use></svg>
-                <span>Create project</span>
+                <span th:text="#{ui.projects.create}">Create project</span>
             </button>
         </form>
     </section>
@@ -66,17 +69,17 @@
     <section class="surface-card mt-6 p-6" id="output-language">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <h2 class="section-heading">Output language</h2>
+                <h2 class="section-heading" th:text="#{ui.projects.outputLanguageHeading}">Output language</h2>
                 <p class="section-copy">
-                    AI summaries are written in
-                    <strong th:text="|${outputLanguage.displayName} (${outputLanguage.outputLanguage})|">English (en)</strong>.
-                    Changing it affects changes classified afterwards.
+                    <span th:text="#{ui.projects.outputLanguageBefore}">AI summaries are written in</span>
+                    <strong th:text="#{ui.projects.outputLanguageValue(${outputLanguage.displayName},${outputLanguage.outputLanguage})}">English (en)</strong><span
+                            th:text="#{ui.projects.outputLanguageAfter}">. Changing it affects later changes.</span>
                 </p>
             </div>
             <form class="flex flex-col gap-2 sm:flex-row sm:items-start" th:if="${viewer.admin}"
                   th:action="@{/organization/output-language}" th:object="${outputLanguageRequest}" method="post">
                 <label class="form-control">
-                    <span class="sr-only">Output language</span>
+                    <span class="sr-only" th:text="#{ui.projects.outputLanguageHeading}">Output language</span>
                     <input type="text" th:field="*{outputLanguage}" maxlength="64" list="output-language-options"
                            autocomplete="off" spellcheck="false" required
                            class="input input-bordered w-full sm:w-44" th:errorclass="input-error">
@@ -85,7 +88,7 @@
                     </datalist>
                     <span class="field-error" th:if="${#fields.hasErrors('outputLanguage')}" th:errors="*{outputLanguage}"></span>
                 </label>
-                <button type="submit" class="btn btn-outline">Save language</button>
+                <button type="submit" class="btn btn-outline" th:text="#{ui.projects.saveLanguage}">Save language</button>
             </form>
         </div>
     </section>
@@ -93,30 +96,30 @@
     <section class="surface-card mt-6 p-6" id="public-changelog">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <h2 class="section-heading">Public changelog</h2>
+                <h2 class="section-heading" th:text="#{ui.projects.changelogHeading}">Public changelog</h2>
                 <p class="section-copy">
-                    Release notes a rule publishes are readable by anybody at
-                    <a class="link" th:href="${changelogUrl}" th:text="${changelogUrl}">http://localhost:8080/changelog/acme</a>.
-                    Changing the address moves the changelog: links shared under the old one stop working.
+                    <span th:text="#{ui.projects.changelogBefore}">Release notes a rule publishes are readable at</span>
+                    <a class="link" th:href="${changelogUrl}" th:text="${changelogUrl}">http://localhost:8080/changelog/acme</a><span
+                            th:text="#{ui.projects.changelogAfter}">. Changing the address moves the changelog.</span>
                 </p>
             </div>
             <form class="flex flex-col gap-2 sm:flex-row sm:items-start" th:if="${viewer.admin}"
                   th:action="@{/organization/slug}" th:object="${organizationSlugRequest}" method="post">
                 <label class="form-control">
-                    <span class="sr-only">Changelog address</span>
+                    <span class="sr-only" th:text="#{ui.projects.changelogAddress}">Changelog address</span>
                     <input type="text" th:field="*{slug}" maxlength="63" autocomplete="off" spellcheck="false" required
                            class="input input-bordered w-full sm:w-56" th:errorclass="input-error">
                     <span class="field-error" th:if="${#fields.hasErrors('slug')}" th:errors="*{slug}"></span>
                 </label>
-                <button type="submit" class="btn btn-outline">Save address</button>
+                <button type="submit" class="btn btn-outline" th:text="#{ui.projects.saveAddress}">Save address</button>
             </form>
         </div>
     </section>
 
     <section class="empty-state mt-6" th:unless="${hasProjects}">
         <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#empty}"></use></svg></div>
-        <h2 class="mt-5 text-xl font-bold">No projects have been created yet.</h2>
-        <p class="mx-auto mt-2 max-w-lg text-slate-600">Create your first project above, then connect the repository or project it releases from.</p>
+        <h2 class="mt-5 text-xl font-bold" th:text="#{ui.projects.noProjects}">No projects have been created yet.</h2>
+        <p class="mx-auto mt-2 max-w-lg text-slate-600" th:text="#{ui.projects.noProjectsCopy}">Create your first project above.</p>
     </section>
 
     <div class="mt-6 grid gap-6 lg:grid-cols-2" th:if="${hasProjects}">
@@ -126,7 +129,7 @@
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
                     <h2 class="truncate text-xl font-bold" th:text="${project.name}">Project name</h2>
-                    <p class="mt-1 text-xs text-slate-500">Created
+                    <p class="mt-1 text-xs text-slate-500"><span th:text="#{ui.projects.created}">Created</span>
                         <time th:datetime="${project.createdAt}"
                               th:text="|${#temporals.format(project.createdAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">10 Sep 2026, 14:44 UTC</time>
                     </p>
@@ -134,13 +137,13 @@
                 <span class="badge gap-1.5 font-semibold"
                       th:classappend="${sourceCount > 0} ? 'badge-success badge-soft' : 'badge-ghost'">
                     <span class="status-dot"></span>
-                    <span th:text="${sourceCount == 0} ? 'Not connected' : (${sourceCount == 1} ? '1 source' : |${sourceCount} sources|)">Not connected</span>
+                    <span th:text="${sourceCount == 0} ? #{ui.projects.notConnected} : #{ui.projects.sourceCount(${sourceCount})}">Not connected</span>
                 </span>
             </div>
 
             <div class="divider my-4"></div>
 
-            <section class="grid gap-5" th:unless="${sourceCount == 0}" aria-label="Sources">
+            <section class="grid gap-5" th:unless="${sourceCount == 0}" th:aria-label="#{ui.projects.sourcesLabel}" aria-label="Sources">
                 <div class="subtle-panel grid gap-4" th:each="source : ${project.sources}" th:id="|source-${source.id}|"
                      th:with="tokenFailing=${tokenSourceId == source.id}">
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -149,63 +152,57 @@
                             <p class="text-xs text-slate-500" th:if="${source.type.name() == 'GITLAB'}"
                                th:text="${source.apiBaseUrl}">https://gitlab.com</p>
                             <p class="text-xs text-slate-500" th:if="${source.type.name() == 'LINEAR'}"
-                               th:text="|Workspace ${source.externalWorkspaceKey}|">Workspace acme</p>
+                               th:text="#{ui.projects.workspace(${source.externalWorkspaceKey})}">Workspace acme</p>
                             <p class="text-xs text-slate-500" th:if="${source.type.name() == 'JIRA'}"
-                               th:text="|${source.apiBaseUrl} as ${source.credentialIdentity}|">https://acme.atlassian.net as ops@acme.test</p>
+                               th:text="#{ui.projects.jiraIdentity(${source.apiBaseUrl},${source.credentialIdentity})}">https://acme.atlassian.net as ops@acme.test</p>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="badge badge-sm badge-ghost" th:switch="${source.type.name()}">
-                                <span th:case="'GITHUB'">GitHub</span>
-                                <span th:case="'GITLAB'">GitLab</span>
-                                <span th:case="'LINEAR'">Linear</span>
-                                <span th:case="'JIRA'">Jira</span>
-                            </span>
+                            <span class="badge badge-sm badge-ghost" th:text="${source.type.displayName()}">GitHub</span>
                             <span class="badge badge-sm badge-error badge-soft" th:if="${source.connectionStatus.name() == 'ERROR'}"
-                                  th:title="${source.lastErrorCode}">Connection failing</span>
+                                  th:title="${source.lastErrorCode}" th:text="#{ui.projects.connectionFailing}">Connection failing</span>
                         </div>
                     </div>
                     <dl class="grid gap-4 text-sm">
-                        <div x-data="copyText()" th:if="${source.webhookPath != null}">
-                            <dt class="text-slate-500">Webhook path</dt>
+                        <div x-data="copyText()" th:data-label-copy="#{ui.common.copy}" th:data-label-copied="#{ui.common.copied}" th:if="${source.webhookPath != null}">
+                            <dt class="text-slate-500" th:text="#{ui.projects.webhookPath}">Webhook path</dt>
                             <dd class="join mt-1 w-full">
                                 <input x-ref="source" class="input input-bordered join-item w-full font-mono text-xs" readonly
-                                       th:value="${source.webhookPath}" aria-label="Webhook path">
+                                       th:value="${source.webhookPath}" th:aria-label="#{ui.projects.webhookPath}" aria-label="Webhook path">
                                 <button type="button" class="btn btn-outline join-item" @click="copy" x-text="label">Copy</button>
                             </dd>
                         </div>
                         <div th:if="${source.type.name() == 'JIRA'}">
-                            <dt class="text-slate-500">Polling</dt>
+                            <dt class="text-slate-500" th:text="#{ui.projects.polling}">Polling</dt>
                             <dd class="mt-1 font-semibold" th:if="${source.lastSyncAt != null}">
-                                Last read
+                                <span th:text="#{ui.projects.lastRead}">Last read</span>
                                 <time th:datetime="${source.lastSyncAt}"
                                       th:text="|${#temporals.format(source.lastSyncAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
                             </dd>
-                            <dd class="mt-1 text-slate-600" th:unless="${source.lastSyncAt != null}">Not read yet</dd>
+                            <dd class="mt-1 text-slate-600" th:unless="${source.lastSyncAt != null}" th:text="#{ui.projects.notReadYet}">Not read yet</dd>
                             <dd class="mt-1 text-slate-600" th:if="${source.nextPollAt != null}">
-                                Next read due
+                                <span th:text="#{ui.projects.nextReadDue}">Next read due</span>
                                 <time th:datetime="${source.nextPollAt}"
                                       th:text="|${#temporals.format(source.nextPollAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:19 UTC</time>
                             </dd>
                         </div>
                         <div th:if="${source.webhookPath != null}">
-                            <dt class="text-slate-500">Last delivery</dt>
+                            <dt class="text-slate-500" th:text="#{ui.projects.lastDelivery}">Last delivery</dt>
                             <dd class="mt-1 font-semibold" th:if="${source.lastDeliveryAt != null}">
                                 <time th:datetime="${source.lastDeliveryAt}"
                                       th:text="|${#temporals.format(source.lastDeliveryAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
                             </dd>
-                            <dd class="mt-1 text-slate-600" th:unless="${source.lastDeliveryAt != null}">No verified delivery yet</dd>
+                            <dd class="mt-1 text-slate-600" th:unless="${source.lastDeliveryAt != null}" th:text="#{ui.projects.noDelivery}">No verified delivery yet</dd>
                         </div>
                         <div>
-                            <dt class="text-slate-500">Access token</dt>
+                            <dt class="text-slate-500" th:text="#{ui.projects.accessToken}">Access token</dt>
                             <dd class="mt-1 font-semibold" th:if="${source.accessTokenConfigured}">
-                                Configured <span class="font-normal text-slate-600">on
+                                <span th:text="#{ui.projects.tokenConfigured}">Configured</span>
+                                <span class="font-normal text-slate-600"><span th:text="#{ui.projects.on}">on</span>
                                 <time th:datetime="${source.accessTokenUpdatedAt}"
                                       th:text="|${#temporals.format(source.accessTokenUpdatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">12 Sep 2026, 10:02 UTC</time></span>
                             </dd>
-                            <dd class="mt-1 text-amber-700" th:unless="${source.accessTokenConfigured}">
-                                Not configured. Every new change from this source needs review until a token lets ReleaseFlow
-                                check its files, and its history cannot be imported.
-                            </dd>
+                            <dd class="mt-1 text-amber-700" th:unless="${source.accessTokenConfigured}"
+                                th:text="#{ui.projects.tokenMissing}">Not configured.</dd>
                         </div>
                     </dl>
 
@@ -213,53 +210,35 @@
                           th:action="@{/projects/{projectId}/sources/{sourceId}/token(projectId=${project.id},sourceId=${source.id})}"
                           th:object="${sourceTokenRequest}" method="post">
                         <div>
-                            <h4 class="font-bold" th:text="${source.accessTokenConfigured} ? 'Replace access token' : 'Add access token'">Add access token</h4>
-                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'GITHUB'}">
-                                A fine-grained token with read access to this repository's pull requests. ReleaseFlow checks it
-                                with GitHub, stores it encrypted, and never shows it again.
-                            </p>
-                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'GITLAB'}">
-                                A project access token with the <code>read_api</code> scope. ReleaseFlow checks it with this
-                                GitLab instance, stores it encrypted, and never shows it again.
-                            </p>
-                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'LINEAR'}">
-                                A Linear API key that can read this team. ReleaseFlow checks that it still reaches the
-                                same workspace, stores it encrypted, and never shows it again.
-                            </p>
-                            <p class="mt-1 text-sm text-slate-600" th:if="${source.type.name() == 'JIRA'}">
-                                An Atlassian API token for the account above, which can browse this project. ReleaseFlow
-                                checks it with Jira, stores it encrypted, and never shows it again.
+                            <h4 class="font-bold"
+                                th:text="${source.accessTokenConfigured} ? #{ui.projects.replaceToken} : #{ui.projects.addToken}">Add access token</h4>
+                            <p class="mt-1 text-sm text-slate-600"
+                               th:utext="#{'ui.projects.tokenCopy.' + ${source.type.name()}}">
+                                A token with read access to this source.
                             </p>
                         </div>
                         <div class="alert alert-error" role="alert" th:if="${tokenFailing and tokenError != null}">
                             <span th:text="${tokenError}">The provider did not accept this token.</span>
                         </div>
-                        <label class="form-control"><span class="label-text font-medium">Access token</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.accessToken}">Access token</span>
                             <input type="password" name="token" maxlength="255" required autocomplete="off" spellcheck="false"
                                    class="input input-bordered w-full font-mono"
                                    th:classappend="${tokenFailing and #fields.hasErrors('token')} ? 'input-error'">
                             <span class="field-error" th:if="${tokenFailing and #fields.hasErrors('token')}" th:errors="*{token}"></span>
                         </label>
-                        <button type="submit" class="btn btn-outline w-full">Save access token</button>
+                        <button type="submit" class="btn btn-outline w-full" th:text="#{ui.projects.saveToken}">Save access token</button>
                     </form>
                 </div>
+                <p class="text-xs text-slate-500" th:utext="#{ui.projects.webhookSetupCopy}">
+                    In each source's webhook settings, use your ReleaseFlow address followed by that source's path.
+                </p>
                 <p class="text-xs text-slate-500">
-                    In each source's webhook settings, use your ReleaseFlow address followed by that source's path as the
-                    payload URL: on GitHub, content type <code>application/json</code>, the saved secret, and the
-                    <strong>Pull requests</strong> event; on GitLab, the saved secret and the
-                    <strong>Merge request events</strong> trigger; on Linear, the <strong>Issues</strong> event, with
-                    Linear's own signing secret pasted into ReleaseFlow when the team was connected. Each merged pull
-                    request, merge request, and completed issue is recorded once. Jira needs no webhook: ReleaseFlow
-                    reads each Jira project every few minutes for issues completed since it was connected. Import
-                    earlier changes from the
-                    <a class="link" th:href="@{/changes(project=${project.id})}">Change Inbox</a>, where a source keeps
-                    a history to import.
+                    <a class="link" th:href="@{/changes(project=${project.id})}" th:text="#{ui.projects.changeInbox}">Change Inbox</a>
                 </p>
             </section>
 
-            <p class="text-sm text-slate-600" th:if="${sourceCount == 0 and !viewer.admin}">
-                No source is connected yet. Only organization administrators can connect one.
-            </p>
+            <p class="text-sm text-slate-600" th:if="${sourceCount == 0 and !viewer.admin}"
+               th:text="#{ui.projects.noSourceMember}">No source is connected yet.</p>
 
             <form class="grid gap-4" th:classappend="${sourceCount > 0} ? 'mt-6'" th:if="${viewer.admin}"
                   th:action="@{/projects/{projectId}/sources(projectId=${project.id})}"
@@ -267,31 +246,36 @@
                   th:attr="data-type=${failing} ? ${sourceRequest.type.name()} : 'GITHUB'"
                   x-data="{ type: $el.dataset.type }">
                 <div>
-                    <h3 class="font-bold" th:text="${sourceCount == 0} ? 'Connect a source' : 'Add another source'">Connect a source</h3>
-                    <p class="mt-1 text-sm text-slate-600">Each webhook source gets its own secret, encrypted with AES-256-GCM and shown only once. A Jira project is read on a schedule instead.</p>
+                    <h3 class="font-bold"
+                        th:text="${sourceCount == 0} ? #{ui.projects.connectSource} : #{ui.projects.addAnotherSource}">Connect a source</h3>
+                    <p class="mt-1 text-sm text-slate-600" th:text="#{ui.projects.connectCopy}">Each webhook source gets its own secret.</p>
                 </div>
                 <div class="alert alert-error" role="alert" th:if="${failing and sourceError != null}">
                     <span th:text="${sourceError}">This repository is already connected to another project.</span>
                 </div>
-                <label class="form-control"><span class="label-text font-medium">Source type</span>
+                <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.sourceType}">Source type</span>
                     <select name="type" class="select select-bordered w-full" x-model="type"
                             th:classappend="${failing and #fields.hasErrors('type')} ? 'select-error'">
-                        <option value="GITHUB" th:selected="${!failing or sourceRequest.type.name() == 'GITHUB'}">GitHub repository</option>
-                        <option value="GITLAB" th:selected="${failing and sourceRequest.type.name() == 'GITLAB'}">GitLab project</option>
-                        <option value="LINEAR" th:selected="${failing and sourceRequest.type.name() == 'LINEAR'}">Linear team</option>
-                        <option value="JIRA" th:selected="${failing and sourceRequest.type.name() == 'JIRA'}">Jira project</option>
+                        <option value="GITHUB" th:selected="${!failing or sourceRequest.type.name() == 'GITHUB'}"
+                                th:text="#{ui.projects.type.GITHUB}">GitHub repository</option>
+                        <option value="GITLAB" th:selected="${failing and sourceRequest.type.name() == 'GITLAB'}"
+                                th:text="#{ui.projects.type.GITLAB}">GitLab project</option>
+                        <option value="LINEAR" th:selected="${failing and sourceRequest.type.name() == 'LINEAR'}"
+                                th:text="#{ui.projects.type.LINEAR}">Linear team</option>
+                        <option value="JIRA" th:selected="${failing and sourceRequest.type.name() == 'JIRA'}"
+                                th:text="#{ui.projects.type.JIRA}">Jira project</option>
                     </select>
                 </label>
                 <template x-if="type === 'GITHUB'">
                     <div class="grid gap-4">
-                        <label class="form-control"><span class="label-text font-medium">Repository owner</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.repositoryOwner}">Repository owner</span>
                             <input type="text" name="owner" maxlength="39" placeholder="octo-org"
                                    class="input input-bordered w-full" :required="type === 'GITHUB'"
                                    th:value="${failing} ? ${sourceRequest.owner} : ''"
                                    th:classappend="${failing and #fields.hasErrors('owner')} ? 'input-error'">
                             <span class="field-error" th:if="${failing and #fields.hasErrors('owner')}" th:errors="*{owner}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">Repository name</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.repositoryName}">Repository name</span>
                             <input type="text" name="repository" maxlength="100" placeholder="hello-world"
                                    class="input input-bordered w-full" :required="type === 'GITHUB'"
                                    th:value="${failing} ? ${sourceRequest.repository} : ''"
@@ -302,32 +286,30 @@
                 </template>
                 <template x-if="type === 'GITLAB'">
                     <div class="grid gap-4">
-                        <label class="form-control"><span class="label-text font-medium">GitLab instance</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.gitlabInstance}">GitLab instance</span>
                             <input type="url" name="apiBaseUrl" maxlength="255" placeholder="https://gitlab.com"
                                    class="input input-bordered w-full" :required="type === 'GITLAB'"
                                    th:value="${failing} ? ${sourceRequest.apiBaseUrl} : ''"
                                    th:classappend="${failing and #fields.hasErrors('apiBaseUrl')} ? 'input-error'">
-                            <span class="label-text-alt text-slate-500">Only instances this deployment allows can be connected.</span>
+                            <span class="label-text-alt text-slate-500" th:text="#{ui.projects.gitlabInstanceHint}">Only allowed instances can be connected.</span>
                             <span class="field-error" th:if="${failing and #fields.hasErrors('apiBaseUrl')}" th:errors="*{apiBaseUrl}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">Project path</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.projectPath}">Project path</span>
                             <input type="text" name="projectPath" maxlength="200" placeholder="acme/group/app"
                                    class="input input-bordered w-full" :required="type === 'GITLAB'"
                                    th:value="${failing} ? ${sourceRequest.projectPath} : ''"
                                    th:classappend="${failing and #fields.hasErrors('projectPath')} ? 'input-error'">
                             <span class="field-error" th:if="${failing and #fields.hasErrors('projectPath')}" th:errors="*{projectPath}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">How GitLab signs deliveries</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.gitlabSigning}">How GitLab signs deliveries</span>
                             <select name="webhookAuthMode" class="select select-bordered w-full"
                                     th:classappend="${failing and #fields.hasErrors('webhookAuthMode')} ? 'select-error'">
                                 <option value="GITLAB_SIGNING_TOKEN"
-                                        th:selected="${!failing or sourceRequest.webhookAuthMode.name() == 'GITLAB_SIGNING_TOKEN'}">
-                                    Signed headers (Standard Webhooks)
-                                </option>
+                                        th:selected="${!failing or sourceRequest.webhookAuthMode.name() == 'GITLAB_SIGNING_TOKEN'}"
+                                        th:text="#{ui.projects.gitlabSigned}">Signed headers (Standard Webhooks)</option>
                                 <option value="GITLAB_SECRET_TOKEN"
-                                        th:selected="${failing and sourceRequest.webhookAuthMode.name() == 'GITLAB_SECRET_TOKEN'}">
-                                    Secret token header
-                                </option>
+                                        th:selected="${failing and sourceRequest.webhookAuthMode.name() == 'GITLAB_SECRET_TOKEN'}"
+                                        th:text="#{ui.projects.gitlabSecretToken}">Secret token header</option>
                             </select>
                             <span class="field-error" th:if="${failing and #fields.hasErrors('webhookAuthMode')}" th:errors="*{webhookAuthMode}"></span>
                         </label>
@@ -335,78 +317,82 @@
                 </template>
                 <template x-if="type === 'LINEAR'">
                     <div class="grid gap-4">
-                        <p class="text-sm text-slate-600">
-                            Create the webhook in Linear first, under <strong>Settings → API → Webhooks</strong>, with the
-                            <strong>Issues</strong> event. Linear generates its own signing secret, so paste that secret
-                            and an API key here.
+                        <p class="text-sm text-slate-600" th:utext="#{ui.projects.linearCopy}">
+                            Create the webhook in Linear first, with the Issues event.
                         </p>
-                        <label class="form-control"><span class="label-text font-medium">Team ID</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.teamId}">Team ID</span>
                             <input type="text" name="teamId" maxlength="200" placeholder="a1b2c3d4-0000-4000-8000-000000000000"
                                    class="input input-bordered w-full font-mono text-xs" :required="type === 'LINEAR'"
                                    th:value="${failing} ? ${sourceRequest.teamId} : ''"
                                    th:classappend="${failing and #fields.hasErrors('teamId')} ? 'input-error'">
                             <span class="field-error" th:if="${failing and #fields.hasErrors('teamId')}" th:errors="*{teamId}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">Webhook signing secret</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.signingSecret}">Webhook signing secret</span>
                             <input type="password" name="webhookSecret" maxlength="255" autocomplete="off" spellcheck="false"
                                    class="input input-bordered w-full font-mono" :required="type === 'LINEAR'"
                                    th:classappend="${failing and #fields.hasErrors('webhookSecret')} ? 'input-error'">
-                            <span class="label-text-alt text-slate-500">The value Linear showed when the webhook was created.</span>
+                            <span class="label-text-alt text-slate-500" th:text="#{ui.projects.signingSecretHint}">The value Linear showed.</span>
                             <span class="field-error" th:if="${failing and #fields.hasErrors('webhookSecret')}" th:errors="*{webhookSecret}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">API key</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.apiKey}">API key</span>
                             <input type="password" name="apiToken" maxlength="255" autocomplete="off" spellcheck="false"
                                    class="input input-bordered w-full font-mono" :required="type === 'LINEAR'"
                                    th:classappend="${failing and #fields.hasErrors('apiToken')} ? 'input-error'">
-                            <span class="label-text-alt text-slate-500">Checked with Linear before anything is stored.</span>
+                            <span class="label-text-alt text-slate-500" th:text="#{ui.projects.apiKeyHint}">Checked with Linear first.</span>
                             <span class="field-error" th:if="${failing and #fields.hasErrors('apiToken')}" th:errors="*{apiToken}"></span>
                         </label>
                     </div>
                 </template>
                 <template x-if="type === 'JIRA'">
                     <div class="grid gap-4">
-                        <p class="text-sm text-slate-600">
-                            ReleaseFlow reads this project every few minutes for issues moved to a <strong>Done</strong>
-                            status, so there is no webhook to create. Issues completed before now are not read.
+                        <p class="text-sm text-slate-600" th:utext="#{ui.projects.jiraCopy}">
+                            ReleaseFlow reads this project every few minutes, so there is no webhook to create.
                         </p>
-                        <label class="form-control"><span class="label-text font-medium">Jira site</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.jiraSite}">Jira site</span>
                             <input type="url" name="siteUrl" maxlength="255" placeholder="https://acme.atlassian.net"
                                    class="input input-bordered w-full" :required="type === 'JIRA'"
                                    th:value="${failing} ? ${sourceRequest.siteUrl} : ''"
                                    th:classappend="${failing and #fields.hasErrors('siteUrl')} ? 'input-error'">
-                            <span class="label-text-alt text-slate-500">A Jira Cloud site on atlassian.net.</span>
+                            <span class="label-text-alt text-slate-500" th:text="#{ui.projects.jiraSiteHint}">A Jira Cloud site on atlassian.net.</span>
                             <span class="field-error" th:if="${failing and #fields.hasErrors('siteUrl')}" th:errors="*{siteUrl}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">Project key</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.projectKey}">Project key</span>
                             <input type="text" name="projectKey" maxlength="100" placeholder="APP"
                                    class="input input-bordered w-full font-mono" :required="type === 'JIRA'"
                                    th:value="${failing} ? ${sourceRequest.projectKey} : ''"
                                    th:classappend="${failing and #fields.hasErrors('projectKey')} ? 'input-error'">
                             <span class="field-error" th:if="${failing and #fields.hasErrors('projectKey')}" th:errors="*{projectKey}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">Account email</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.accountEmail}">Account email</span>
                             <input type="email" name="accountEmail" maxlength="255" placeholder="release-bot@acme.test"
                                    class="input input-bordered w-full" :required="type === 'JIRA'"
                                    th:value="${failing} ? ${sourceRequest.accountEmail} : ''"
                                    th:classappend="${failing and #fields.hasErrors('accountEmail')} ? 'input-error'">
                             <span class="field-error" th:if="${failing and #fields.hasErrors('accountEmail')}" th:errors="*{accountEmail}"></span>
                         </label>
-                        <label class="form-control"><span class="label-text font-medium">API token</span>
+                        <label class="form-control"><span class="label-text font-medium" th:text="#{ui.projects.apiToken}">API token</span>
                             <input type="password" name="apiToken" maxlength="255" autocomplete="off" spellcheck="false"
                                    class="input input-bordered w-full font-mono" :required="type === 'JIRA'"
                                    th:classappend="${failing and #fields.hasErrors('apiToken')} ? 'input-error'">
-                            <span class="label-text-alt text-slate-500">Checked with Jira before anything is stored.</span>
+                            <span class="label-text-alt text-slate-500" th:text="#{ui.projects.apiTokenHint}">Checked with Jira first.</span>
                             <span class="field-error" th:if="${failing and #fields.hasErrors('apiToken')}" th:errors="*{apiToken}"></span>
                         </label>
                     </div>
                 </template>
+                <!--/* The three labels are rendered on the server and read from data attributes, never
+                       interpolated into the Alpine expression. */-->
                 <button type="submit" class="btn w-full" th:classappend="${sourceCount == 0} ? 'btn-primary' : 'btn-outline'"
-                        x-text="type === 'LINEAR' ? 'Connect the team' : (type === 'JIRA' ? 'Connect the project' : 'Generate webhook credentials')">Generate webhook credentials</button>
+                        th:data-label-team="#{ui.projects.connectTeam}"
+                        th:data-label-project="#{ui.projects.connectProject}"
+                        th:data-label-webhook="#{ui.projects.generateCredentials}"
+                        x-text="type === 'LINEAR' ? $el.dataset.labelTeam
+                                : (type === 'JIRA' ? $el.dataset.labelProject : $el.dataset.labelWebhook)">Generate webhook credentials</button>
             </form>
 
             <div class="mt-auto pt-5">
-                <a class="link text-sm" th:href="@{/projects/{projectId}/sensitive-paths(projectId=${project.id})}">Sensitive paths</a>
-                <span class="text-xs text-slate-500">— files whose changes always need review</span>
+                <a class="link text-sm" th:href="@{/projects/{projectId}/sensitive-paths(projectId=${project.id})}"
+                   th:text="#{ui.projects.sensitivePaths}">Sensitive paths</a>
+                <span class="text-xs text-slate-500" th:text="#{ui.projects.sensitivePathsHint}">— files whose changes always need review</span>
             </div>
         </article>
     </div>

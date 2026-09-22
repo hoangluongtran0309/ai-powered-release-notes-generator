@@ -27,6 +27,14 @@ public enum CategoryGroup {
         return label;
     }
 
+    /**
+     * The bundle key of this CategoryGroup's name, so a page says it in the reader's language.
+     * {@link #getLabel()} stays the English wording that recorded evidence keeps.
+     */
+    public String getLabelKey() {
+        return "ui.enum.categoryGroup." + name();
+    }
+
     public static Optional<CategoryGroup> fromValue(String value) {
         if (value == null) {
             return Optional.empty();

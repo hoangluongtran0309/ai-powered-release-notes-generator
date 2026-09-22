@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-public class ReleaseEmptyException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ReleaseEmptyException extends LocalizedException {
 
     public ReleaseEmptyException() {
-        super("Add at least one change to this release first.");
+        super("error.release_empty");
     }
 }

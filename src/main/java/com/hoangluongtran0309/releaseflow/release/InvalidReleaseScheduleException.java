@@ -1,12 +1,13 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-public class InvalidReleaseScheduleException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    static final String PAST = "The planned release time must be in the future.";
-    static final String UNREADABLE =
-            "Enter the planned release time as an ISO-8601 date and time, for example 2026-10-01T09:00:00Z.";
+public class InvalidReleaseScheduleException extends LocalizedException {
 
-    InvalidReleaseScheduleException(String message) {
-        super(message);
+    static final String PAST = "error.invalid_release_schedule.past";
+    static final String UNREADABLE = "error.invalid_release_schedule.unreadable";
+
+    InvalidReleaseScheduleException(String messageKey) {
+        super(messageKey);
     }
 }

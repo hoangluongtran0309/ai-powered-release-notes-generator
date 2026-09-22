@@ -1,22 +1,22 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout/main}">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/main}">
 <head>
-    <title>Overview</title>
+    <title th:text="#{ui.overview.title}">Overview</title>
 </head>
 <body>
-<p layout:fragment="page-title">Overview</p>
+<p layout:fragment="page-title" th:text="#{ui.overview.title}">Overview</p>
 <div layout:fragment="content">
     <header class="page-header">
         <div>
-            <p class="page-eyebrow">Workspace overview</p>
-            <h1 class="page-heading" th:text="|Welcome, ${viewer.displayName}|">Welcome</h1>
-            <p class="page-subtitle">Start by connecting the repositories whose merged changes will become release notes.</p>
+            <p class="page-eyebrow" th:text="#{ui.overview.eyebrow}">Workspace overview</p>
+            <h1 class="page-heading" th:text="#{ui.overview.welcome(${viewer.displayName})}">Welcome</h1>
+            <p class="page-subtitle" th:text="#{ui.overview.subtitle}">Start by connecting repositories.</p>
         </div>
         <div class="page-actions">
             <a class="btn btn-primary" th:href="@{/projects}">
                 <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#settings}"></use></svg>
-                <span>Manage projects</span>
+                <span th:text="#{ui.overview.manageProjects}">Manage projects</span>
             </a>
         </div>
     </header>
@@ -24,23 +24,23 @@
     <section class="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <article class="surface-card overflow-hidden">
             <div class="p-6">
-                <p class="text-sm font-semibold text-indigo-600">Recommended next step</p>
-                <h2 class="mt-1 text-xl font-bold">Connect a source</h2>
-                <p class="mt-2 text-sm text-slate-600">Create a project, then generate the webhook credentials a GitHub repository or GitLab project will use to sign its deliveries.</p>
-                <a class="btn btn-primary mt-5" th:href="@{/projects}">Open projects</a>
+                <p class="text-sm font-semibold text-indigo-600" th:text="#{ui.overview.nextStep}">Recommended next step</p>
+                <h2 class="mt-1 text-xl font-bold" th:text="#{ui.overview.connectSource}">Connect a source</h2>
+                <p class="mt-2 text-sm text-slate-600" th:text="#{ui.overview.connectBody}">Create a project, then generate webhook credentials.</p>
+                <a class="btn btn-primary mt-5" th:href="@{/projects}" th:text="#{ui.overview.openProjects}">Open projects</a>
             </div>
             <div class="grid grid-cols-4 border-t border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-500">
-                <div><strong class="block text-base text-slate-900">1</strong><span>Connect</span></div>
-                <div><strong class="block text-base text-slate-900">2</strong><span>Collect</span></div>
-                <div><strong class="block text-base text-slate-900">3</strong><span>Review</span></div>
-                <div><strong class="block text-base text-slate-900">4</strong><span>Publish</span></div>
+                <div><strong class="block text-base text-slate-900">1</strong><span th:text="#{ui.overview.step.connect}">Connect</span></div>
+                <div><strong class="block text-base text-slate-900">2</strong><span th:text="#{ui.overview.step.collect}">Collect</span></div>
+                <div><strong class="block text-base text-slate-900">3</strong><span th:text="#{ui.overview.step.review}">Review</span></div>
+                <div><strong class="block text-base text-slate-900">4</strong><span th:text="#{ui.overview.step.publish}">Publish</span></div>
             </div>
         </article>
         <article class="surface-card p-6">
-            <h2 class="font-bold">Application status</h2>
-            <p class="mt-2 text-sm text-slate-600">The public health endpoint reports whether ReleaseFlow is running.</p>
+            <h2 class="font-bold" th:text="#{ui.overview.statusHeading}">Application status</h2>
+            <p class="mt-2 text-sm text-slate-600" th:text="#{ui.overview.statusBody}">The public health endpoint reports whether ReleaseFlow is running.</p>
             <a class="btn btn-outline btn-sm mt-5" th:href="@{/api/status}">
-                <span class="status-dot text-emerald-600"></span> View status
+                <span class="status-dot text-emerald-600"></span> <span th:text="#{ui.overview.viewStatus}">View status</span>
             </a>
         </article>
     </section>

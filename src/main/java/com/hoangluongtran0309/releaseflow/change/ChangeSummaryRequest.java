@@ -15,17 +15,17 @@ public class ChangeSummaryRequest {
 
     static final int FIELD_LIMIT = 2000;
 
-    @NotBlank(message = "Describe what changed.")
-    @Size(max = FIELD_LIMIT, message = "What changed must not exceed 2000 characters.")
+    @NotBlank(message = "{validation.whatChanged.required}")
+    @Size(max = FIELD_LIMIT, message = "{validation.whatChanged.tooLong}")
     private String whatChanged;
 
-    @Size(max = FIELD_LIMIT, message = "Why it changed must not exceed 2000 characters.")
+    @Size(max = FIELD_LIMIT, message = "{validation.whyItChanged.tooLong}")
     private String whyChanged = "";
 
-    @Size(max = FIELD_LIMIT, message = "Technical detail must not exceed 2000 characters.")
+    @Size(max = FIELD_LIMIT, message = "{validation.technicalDetail.tooLong}")
     private String technicalDetail = "";
 
-    @Size(max = FIELD_LIMIT, message = "Migration step must not exceed 2000 characters.")
+    @Size(max = FIELD_LIMIT, message = "{validation.migrationStep.tooLong}")
     private String migrationStep = "";
 
     private Map<String, String> narratives = new LinkedHashMap<>();
@@ -73,7 +73,7 @@ public class ChangeSummaryRequest {
         }
     }
 
-    @AssertTrue(message = "Each narrative must not exceed 2000 characters.")
+    @AssertTrue(message = "{validation.narrative.tooLong}")
     public boolean isNarrativesWithinLimit() {
         return narratives.values().stream().allMatch(text -> clean(text).length() <= FIELD_LIMIT);
     }

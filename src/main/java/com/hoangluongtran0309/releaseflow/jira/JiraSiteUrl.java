@@ -21,14 +21,13 @@ public class JiraSiteUrl {
     /** The submitted site without its trailing slashes, or an exception saying why not. */
     public String validated(String value) {
         if (value == null || value.isBlank() || value.length() > MAX_LENGTH) {
-            throw new InvalidJiraSiteException(
-                    "The Jira site URL is required and must not exceed " + MAX_LENGTH + " characters.");
+            throw new InvalidJiraSiteException("error.jira_site_invalid.length", MAX_LENGTH);
         }
         final URI uri;
         try {
             uri = new URI(value.strip());
         } catch (URISyntaxException exception) {
-            throw new InvalidJiraSiteException("The Jira site URL is not a valid URL.");
+            throw new InvalidJiraSiteException("error.jira_site_invalid.unreadable");
         }
         if (!"https".equalsIgnoreCase(uri.getScheme() == null ? "" : uri.getScheme())
                 || uri.getHost() == null
@@ -36,12 +35,11 @@ public class JiraSiteUrl {
                 || uri.getQuery() != null
                 || uri.getFragment() != null
                 || uri.getPort() != -1) {
-            throw new InvalidJiraSiteException("The Jira site URL must be an HTTPS address with no credentials, "
-                    + "port, query, or fragment.");
+            throw new InvalidJiraSiteException("error.jira_site_invalid.shape");
         }
         String host = uri.getHost().toLowerCase(Locale.ROOT);
         if (!host.equals(CLOUD_DOMAIN) && !host.endsWith("." + CLOUD_DOMAIN)) {
-            throw new InvalidJiraSiteException("The Jira site must be an " + CLOUD_DOMAIN + " address.");
+            throw new InvalidJiraSiteException("error.jira_site_invalid.domain", CLOUD_DOMAIN);
         }
         return withoutTrailingSlashes(uri.toString());
     }

@@ -159,15 +159,15 @@ class AutomationWebhookService {
         try {
             payload = objectMapper.readTree(body);
         } catch (JacksonException malformed) {
-            throw new MalformedWebhookPayloadException("The webhook body must be a JSON object with a releaseId.");
+            throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.releaseId");
         }
         if (payload == null || !payload.isObject() || !payload.path("releaseId").isString()) {
-            throw new MalformedWebhookPayloadException("The webhook body must be a JSON object with a releaseId.");
+            throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.releaseId");
         }
         try {
             return UUID.fromString(payload.path("releaseId").stringValue());
         } catch (IllegalArgumentException notAnId) {
-            throw new MalformedWebhookPayloadException("The webhook body must be a JSON object with a releaseId.");
+            throw new MalformedWebhookPayloadException("error.webhook_payload_malformed.releaseId");
         }
     }
 

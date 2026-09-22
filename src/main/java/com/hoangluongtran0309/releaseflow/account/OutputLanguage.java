@@ -18,7 +18,7 @@ public record OutputLanguage(String tag) {
 
     public static OutputLanguage parse(String value) {
         if (value == null || value.isBlank()) {
-            throw new InvalidOutputLanguageException("An output language is required.");
+            throw new InvalidOutputLanguageException("error.output_language_invalid.required");
         }
         final Locale locale;
         try {
@@ -32,7 +32,7 @@ public record OutputLanguage(String tag) {
         String canonical = locale.toLanguageTag();
         if (canonical.length() > MAX_LENGTH) {
             throw new InvalidOutputLanguageException(
-                    "The output language must not exceed " + MAX_LENGTH + " characters."
+                    "error.output_language_invalid.tooLong", MAX_LENGTH
             );
         }
         return new OutputLanguage(canonical);
@@ -45,7 +45,7 @@ public record OutputLanguage(String tag) {
 
     private static InvalidOutputLanguageException invalid(String value) {
         return new InvalidOutputLanguageException(
-                "\"" + value.strip() + "\" is not a valid language tag. Use a code such as en, vi, or pt-BR."
+                "error.output_language_invalid.tag", value.strip()
         );
     }
 }

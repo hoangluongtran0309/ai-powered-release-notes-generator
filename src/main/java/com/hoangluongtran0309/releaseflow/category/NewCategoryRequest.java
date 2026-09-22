@@ -9,9 +9,9 @@ import java.util.Locale;
 /** A new category. Its code is upper-cased, with dashes and spaces turned into underscores, and fixed once created. */
 public class NewCategoryRequest extends CategoryRequest {
 
-    @NotBlank(message = "Code is required.")
-    @Size(max = CategoryRef.MAX_CODE_LENGTH, message = "Code must not exceed 64 characters.")
-    @Pattern(regexp = "[A-Z][A-Z0-9_]*", message = "Use letters, digits, and underscores, starting with a letter.")
+    @NotBlank(message = "{validation.code.required}")
+    @Size(max = CategoryRef.MAX_CODE_LENGTH, message = "{validation.code.tooLong}")
+    @Pattern(regexp = "[A-Z][A-Z0-9_]*", message = "{validation.code.format}")
     private String code;
 
     public String getCode() {

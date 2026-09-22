@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.audience;
 
-public class AudienceNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class AudienceNotFoundException extends LocalizedException {
 
     public AudienceNotFoundException() {
-        super("Audience was not found.");
+        super("error.audience_not_found");
     }
 }

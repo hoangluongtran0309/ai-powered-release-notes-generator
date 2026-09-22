@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,21 +19,25 @@
     <link rel="stylesheet" th:href="@{/css/application.css}">
 </head>
 <body class="theme-canvas min-h-screen">
-<a href="#page-content" class="skip-link">Skip to main content</a>
+<a href="#page-content" class="skip-link" th:text="#{ui.layout.skipToContent}">Skip to main content</a>
 
 <div class="drawer lg:drawer-open">
-    <input id="app-drawer" type="checkbox" class="drawer-toggle" aria-label="Open navigation">
+    <input id="app-drawer" type="checkbox" class="drawer-toggle" th:aria-label="#{ui.layout.openNavigation}"
+           aria-label="Open navigation">
     <div class="drawer-content min-w-0">
         <header class="app-header sticky top-0 z-30 flex h-16 items-center gap-3 border-b px-4 backdrop-blur lg:px-8">
-            <label for="app-drawer" class="icon-button lg:hidden" aria-label="Open navigation">
+            <label for="app-drawer" class="icon-button lg:hidden" th:aria-label="#{ui.layout.openNavigation}"
+                   aria-label="Open navigation">
                 <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#menu}"></use></svg>
             </label>
             <div class="min-w-0 flex-1">
-                <p class="truncate text-xs font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
+                <p class="truncate text-xs font-semibold uppercase tracking-wider text-slate-500"
+                   th:text="#{ui.layout.workspace}">Workspace</p>
                 <p class="truncate text-sm font-semibold" layout:fragment="page-title">ReleaseFlow</p>
             </div>
             <button type="button" class="icon-button" x-data="themeToggle()" @click="toggle"
-                    :aria-label="label" :title="label" aria-label="Toggle theme">
+                    :aria-label="label" :title="label" th:aria-label="#{ui.layout.themeToggle}" aria-label="Toggle theme"
+                    th:data-label-light="#{ui.layout.themeToLight}" th:data-label-dark="#{ui.layout.themeToDark}">
                 <svg x-show="theme === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.6 6.6 0 0 0 21 12.8Z"/>
                 </svg>
@@ -44,7 +49,7 @@
                  @focusout="closeOnFocusOut($event)" @keydown.escape.stop.prevent="close(true)">
                 <button x-ref="trigger" type="button" class="btn btn-ghost gap-2 px-2" @click="toggle"
                         aria-controls="user-menu" :aria-expanded="open.toString()" aria-expanded="false"
-                        aria-label="Open user menu">
+                        th:aria-label="#{ui.layout.openUserMenu}" aria-label="Open user menu">
                     <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700"
                           th:text="${viewer.initial}">A</span>
                     <span class="hidden max-w-40 truncate text-sm md:block" th:text="${viewer.displayName}">Owner</span>
@@ -56,8 +61,20 @@
                         <p class="text-xs text-slate-500" th:text="${viewer.role}">Owner</p>
                     </div>
                     <div class="divider my-1"></div>
+                    <p class="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-500"
+                       th:text="#{ui.layout.language}">Language</p>
+                    <!--/* One form per language, so choosing one needs no JavaScript at all. */-->
+                    <form method="post" th:action="@{/settings/ui-locale}" th:each="option : ${uiLocaleOptions}">
+                        <input type="hidden" name="uiLocale" th:value="${option.tag}">
+                        <button type="submit" class="btn btn-ghost btn-sm w-full justify-start"
+                                th:classappend="${option.tag == currentUiLocale} ? 'font-bold'"
+                                th:attr="aria-current=${option.tag == currentUiLocale} ? 'true'"
+                                th:text="${option.displayName}">English</button>
+                    </form>
+                    <div class="divider my-1"></div>
                     <form method="post" th:action="@{/logout}">
-                        <button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Sign out</button>
+                        <button type="submit" class="btn btn-ghost btn-sm w-full justify-start"
+                                th:text="#{ui.layout.signOut}">Sign out</button>
                     </form>
                 </div>
             </div>
@@ -74,43 +91,44 @@
             <a th:href="@{/}" class="app-sidebar-divider flex h-16 items-center gap-3 border-b px-6">
                 <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
                      width="36" height="36" class="h-9 w-9 shrink-0">
-                <span><strong class="block tracking-tight">ReleaseFlow</strong><small class="app-sidebar-muted">Release notes workspace</small></span>
+                <span><strong class="block tracking-tight">ReleaseFlow</strong><small class="app-sidebar-muted" th:text="#{ui.layout.tagline}">Release notes workspace</small></span>
             </a>
-            <nav class="flex-1 space-y-1 p-4" aria-label="Primary">
-                <p class="app-sidebar-muted px-3 pb-2 pt-3 text-xs font-semibold uppercase tracking-widest">Workspace</p>
+            <nav class="flex-1 space-y-1 p-4" th:aria-label="#{ui.layout.primaryNavigation}" aria-label="Primary">
+                <p class="app-sidebar-muted px-3 pb-2 pt-3 text-xs font-semibold uppercase tracking-widest"
+                   th:text="#{ui.layout.workspace}">Workspace</p>
                 <a th:href="@{/}" class="app-nav-link" th:classappend="${currentPath == '/'} ? 'is-active'"
-                   th:attr="aria-current=${currentPath == '/'} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#overview}"></use></svg><span>Overview</span></a>
+                   th:attr="aria-current=${currentPath == '/'} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#overview}"></use></svg><span th:text="#{ui.nav.overview}">Overview</span></a>
                 <a th:href="@{/changes}" class="app-nav-link" th:classappend="${#strings.startsWith(currentPath, '/changes')} ? 'is-active'"
-                   th:attr="aria-current=${#strings.startsWith(currentPath, '/changes')} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#inbox}"></use></svg><span>Change Inbox</span></a>
+                   th:attr="aria-current=${#strings.startsWith(currentPath, '/changes')} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#inbox}"></use></svg><span th:text="#{ui.nav.changes}">Change Inbox</span></a>
                 <a th:href="@{/releases}" class="app-nav-link"
                    th:with="active=${#strings.startsWith(currentPath, '/releases') or #strings.contains(currentPath, '/releases/')}"
                    th:classappend="${active} ? 'is-active'"
-                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#releases}"></use></svg><span>Releases</span></a>
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#releases}"></use></svg><span th:text="#{ui.nav.releases}">Releases</span></a>
                 <a th:href="@{/projects}" class="app-nav-link"
                    th:with="active=${#strings.startsWith(currentPath, '/projects') and !#strings.contains(currentPath, '/releases')}"
                    th:classappend="${active} ? 'is-active'"
-                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#settings}"></use></svg><span>Projects</span></a>
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#settings}"></use></svg><span th:text="#{ui.nav.projects}">Projects</span></a>
                 <a th:href="@{/members}" class="app-nav-link" th:if="${viewer != null and viewer.admin}"
                    th:with="active=${#strings.startsWith(currentPath, '/members')}"
                    th:classappend="${active} ? 'is-active'"
-                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#members}"></use></svg><span>Members</span></a>
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#members}"></use></svg><span th:text="#{ui.nav.members}">Members</span></a>
                 <a th:href="@{/audiences}" class="app-nav-link" th:if="${viewer != null and viewer.admin}"
                    th:with="active=${#strings.startsWith(currentPath, '/audiences')}"
                    th:classappend="${active} ? 'is-active'"
-                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#audiences}"></use></svg><span>Audiences</span></a>
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#audiences}"></use></svg><span th:text="#{ui.nav.audiences}">Audiences</span></a>
                 <a th:href="@{/categories}" class="app-nav-link" th:if="${viewer != null and viewer.admin}"
                    th:with="active=${#strings.startsWith(currentPath, '/categories')}"
                    th:classappend="${active} ? 'is-active'"
-                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#compare}"></use></svg><span>Categories</span></a>
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#compare}"></use></svg><span th:text="#{ui.nav.categories}">Categories</span></a>
                 <a th:href="@{/automation}" class="app-nav-link" th:if="${viewer != null and viewer.admin}"
                    th:with="active=${#strings.startsWith(currentPath, '/automation')}"
                    th:classappend="${active} ? 'is-active'"
-                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#automation}"></use></svg><span>Automation</span></a>
+                   th:attr="aria-current=${active} ? 'page'"><svg class="app-nav-icon icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#automation}"></use></svg><span th:text="#{ui.nav.automation}">Automation</span></a>
             </nav>
             <div class="app-sidebar-divider border-t p-4">
                 <div class="subtle-panel flex items-start gap-3 p-3">
                     <svg class="icon mt-0.5 text-indigo-600" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#sparkles}"></use></svg>
-                    <p class="app-sidebar-muted text-xs leading-5">AI drafts once. Your team decides what ships.</p>
+                    <p class="app-sidebar-muted text-xs leading-5" th:text="#{ui.layout.promise}">AI drafts once.</p>
                 </div>
             </div>
         </aside>

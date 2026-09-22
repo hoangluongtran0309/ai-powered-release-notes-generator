@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-public class ReleaseReviewIncompleteException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ReleaseReviewIncompleteException extends LocalizedException {
 
     public ReleaseReviewIncompleteException() {
-        super("Record a decision for every change of this release before approving it.");
+        super("error.release_review_incomplete");
     }
 }

@@ -92,13 +92,12 @@ public class ReleaseLanguageService {
             try {
                 languages.add(OutputLanguage.parse(value).tag());
             } catch (InvalidOutputLanguageException exception) {
-                throw new InvalidReleaseLanguagesException(exception.getMessage());
+                // The language tag is at fault, so its own wording is what the person needs.
+                throw new InvalidReleaseLanguagesException(exception.messageKey(), exception.arguments());
             }
         }
         if (languages.isEmpty() || languages.size() > MAX_LANGUAGES) {
-            throw new InvalidReleaseLanguagesException(
-                    "Choose between one and " + MAX_LANGUAGES + " release note languages."
-            );
+            throw new InvalidReleaseLanguagesException("error.invalid_release_languages.count", MAX_LANGUAGES);
         }
         return List.copyOf(languages);
     }

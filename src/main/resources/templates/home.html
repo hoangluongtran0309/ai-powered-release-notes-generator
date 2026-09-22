@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout/auth}">
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/auth}">
 <head>
-    <title>Human-reviewed release notes</title>
+    <title th:text="#{ui.home.title}">Human-reviewed release notes</title>
 </head>
 <body>
 <main layout:fragment="content" class="grid min-h-screen lg:grid-cols-2">
@@ -12,25 +12,25 @@
                  width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
         </a>
         <div class="max-w-xl">
-            <p class="auth-showcase-accent mb-5 text-sm font-semibold uppercase tracking-[0.24em]">Human-reviewed release notes</p>
-            <h1 class="text-4xl font-bold leading-tight sm:text-5xl">Ship release notes your team actually approved.</h1>
-            <p class="auth-showcase-copy mt-6 text-lg leading-8">ReleaseFlow is being rebuilt one complete capability at a time. Today it manages organizations, projects, and GitHub and GitLab source connections.</p>
+            <p class="auth-showcase-accent mb-5 text-sm font-semibold uppercase tracking-[0.24em]" th:text="#{ui.home.eyebrow}">Human-reviewed release notes</p>
+            <h1 class="text-4xl font-bold leading-tight sm:text-5xl" th:text="#{ui.home.heading}">Ship release notes your team actually approved.</h1>
+            <p class="auth-showcase-copy mt-6 text-lg leading-8" th:text="#{ui.home.body}">ReleaseFlow is being rebuilt one capability at a time.</p>
         </div>
-        <p class="auth-showcase-copy text-sm">Breaking changes always require human review.</p>
+        <p class="auth-showcase-copy text-sm" th:text="#{ui.home.footnote}">Breaking changes always require human review.</p>
     </section>
     <section class="theme-canvas flex items-center justify-center p-5 sm:p-10">
         <div class="w-full max-w-md">
             <div class="auth-card">
-                <p class="text-sm font-semibold text-indigo-600">Get started</p>
-                <h2 class="mt-2 text-3xl font-bold tracking-tight">Your release workspace</h2>
-                <p class="mt-2 text-sm text-slate-600">Create an organization to become its owner, or sign in to an existing workspace.</p>
+                <p class="text-sm font-semibold text-indigo-600" th:text="#{ui.home.getStarted}">Get started</p>
+                <h2 class="mt-2 text-3xl font-bold tracking-tight" th:text="#{ui.home.cardHeading}">Your release workspace</h2>
+                <p class="mt-2 text-sm text-slate-600" th:text="#{ui.home.cardBody}">Create an organization or sign in.</p>
                 <div class="mt-7 grid gap-3">
-                    <a class="btn btn-primary min-h-12" th:href="@{/register}">Create an organization</a>
-                    <a class="btn btn-outline min-h-12" th:href="@{/login}">Sign in</a>
+                    <a class="btn btn-primary min-h-12" th:href="@{/register}" th:text="#{ui.home.createOrganization}">Create an organization</a>
+                    <a class="btn btn-outline min-h-12" th:href="@{/login}" th:text="#{ui.home.signIn}">Sign in</a>
                 </div>
                 <div class="divider my-6"></div>
                 <a class="link link-primary flex items-center justify-center gap-2 text-sm font-semibold" th:href="@{/api/status}">
-                    <span class="status-dot text-emerald-600"></span> View application status
+                    <span class="status-dot text-emerald-600"></span> <span th:text="#{ui.home.viewStatus}">View application status</span>
                 </a>
             </div>
         </div>

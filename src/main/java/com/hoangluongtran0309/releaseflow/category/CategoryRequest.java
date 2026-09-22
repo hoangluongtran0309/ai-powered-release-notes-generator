@@ -7,11 +7,11 @@ import jakarta.validation.constraints.Size;
 /** The editable details of a category. */
 public class CategoryRequest {
 
-    @NotBlank(message = "Display name is required.")
-    @Size(max = 120, message = "Display name must not exceed 120 characters.")
+    @NotBlank(message = "{validation.displayName.required}")
+    @Size(max = 120, message = "{validation.displayName.tooLong}")
     private String displayName;
 
-    @NotNull(message = "Choose a group.")
+    @NotNull(message = "{validation.categoryGroup.required}")
     private CategoryGroup group;
 
     public String getDisplayName() {

@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-public class ChangeNotReleasableException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ChangeNotReleasableException extends LocalizedException {
 
     public ChangeNotReleasableException() {
-        super("Only changes that have finished processing and are not in another release can be added.");
+        super("error.change_not_releasable");
     }
 }

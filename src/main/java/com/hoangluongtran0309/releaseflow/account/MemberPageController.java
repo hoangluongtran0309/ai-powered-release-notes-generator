@@ -1,5 +1,7 @@
 package com.hoangluongtran0309.releaseflow.account;
 
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
@@ -20,9 +22,11 @@ import java.util.UUID;
 public class MemberPageController {
 
     private final InvitationService invitationService;
+    private final UiMessages messages;
 
-    MemberPageController(InvitationService invitationService) {
+    MemberPageController(InvitationService invitationService, UiMessages messages) {
         this.invitationService = invitationService;
+        this.messages = messages;
     }
 
     @GetMapping("/members")
@@ -45,7 +49,7 @@ public class MemberPageController {
             return renderIssued(invitationService.invite(principal, request), model, response);
         } catch (InvitationEmailUnavailableException | InvitationAlreadyPendingException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
-            bindingResult.rejectValue("email", "invitation.conflict", exception.getMessage());
+            bindingResult.rejectValue("email", "invitation.conflict", messages.of(exception));
             return renderMembers(principal, model);
         }
     }
@@ -104,12 +108,12 @@ public class MemberPageController {
     private String renderMembersWithError(
             ReleaseFlowPrincipal principal,
             HttpStatus status,
-            RuntimeException exception,
+            LocalizedException exception,
             Model model,
             HttpServletResponse response
     ) {
         response.setStatus(status.value());
-        model.addAttribute("pageError", exception.getMessage());
+        model.addAttribute("pageError", messages.of(exception));
         return renderMembers(principal, model);
     }
 }

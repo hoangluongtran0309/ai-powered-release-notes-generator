@@ -20,6 +20,14 @@ public enum TriggerType {
     }
 
     /**
+     * The bundle key of this TriggerType's name, so a page says it in the reader's language.
+     * {@link #getLabel()} stays the English wording that recorded evidence keeps.
+     */
+    public String getLabelKey() {
+        return "ui.enum.triggerType." + name();
+    }
+
+    /**
      * Whether ReleaseFlow itself decides when this trigger fires. Nobody reads a
      * schedule's outcome as it happens, so such a Rule may only tell people something.
      */

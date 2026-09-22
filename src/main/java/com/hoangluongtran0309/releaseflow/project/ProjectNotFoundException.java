@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.project;
 
-public class ProjectNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ProjectNotFoundException extends LocalizedException {
 
     public ProjectNotFoundException() {
-        super("Project was not found.");
+        super("error.project_not_found");
     }
 }

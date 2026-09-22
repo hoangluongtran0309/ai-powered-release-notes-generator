@@ -5,10 +5,10 @@ import jakarta.validation.constraints.NotNull;
 
 public class ChangeReviewRequest {
 
-    @NotBlank(message = "Category is required.")
+    @NotBlank(message = "{validation.category.required}")
     private String category;
 
-    @NotNull(message = "Breaking must be true or false.")
+    @NotNull(message = "{validation.breaking.required}")
     private Boolean breaking;
 
     public String getCategory() {

@@ -26,10 +26,10 @@ public record AutomationRunPage(List<AutomationRunView> items, int page, int siz
     /** Checks a requested page, because nobody can be shown one that cannot exist. */
     static void requireValid(int page, int size) {
         if (page < 0) {
-            throw new InvalidAutomationRunPageException("Page must not be negative.");
+            throw new InvalidAutomationRunPageException("error.invalid_automation_run_page.negative");
         }
         if (size < 1 || size > MAX_SIZE) {
-            throw new InvalidAutomationRunPageException("Size must be between 1 and " + MAX_SIZE + ".");
+            throw new InvalidAutomationRunPageException("error.invalid_automation_run_page.size", MAX_SIZE);
         }
     }
 }

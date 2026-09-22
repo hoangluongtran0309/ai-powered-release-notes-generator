@@ -521,7 +521,47 @@ version has been released.
   `RELEASEFLOW_MANAGEMENT_HEALTH_MAIL`, the last so an unconfigured SMTP server cannot
   make a healthy process report itself unwell.
 
+- An English or Vietnamese interface, chosen per person (ADR-0027, migration `V27`).
+  Every page, form message, and error explanation is written in the reader's own
+  language, from one bundle per language.
+- A language picked per request, in one order: the `releaseflow_lang` cookie, then
+  `app_users.ui_locale`, then `Accept-Language` narrowed from a region to a language,
+  then the first entry of `RELEASEFLOW_UI_LANGUAGES` (default `en,vi`). A step naming a
+  language this deployment does not ship falls through to the next.
+- A language picker in the user menu, and `GET|PUT /api/me/ui-locale` returning
+  `{uiLocale, supported}`. Choosing a language saves it on the account and writes the
+  cookie, which outranks the account, so the change shows at once. Null means the
+  browser decides, which is what a new account does. A language this deployment does
+  not ship returns `400 ui_locale_invalid`.
+- Localized `title` and `detail` on every `application/problem+json` response, including
+  the ones the security filter chain writes. **Every error `code` is unchanged.**
+- Localized Bean Validation messages: every constraint names a bundle key, resolved in
+  the language of the request.
+- Public changelog pages that localize their chrome from the cookie and
+  `Accept-Language` while leaving each published note in the language it was published
+  in. Anonymous reading still creates no session and reads no account, and those pages
+  now declare `Vary: Accept-Language, Cookie` so a shared cache cannot hand one reader's
+  language to another. The RSS feed is one shared document and stays English.
+- Tests that hold the bundle to its promises: the two languages carry the same keys,
+  every key a template or a constraint asks for exists, every pattern with a placeholder
+  can be filled in, and every page renders in Vietnamese without a single key reaching
+  the HTML.
+
 ### Changed
+
+- `ReviewTrigger.describe()` becomes `messageKey()`: a trigger now answers with a bundle
+  key and its detail rather than a finished English sentence, because nothing stores that
+  sentence. Six enums a page names gained a `getLabelKey()` beside `getLabel()`; the
+  English label stays where recorded evidence keeps it.
+- Every user-facing exception extends `LocalizedException` and carries a bundle key and
+  its values instead of a sentence. A new failure that forgets its key no longer compiles.
+- A missing translation is served as the key itself — `use-code-as-default-message` on,
+  `fallback-to-system-locale` off — so a gap shows on the page and in tests instead of
+  hiding behind whichever language happens to be complete.
+- The three Alpine components that held English strings read their labels from `data-`
+  attributes the template rendered. No wording is left in `app.js`.
+- `SourceType` gained `displayName()`, so a provider is named "GitHub" rather than
+  "Github" wherever a sentence includes it.
 
 - The container health check now calls the management port instead of the public
   `GET /api/status`, so a container whose database has gone is unhealthy rather than

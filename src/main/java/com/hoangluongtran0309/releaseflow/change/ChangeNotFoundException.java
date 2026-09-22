@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.change;
 
-public class ChangeNotFoundException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+
+public class ChangeNotFoundException extends LocalizedException {
 
     public ChangeNotFoundException() {
-        super("Change was not found.");
+        super("error.change_not_found");
     }
 }

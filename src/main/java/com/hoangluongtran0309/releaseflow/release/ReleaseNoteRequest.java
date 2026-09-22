@@ -8,8 +8,8 @@ public class ReleaseNoteRequest {
 
     static final int MAX_LENGTH = 200_000;
 
-    @NotBlank(message = "A release note cannot be empty.")
-    @Size(max = MAX_LENGTH, message = "A release note must not exceed 200000 characters.")
+    @NotBlank(message = "{validation.releaseNote.required}")
+    @Size(max = MAX_LENGTH, message = "{validation.releaseNote.tooLong}")
     private String content;
 
     public String getContent() {

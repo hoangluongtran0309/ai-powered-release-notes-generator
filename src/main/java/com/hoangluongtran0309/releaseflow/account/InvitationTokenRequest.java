@@ -5,8 +5,8 @@ import jakarta.validation.constraints.Size;
 
 public class InvitationTokenRequest {
 
-    @NotBlank
-    @Size(max = 128)
+    @NotBlank(message = "{validation.invitationToken.required}")
+    @Size(max = 128, message = "{validation.invitationToken.tooLong}")
     private String token;
 
     public String getToken() {

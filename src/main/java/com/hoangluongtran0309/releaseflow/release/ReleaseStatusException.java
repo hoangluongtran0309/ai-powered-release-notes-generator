@@ -1,9 +1,11 @@
 package com.hoangluongtran0309.releaseflow.release;
 
-/** The release is not in the status the requested operation needs. */
-public class ReleaseStatusException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public ReleaseStatusException(String message) {
-        super(message);
+/** The release is not in the status the requested operation needs. */
+public class ReleaseStatusException extends LocalizedException {
+
+    public ReleaseStatusException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

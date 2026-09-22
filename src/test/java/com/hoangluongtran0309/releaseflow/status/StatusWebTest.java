@@ -1,9 +1,8 @@
 package com.hoangluongtran0309.releaseflow.status;
 
+import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -12,9 +11,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
-@WebMvcTest({StatusController.class, HomeController.class})
-@AutoConfigureMockMvc(addFilters = false)
-class StatusWebTest {
+/**
+ * The two public entry points, through the whole application. A web-layer slice would no
+ * longer reach them: every page now resolves a language, and the home page is rendered
+ * from the same bundle as the rest of the interface.
+ */
+class StatusWebTest extends PostgreSqlIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;

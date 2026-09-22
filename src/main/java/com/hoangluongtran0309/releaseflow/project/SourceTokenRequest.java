@@ -6,9 +6,9 @@ import jakarta.validation.constraints.Size;
 
 public class SourceTokenRequest {
 
-    @NotBlank(message = "Access token is required.")
-    @Size(max = 255, message = "Access token must not exceed 255 characters.")
-    @Pattern(regexp = "\\S*", message = "Access token must not contain spaces.")
+    @NotBlank(message = "{validation.token.required}")
+    @Size(max = 255, message = "{validation.token.tooLong}")
+    @Pattern(regexp = "\\S*", message = "{validation.token.noSpaces}")
     private String token;
 
     public String getToken() {

@@ -1,8 +1,10 @@
 package com.hoangluongtran0309.releaseflow.account;
 
-public class InvalidOrganizationSlugException extends RuntimeException {
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
 
-    public InvalidOrganizationSlugException(String message) {
-        super(message);
+public class InvalidOrganizationSlugException extends LocalizedException {
+
+    public InvalidOrganizationSlugException(String messageKey, Object... arguments) {
+        super(messageKey, arguments);
     }
 }

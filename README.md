@@ -16,7 +16,7 @@ The application currently provides:
 - session authentication, CSRF protection, form login, and POST logout;
 - an authenticated session endpoint whose tenant identity comes exclusively
   from the principal;
-- PostgreSQL persistence managed by Flyway migrations `V1` through `V22`;
+- PostgreSQL persistence managed by Flyway migrations `V1` through `V27`;
 - tenant-scoped Project creation and listing through REST and Thymeleaf;
 - create-only GitHub repository, GitLab project, Linear team, and Jira Cloud
   project sources, several per Project;
@@ -70,6 +70,8 @@ The application currently provides:
 - the public home page and application status endpoint from the bootstrap
   slice;
 - a Tailwind CSS, DaisyUI, and Alpine.js workspace UI with a light/dark theme;
+- an English or Vietnamese interface, chosen per person, with every page,
+  form message, and error explanation written in the reader's own language;
 - a non-root container image and a Docker Compose demo stack with PostgreSQL,
   Prometheus, and Grafana, with metrics on a private management port;
 - automation rules that deliver a published release note to a GitHub Release, a
@@ -81,10 +83,8 @@ The application currently provides:
 - GitHub Actions gates for tests, CodeQL, dependency review, secret scanning,
   and container vulnerability scanning.
 
-Every slice in the current plan is implemented; scheduled and webhook
-automation triggers, further distribution integrations, and a public changelog
-are deliberately deferred. See the
-[implementation status](docs/implementation-status.md).
+Every slice in the current plan is implemented. What is deliberately left out
+is listed in the [implementation status](docs/implementation-status.md).
 
 ## Requirements
 
@@ -725,6 +725,48 @@ automatic AI. The failure trigger stays, so a person still reviews the change.
 | Change already classified by AI, or reviewed | `409 change_not_eligible_for_ai` |
 | The provider failed; the failure is stored and shown | `502 ai_classification_failed` |
 | AI not configured | `503 ai_classification_unavailable` |
+
+## Interface language
+
+Each person reads ReleaseFlow in English or Vietnamese. The language is picked
+per request, in this order:
+
+1. the `releaseflow_lang` cookie;
+2. the language saved on the account (`app_users.ui_locale`);
+3. `Accept-Language`, narrowed from a region to a language, so `vi-VN` asks
+   for `vi`;
+4. the first entry of `RELEASEFLOW_UI_LANGUAGES` (default `en,vi`).
+
+A step that names a language this deployment does not ship falls through to the
+next one. The picker sits in the user menu; choosing a language saves it on the
+account and writes the cookie, which outranks the account, so the change shows at
+once. The cookie is `HttpOnly`, lasts a year, and is `Secure` when the request
+was.
+
+```text
+GET /api/me/ui-locale                  (any member)
+PUT /api/me/ui-locale {"uiLocale"}     (the same member)
+```
+
+Both return `{uiLocale, supported}`. `uiLocale` is null when the browser decides,
+which is also what a new account does and what sending `null` returns to. A
+language this deployment does not ship returns `400 ui_locale_invalid`.
+
+Public changelog pages follow the same order, minus the account step: reading a
+changelog still creates no session. They declare `Vary: Accept-Language, Cookie`,
+because the note inside them is the same for everybody and the chrome is not. The
+RSS feed is one shared document and stays English.
+
+Page copy, form messages, and the `title` and `detail` of every
+`application/problem+json` response are written in this language. **The `code` of
+an error never changes**, so a caller matching on it is unaffected. Recorded
+evidence is not interface text and stays as it was recorded: a stored AI failure,
+a classification reason, and a provider's own name read the same in every
+language.
+
+This is not the language of anything ReleaseFlow writes. Release notes and AI
+summaries follow the Organization's output language and its release note
+languages, below, whichever language the person approving them was reading in.
 
 ## Output language
 

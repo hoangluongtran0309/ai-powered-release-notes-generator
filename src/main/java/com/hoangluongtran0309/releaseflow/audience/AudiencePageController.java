@@ -1,6 +1,8 @@
 package com.hoangluongtran0309.releaseflow.audience;
 
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.configuration.LocalizedException;
+import com.hoangluongtran0309.releaseflow.configuration.UiMessages;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -26,10 +28,12 @@ public class AudiencePageController {
 
     private final AudienceService audienceService;
     private final ReleaseLanguageService releaseLanguageService;
+    private final UiMessages messages;
 
-    AudiencePageController(AudienceService audienceService, ReleaseLanguageService releaseLanguageService) {
+    AudiencePageController(AudienceService audienceService, ReleaseLanguageService releaseLanguageService, UiMessages messages) {
         this.audienceService = audienceService;
         this.releaseLanguageService = releaseLanguageService;
+        this.messages = messages;
     }
 
     @GetMapping("/audiences")
@@ -70,13 +74,13 @@ public class AudiencePageController {
             return "redirect:/audiences/" + audience.id() + "?saved";
         } catch (InvalidAudienceTemplateException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            bindingResult.rejectValue("templateBody", exception.code(), exception.getMessage());
+            bindingResult.rejectValue("templateBody", exception.code(), messages.of(exception));
         } catch (AudienceConflictException exception) {
             response.setStatus(HttpStatus.CONFLICT.value());
             if ("audience_code_taken".equals(exception.code())) {
-                bindingResult.rejectValue("code", exception.code(), exception.getMessage());
+                bindingResult.rejectValue("code", exception.code(), messages.of(exception));
             } else {
-                model.addAttribute("pageError", exception.getMessage());
+                model.addAttribute("pageError", messages.of(exception));
             }
         }
         return render(principal, null, model, response);
@@ -100,10 +104,10 @@ public class AudiencePageController {
             return "redirect:/audiences/" + audienceId + "?saved";
         } catch (InvalidAudienceTemplateException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            bindingResult.rejectValue("templateBody", exception.code(), exception.getMessage());
+            bindingResult.rejectValue("templateBody", exception.code(), messages.of(exception));
         } catch (AudienceNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
         }
         return render(principal, audienceId, model, response);
     }
@@ -159,10 +163,10 @@ public class AudiencePageController {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
             model.addAttribute("variantLanguage", language);
             model.addAttribute("variantBody", request.getTemplateBody());
-            model.addAttribute("variantError", exception.getMessage());
+            model.addAttribute("variantError", messages.of(exception));
         } catch (AudienceNotFoundException exception) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
-            model.addAttribute("pageError", exception.getMessage());
+            model.addAttribute("pageError", messages.of(exception));
         }
         return render(principal, audienceId, model, response);
     }
@@ -182,7 +186,7 @@ public class AudiencePageController {
             return "redirect:/audiences?languagesSaved";
         } catch (InvalidReleaseLanguagesException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            model.addAttribute("languagesError", exception.getMessage());
+            model.addAttribute("languagesError", messages.of(exception));
             model.addAttribute("languagesText", targetLanguages);
         }
         List<AudienceView> audiences = audienceService.list(principal.organizationId());
@@ -206,7 +210,7 @@ public class AudiencePageController {
             model.addAttribute("preview", audienceService.preview(request.getTemplateBody()));
         } catch (InvalidAudienceTemplateException exception) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            bindingResult.rejectValue("templateBody", exception.code(), exception.getMessage());
+            bindingResult.rejectValue("templateBody", exception.code(), messages.of(exception));
         }
         return render(principal, audienceId, model, response);
     }
@@ -231,7 +235,7 @@ public class AudiencePageController {
                 }
             } catch (AudienceNotFoundException exception) {
                 response.setStatus(HttpStatus.NOT_FOUND.value());
-                model.addAttribute("pageError", exception.getMessage());
+                model.addAttribute("pageError", messages.of(exception));
             }
         }
         if (!model.containsAttribute(FORM)) {
@@ -246,12 +250,12 @@ public class AudiencePageController {
             ReleaseFlowPrincipal principal,
             UUID audienceId,
             HttpStatus status,
-            RuntimeException exception,
+            LocalizedException exception,
             Model model,
             HttpServletResponse response
     ) {
         response.setStatus(status.value());
-        model.addAttribute("pageError", exception.getMessage());
+        model.addAttribute("pageError", messages.of(exception));
         return render(principal, audienceId, model, response);
     }
 

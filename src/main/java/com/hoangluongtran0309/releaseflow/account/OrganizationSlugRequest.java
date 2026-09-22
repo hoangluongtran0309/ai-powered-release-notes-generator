@@ -5,8 +5,8 @@ import jakarta.validation.constraints.Size;
 
 public class OrganizationSlugRequest {
 
-    @NotBlank(message = "A changelog address is required.")
-    @Size(max = OrganizationSlug.MAX_LENGTH, message = "The changelog address is too long.")
+    @NotBlank(message = "{validation.slug.required}")
+    @Size(max = OrganizationSlug.MAX_LENGTH, message = "{validation.slug.tooLong}")
     private String slug;
 
     public String getSlug() {

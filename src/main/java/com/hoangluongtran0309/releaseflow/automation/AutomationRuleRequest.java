@@ -14,11 +14,11 @@ import java.util.UUID;
  */
 public class AutomationRuleRequest {
 
-    @NotBlank(message = "Name is required.")
-    @Size(max = 120, message = "Name must not exceed 120 characters.")
+    @NotBlank(message = "{validation.name.required}")
+    @Size(max = 120, message = "{validation.name.tooLong}")
     private String name;
 
-    @NotNull(message = "Choose what makes the rule run.")
+    @NotNull(message = "{validation.trigger.required}")
     private TriggerType triggerType;
 
     private UUID projectId;

@@ -6,9 +6,9 @@ import jakarta.validation.constraints.Size;
 
 public class InvitationRequest {
 
-    @NotBlank
-    @Email
-    @Size(max = 254)
+    @NotBlank(message = "{validation.email.required}")
+    @Email(message = "{validation.email.format}")
+    @Size(max = 254, message = "{validation.email.tooLong}")
     private String email;
 
     public String getEmail() {

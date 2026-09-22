@@ -19,19 +19,19 @@ record ChangeFilter(String category, ReviewStatus status, boolean insufficientCo
         String parsedCategory = null;
         if (category != null && !category.isBlank()) {
             parsedCategory = CategoryRef.normalize(category).orElseThrow(() -> new InvalidChangeFilterException(
-                    "Category must be a category code such as feature or fix."
+                    "error.invalid_change_filter.category"
             ));
         }
         ReviewStatus parsedStatus = null;
         if (status != null && !status.isBlank()) {
             parsedStatus = ReviewStatus.fromValue(status).orElseThrow(() -> new InvalidChangeFilterException(
-                    "Status must be one of: needs-review, classified, reviewed."
+                    "error.invalid_change_filter.status"
             ));
         }
         boolean insufficientContext = false;
         if (context != null && !context.isBlank()) {
             if (!INSUFFICIENT_CONTEXT.equals(context.strip())) {
-                throw new InvalidChangeFilterException("Context must be insufficient.");
+                throw new InvalidChangeFilterException("error.invalid_change_filter.context");
             }
             insufficientContext = true;
         }
