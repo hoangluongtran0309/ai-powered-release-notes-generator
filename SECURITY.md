@@ -39,5 +39,5 @@ and the CSRF and security-header configuration.
 
 ## Supported versions
 
-Only the current `main`. Nothing has been released yet, so there is no older
-version to support.
+Only the latest released version, and the current `main`. Older versions get no
+fixes; there is one maintainer, so please upgrade rather than ask for a backport.
