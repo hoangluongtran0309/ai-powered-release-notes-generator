@@ -1,0 +1,161 @@
+# ReleaseFlow demo stack: the application image, PostgreSQL, Prometheus, and Grafana.
+# GitHub and OpenAI remain external services configured through the environment.
+#
+#   cp .env.example .env    # then replace every REPLACE_ME value
+#   docker compose -f docker-compose.demo.yml up --build
+#
+# Open http://127.0.0.1:${RELEASEFLOW_HTTP_PORT:-8080} for the application and
+# http://127.0.0.1:${RELEASEFLOW_GRAFANA_PORT:-3000} for the operations dashboard.
+# `down --volumes` wipes the demo data. This stack is for local evaluation, not
+# production: it provisions no alerting, no retention policy worth the name, and no
+# access control beyond a single Grafana administrator.
+
+name: releaseflow
+
+services:
+  app:
+    image: releaseflow:demo
+    build:
+      context: .
+    environment:
+      RELEASEFLOW_DB_URL: jdbc:postgresql://db:5432/${RELEASEFLOW_DB_NAME:-releaseflow}
+      RELEASEFLOW_DB_USERNAME: ${RELEASEFLOW_DB_USERNAME:-releaseflow}
+      RELEASEFLOW_DB_PASSWORD: ${RELEASEFLOW_DB_PASSWORD:?set RELEASEFLOW_DB_PASSWORD in .env}
+      RELEASEFLOW_CREDENTIAL_MASTER_KEY: ${RELEASEFLOW_CREDENTIAL_MASTER_KEY:?set RELEASEFLOW_CREDENTIAL_MASTER_KEY in .env (openssl rand -base64 32)}
+      RELEASEFLOW_SESSION_COOKIE_SECURE: ${RELEASEFLOW_SESSION_COOKIE_SECURE:-false}
+      # The management port answers inside the private observability network below. It
+      # is never published, so binding it to the container's addresses exposes nothing.
+      RELEASEFLOW_MANAGEMENT_ADDRESS: 0.0.0.0
+      # Optional AI classification; leave the provider empty to use the rules only.
+      RELEASEFLOW_AI_PROVIDER: ${RELEASEFLOW_AI_PROVIDER:-}
+      RELEASEFLOW_OPENAI_API_KEY: ${RELEASEFLOW_OPENAI_API_KEY:-}
+      RELEASEFLOW_OPENAI_MODEL: ${RELEASEFLOW_OPENAI_MODEL:-}
+      RELEASEFLOW_ANTHROPIC_API_KEY: ${RELEASEFLOW_ANTHROPIC_API_KEY:-}
+      RELEASEFLOW_ANTHROPIC_MODEL: ${RELEASEFLOW_ANTHROPIC_MODEL:-}
+      RELEASEFLOW_DEEPSEEK_API_KEY: ${RELEASEFLOW_DEEPSEEK_API_KEY:-}
+      RELEASEFLOW_DEEPSEEK_MODEL: ${RELEASEFLOW_DEEPSEEK_MODEL:-}
+      # Optional translation of release notes; disabled unless set to deepl.
+      RELEASEFLOW_TRANSLATION_PROVIDER: ${RELEASEFLOW_TRANSLATION_PROVIDER:-disabled}
+      RELEASEFLOW_DEEPL_API_KEY: ${RELEASEFLOW_DEEPL_API_KEY:-}
+      RELEASEFLOW_DEEPL_BASE_URL: ${RELEASEFLOW_DEEPL_BASE_URL:-}
+      # Optional email automation; an email action cannot be enabled without both.
+      RELEASEFLOW_SMTP_HOST: ${RELEASEFLOW_SMTP_HOST:-}
+      RELEASEFLOW_SMTP_PORT: ${RELEASEFLOW_SMTP_PORT:-587}
+      RELEASEFLOW_SMTP_USERNAME: ${RELEASEFLOW_SMTP_USERNAME:-}
+      RELEASEFLOW_SMTP_PASSWORD: ${RELEASEFLOW_SMTP_PASSWORD:-}
+      RELEASEFLOW_SMTP_AUTH: ${RELEASEFLOW_SMTP_AUTH:-false}
+      RELEASEFLOW_SMTP_STARTTLS: ${RELEASEFLOW_SMTP_STARTTLS:-false}
+      RELEASEFLOW_AUTOMATION_EMAIL_FROM: ${RELEASEFLOW_AUTOMATION_EMAIL_FROM:-}
+      # Public changelog links are built from this, never from a request's Host header.
+      RELEASEFLOW_PUBLIC_BASE_URL: ${RELEASEFLOW_PUBLIC_BASE_URL:-http://localhost:8080}
+      # Empty serves changelogs by path only; a domain here needs wildcard DNS and TLS.
+      RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN: ${RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN:-}
+      # Notion, Confluence, Microsoft Teams, and Zendesk actions need no variables: their
+      # tokens, callback URLs, and client secrets are entered per action in the UI, and
+      # RELEASEFLOW_NOTION_API_BASE_URL and RELEASEFLOW_NOTION_VERSION have working
+      # defaults that must not be blanked.
+      # Other optional settings, including RELEASEFLOW_SENSITIVE_PATHS, are
+      # deliberately not forwarded: Compose turns an unset variable into an empty
+      # string, which would replace the default in application.properties (an
+      # empty sensitive-path list stops the application).
+      # The GitHub access token is set per Project in the UI, not here.
+    ports:
+      - "127.0.0.1:${RELEASEFLOW_HTTP_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - releaseflow
+      - observability
+
+  db:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: ${RELEASEFLOW_DB_NAME:-releaseflow}
+      POSTGRES_USER: ${RELEASEFLOW_DB_USERNAME:-releaseflow}
+      POSTGRES_PASSWORD: ${RELEASEFLOW_DB_PASSWORD:?set RELEASEFLOW_DB_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # No published port: only the application reaches the database.
+    networks:
+      - releaseflow
+
+  prometheus:
+    image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # A demo keeps a week. A real deployment decides this for itself.
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      # Z relabels for SELinux hosts and is ignored elsewhere; without it the container
+      # is refused the file on Fedora and its relatives.
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,Z
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${RELEASEFLOW_PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - observability
+      - observability-ui
+
+  grafana:
+    image: grafana/grafana:13.2.1@sha256:f772d434e8fab0049deb2b1b30abd43342bcfca1537614aa8d36080232cf4283
+    environment:
+      GF_SECURITY_ADMIN_USER: ${RELEASEFLOW_GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${RELEASEFLOW_GRAFANA_PASSWORD:?set RELEASEFLOW_GRAFANA_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro,Z
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${RELEASEFLOW_GRAFANA_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --output-document=/dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    # Grafana reads Prometheus, never the application's management port.
+    networks:
+      - observability-ui
+
+volumes:
+  postgres-data:
+    name: releaseflow-demo-postgres-data
+  prometheus-data:
+    name: releaseflow-demo-prometheus-data
+  grafana-data:
+    name: releaseflow-demo-grafana-data
+
+networks:
+  releaseflow:
+    name: releaseflow-demo
+  # Carries the management port and nothing else. Marked internal, so what is on it
+  # cannot reach the host or the Internet and the host cannot reach in.
+  observability:
+    name: releaseflow-demo-observability
+    internal: true
+  observability-ui:
+    name: releaseflow-demo-observability-ui

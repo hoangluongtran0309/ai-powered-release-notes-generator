@@ -1,0 +1,344 @@
+package com.hoangluongtran0309.releaseflow.release;
+
+import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
+import com.hoangluongtran0309.releaseflow.account.RegistrationResult;
+import com.hoangluongtran0309.releaseflow.account.RegistrationService;
+import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestChanges;
+import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class ReleasePublicationIntegrationTest extends PostgreSqlIntegrationTest {
+
+    // Neither change has an AI summary, so each note uses the pull request titles.
+    private static final String OPERATOR_NOTE = """
+            # Release 1.4.0
+
+            Exports and clearer config.
+
+            ## What's New
+
+            This release includes 2 changes: 1 breaking change and 1 new feature.
+
+            > ⚠️ 1 breaking change requires action before upgrading.
+
+            ## ⚠️ Breaking Changes
+
+            - **rename config keys** ([#2](https://github.com/acme/releaseflow/pull/2))
+
+            ## ✨ New Features
+
+            - **add the inbox** ([#1](https://github.com/acme/releaseflow/pull/1))
+            """;
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private RegistrationService registrationService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    @AfterEach
+    void clearDatabase() {
+        // Published releases reject DELETE by design; TRUNCATE bypasses row triggers.
+        jdbcTemplate.execute("TRUNCATE public_changelog_entries, automation_action_runs, automation_runs, automation_publish_jobs, automation_rule_actions, automation_rules, release_audience_notes, release_change_reviews, release_notes, release_changes, releases");
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
+        jdbcTemplate.update("DELETE FROM changes");
+        jdbcTemplate.update("DELETE FROM integration_sources");
+        jdbcTemplate.update("DELETE FROM projects");
+        jdbcTemplate.update("DELETE FROM app_users");
+        deleteOrganizationSettings();
+        jdbcTemplate.update("DELETE FROM organizations");
+    }
+
+    @Test
+    void publishesTheAudienceNotesAsAnImmutableSnapshot() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID feature = TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1,
+                "feat(ui): add the inbox", "FEATURE", false, false, null);
+        TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 2,
+                "fix!: rename config keys", "FIX", true, false, owner.userId());
+        UUID releaseId = approvedRelease(owner, projectId, "1.4.0");
+
+        publish(owner, projectId, releaseId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.publishedAt", notNullValue()))
+                .andExpect(jsonPath("$.publisherName").value("Mai Tran"))
+                .andExpect(jsonPath("$.approverName").value("Mai Tran"))
+                .andExpect(jsonPath("$.approvedAt", notNullValue()))
+                .andExpect(jsonPath("$.decisions.length()").value(2))
+                .andExpect(jsonPath("$.markdown").doesNotExist())
+                .andExpect(jsonPath("$.notes.length()").value(3))
+                .andExpect(jsonPath("$.notes[*].audienceName").value(contains("Contributor", "End user", "Operator")))
+                .andExpect(jsonPath("$.notes[2].content").value(OPERATOR_NOTE));
+
+        // A later correction of an included change must not alter the published notes.
+        mockMvc.perform(post("/api/projects/{projectId}/changes/{changeId}/review", projectId, feature)
+                        .session(owner.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"documentation\",\"breaking\":false}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}/notes", projectId, releaseId)
+                        .session(owner.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[2].audienceCode").value("operator"))
+                .andExpect(jsonPath("$[2].content").value(OPERATOR_NOTE));
+        mockMvc.perform(get("/api/projects/{projectId}/releases", projectId).session(owner.session()))
+                .andExpect(jsonPath("$[0].status").value("PUBLISHED"))
+                .andExpect(jsonPath("$[0].publishedAt", notNullValue()))
+                .andExpect(jsonPath("$[0].changeCount").value(2));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM release_audience_notes WHERE release_id = ?", Integer.class, releaseId
+        )).isEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM release_notes WHERE release_id = ?", Integer.class, releaseId
+        )).isZero();
+    }
+
+    @Test
+    void rejectsEveryChangeToAPublishedRelease() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID included = TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1,
+                "feat: add the inbox", "FEATURE", false, false, null);
+        UUID releaseId = approvedRelease(owner, projectId, "1.4.0");
+        publish(owner, projectId, releaseId).andExpect(status().isOk());
+        UUID later = TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 2,
+                "fix: handle empty tables", "FIX", false, false, null);
+
+        expectPublished(publish(owner, projectId, releaseId));
+        expectPublished(mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
+                .session(owner.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"version\":\"1.4.1\"}")));
+        expectPublished(mockMvc.perform(delete("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
+                .session(owner.session())
+                .with(csrf())));
+        expectPublished(addChanges(owner, projectId, releaseId, "{\"changeIds\":[\"%s\"]}".formatted(later)));
+        expectPublished(mockMvc.perform(delete("/api/projects/{projectId}/releases/{releaseId}/changes/{changeId}",
+                        projectId, releaseId, included)
+                .session(owner.session())
+                .with(csrf())));
+        for (String action : new String[]{"request-review", "approve", "return-to-draft"}) {
+            expectPublished(mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/" + action, projectId, releaseId)
+                    .session(owner.session())
+                    .with(csrf())));
+        }
+        expectPublished(mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}/schedule", projectId, releaseId)
+                .session(owner.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"plannedReleaseAt\":\"2099-01-01T00:00:00Z\"}")));
+        expectPublished(mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decision",
+                        projectId, releaseId, included)
+                .session(owner.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"APPROVE\",\"category\":\"feature\",\"breaking\":false}")));
+
+        mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
+                        .session(owner.session()))
+                .andExpect(jsonPath("$.version").value("1.4.0"))
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.changes.length()").value(1))
+                .andExpect(jsonPath("$.decisions.length()").value(1));
+    }
+
+    @Test
+    void publishesOnlyApprovedReleasesAndRefusesReusedVersions() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID emptyDraft = createDraft(owner, projectId, "1.4.0");
+
+        publish(owner, projectId, emptyDraft)
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("release_status_conflict"))
+                .andExpect(jsonPath("$.detail").value("Approve this release before publishing it."));
+
+        TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1, "feat: add the inbox", "FEATURE", false, false, null);
+        addChanges(owner, projectId, emptyDraft, "{\"allAvailable\":true}").andExpect(status().isOk());
+        approve(owner, projectId, emptyDraft);
+        publish(owner, projectId, emptyDraft).andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/projects/{projectId}/releases", projectId)
+                        .session(owner.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":\"1.4.0\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("release_version_taken"));
+        UUID next = createDraft(owner, projectId, "1.5.0");
+        mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}", projectId, next)
+                        .session(owner.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":\"1.4.0\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("release_version_taken"));
+        mockMvc.perform(get("/api/projects/{projectId}/releases", projectId).session(owner.session()))
+                .andExpect(jsonPath("$[0].version").value("1.5.0"))
+                .andExpect(jsonPath("$[0].status").value("DRAFT"))
+                .andExpect(jsonPath("$[1].version").value("1.4.0"))
+                .andExpect(jsonPath("$[1].status").value("PUBLISHED"))
+                .andExpect(jsonPath("$[1].reviewedCount").value(1))
+                .andExpect(jsonPath("$[1].approvedAt", notNullValue()));
+    }
+
+    @Test
+    void publishesOnlyInsideTheTenant() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        Owner other = registerAndLogin("other@example.com", "Other Owner");
+        UUID projectId = createProject(owner);
+        TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1, "feat: add the inbox", "FEATURE", false, false, null);
+        UUID releaseId = approvedRelease(owner, projectId, "1.4.0");
+
+        publish(other, projectId, releaseId)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("release_not_found"));
+        mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/publish", projectId, releaseId)
+                        .session(owner.session()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/projects/{projectId}/releases/{releaseId}", projectId, releaseId)
+                        .session(owner.session()))
+                .andExpect(jsonPath("$.status").value("APPROVED"))
+                .andExpect(jsonPath("$.markdown").doesNotExist());
+    }
+
+    private static void expectPublished(ResultActions result) throws Exception {
+        result.andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("release_published"))
+                .andExpect(jsonPath("$.detail", startsWith("This release is published.")));
+    }
+
+    private ResultActions publish(Owner owner, UUID projectId, UUID releaseId) throws Exception {
+        return mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/publish", projectId, releaseId)
+                .session(owner.session())
+                .with(csrf()));
+    }
+
+    private UUID createDraft(Owner owner, UUID projectId, String version) throws Exception {
+        String body = mockMvc.perform(post("/api/projects/{projectId}/releases", projectId)
+                        .session(owner.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":\"%s\",\"summary\":\"Exports and clearer config.\"}".formatted(version)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return UUID.fromString(JsonPath.read(body, "$.id"));
+    }
+
+    private UUID draftWithAllChanges(Owner owner, UUID projectId, String version) throws Exception {
+        UUID releaseId = createDraft(owner, projectId, version);
+        addChanges(owner, projectId, releaseId, "{\"allAvailable\":true}").andExpect(status().isOk());
+        return releaseId;
+    }
+
+    private UUID approvedRelease(Owner owner, UUID projectId, String version) throws Exception {
+        UUID releaseId = draftWithAllChanges(owner, projectId, version);
+        approve(owner, projectId, releaseId);
+        return releaseId;
+    }
+
+    // Requests review, approves every change as shown, and approves the release.
+    private void approve(Owner owner, UUID projectId, UUID releaseId) throws Exception {
+        String inReview = mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/request-review", projectId, releaseId)
+                        .session(owner.session())
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<Map<String, Object>> changes = JsonPath.read(inReview, "$.changes");
+        for (Map<String, Object> change : changes) {
+            mockMvc.perform(put("/api/projects/{projectId}/releases/{releaseId}/changes/{changeId}/decision",
+                            projectId, releaseId, change.get("id"))
+                            .session(owner.session())
+                            .with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"action\":\"APPROVE\",\"category\":\"%s\",\"breaking\":%s}".formatted(
+                                    change.get("category").toString().toLowerCase(Locale.ROOT), change.get("breaking"))))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/approve", projectId, releaseId)
+                        .session(owner.session())
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+    }
+
+    private ResultActions addChanges(Owner owner, UUID projectId, UUID releaseId, String body) throws Exception {
+        return mockMvc.perform(post("/api/projects/{projectId}/releases/{releaseId}/changes", projectId, releaseId)
+                .session(owner.session())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    private UUID createProject(Owner owner) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/projects")
+                        .session(owner.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"ReleaseFlow\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return UUID.fromString(JsonPath.read(result.getResponse().getContentAsString(), "$.id"));
+    }
+
+    private Owner registerAndLogin(String email, String displayName) throws Exception {
+        RegistrationRequest request = new RegistrationRequest();
+        request.setOrganizationName(email);
+        request.setDisplayName(displayName);
+        request.setEmail(email);
+        request.setPassword("owner-password");
+        RegistrationResult registration = registrationService.register(request);
+        MvcResult login = mockMvc.perform(post("/login")
+                        .with(csrf())
+                        .param("email", email)
+                        .param("password", "owner-password"))
+                .andExpect(status().isFound())
+                .andReturn();
+        return new Owner(
+                registration.organizationId(),
+                registration.userId(),
+                (MockHttpSession) login.getRequest().getSession(false)
+        );
+    }
+
+    private record Owner(UUID organizationId, UUID userId, MockHttpSession session) {
+    }
+}

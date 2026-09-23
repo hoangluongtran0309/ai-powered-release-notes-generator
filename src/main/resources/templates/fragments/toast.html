@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--/* One toast: what just happened, and a way to put it away. It never disappears on a
+       timer — WCAG 2.2.1 asks that nothing time out on somebody, and a person who reads
+       slowly has as much right to the message as anybody else. It is a live region, so a
+       screen reader announces it without taking focus away from the form just used. */-->
+<div th:fragment="toast(message)" class="toast-item" role="status" x-data="{ shown: true }" x-show="shown">
+    <svg class="icon shrink-0 text-emerald-600" aria-hidden="true">
+        <use th:href="@{/svg/ui-icons.svg#check}"></use>
+    </svg>
+    <p class="grow" th:text="${message}">Saved.</p>
+    <button type="button" class="icon-button btn-xs h-11 w-11 shrink-0" @click="shown = false"
+            th:aria-label="#{ui.common.dismiss}" aria-label="Dismiss">
+        <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#close}"></use></svg>
+    </button>
+</div>
+</body>
+</html>

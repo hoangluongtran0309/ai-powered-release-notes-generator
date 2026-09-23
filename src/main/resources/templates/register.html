@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/auth}">
+<head>
+    <title th:text="#{ui.register.title}">Create your organization</title>
+</head>
+<body>
+<main layout:fragment="content" class="grid min-h-screen lg:grid-cols-2">
+    <section class="auth-showcase hidden flex-col justify-between border-r theme-border p-12 lg:flex">
+        <a th:href="@{/}" class="flex items-center gap-3 text-lg font-bold">
+            <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
+                 width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
+        </a>
+        <div class="max-w-xl">
+            <p class="auth-showcase-accent mb-5 text-sm font-semibold uppercase tracking-[0.24em]" th:text="#{ui.register.eyebrow}">One workspace, every audience</p>
+            <h1 class="text-5xl font-bold leading-tight" th:text="#{ui.register.heading}">Create release notes without losing human judgment.</h1>
+            <p class="auth-showcase-copy mt-6 text-lg leading-8" th:text="#{ui.register.body}">Set up your organization, then connect repositories.</p>
+        </div>
+        <p class="auth-showcase-copy text-sm" th:text="#{ui.register.footnote}">Your first account becomes the organization administrator.</p>
+    </section>
+    <section class="theme-canvas flex items-center justify-center p-5 sm:p-10">
+        <div class="w-full max-w-lg">
+            <a th:href="@{/}" class="mb-8 flex items-center gap-3 text-xl font-bold lg:hidden">
+                <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
+                     width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
+            </a>
+            <div class="auth-card">
+                <p class="text-sm font-semibold text-indigo-600" th:text="#{ui.register.getStarted}">Get started</p>
+                <h2 class="mt-2 text-3xl font-bold tracking-tight" th:text="#{ui.register.cardHeading}">Create your organization</h2>
+                <p class="mt-2 text-sm text-slate-600" th:text="#{ui.register.cardBody}">The first account becomes the organization administrator.</p>
+                <form class="mt-7 grid gap-4" th:action="@{/register}" th:object="${registration}" method="post">
+                    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.register.organizationName}">Organization name</span>
+                        <input type="text" th:field="*{organizationName}" maxlength="120" autocomplete="organization"
+                               class="input input-bordered w-full" th:errorclass="input-error" required autofocus>
+                        <span class="field-error" th:if="${#fields.hasErrors('organizationName')}" th:errors="*{organizationName}"></span>
+                    </label>
+                    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.register.outputLanguage}">Release note language</span>
+                        <input type="text" th:field="*{outputLanguage}" maxlength="64" list="output-language-options"
+                               autocomplete="off" spellcheck="false" placeholder="en"
+                               class="input input-bordered w-full" th:errorclass="input-error">
+                        <datalist id="output-language-options">
+                            <option th:each="option : ${outputLanguageOptions}" th:value="${option.tag}" th:text="${option.displayName}">English</option>
+                        </datalist>
+                        <span class="text-xs text-slate-500" th:text="#{ui.register.outputLanguageHint}">A language tag such as en, vi, or pt-BR.</span>
+                        <span class="field-error" th:if="${#fields.hasErrors('outputLanguage')}" th:errors="*{outputLanguage}"></span>
+                    </label>
+                    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.common.displayName}">Your name</span>
+                        <input type="text" th:field="*{displayName}" maxlength="120" autocomplete="name"
+                               class="input input-bordered w-full" th:errorclass="input-error" required>
+                        <span class="field-error" th:if="${#fields.hasErrors('displayName')}" th:errors="*{displayName}"></span>
+                    </label>
+                    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.common.email}">Email</span>
+                        <input type="email" th:field="*{email}" maxlength="254" autocomplete="email"
+                               class="input input-bordered w-full" th:errorclass="input-error" required>
+                        <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></span>
+                    </label>
+                    <label class="form-control" x-data="passwordField()" th:data-label-show="#{ui.common.show}" th:data-label-hide="#{ui.common.hide}"><span class="label-text font-medium" th:text="#{ui.common.password}">Password</span>
+                        <span class="join w-full">
+                            <input :type="visible ? 'text' : 'password'" type="password" name="password" minlength="12" maxlength="72"
+                                   autocomplete="new-password" class="input input-bordered join-item w-full"
+                                   th:classappend="${#fields.hasErrors('password')} ? 'input-error'" required>
+                            <button type="button" class="btn btn-outline join-item" @click="toggle" x-text="label">Show</button>
+                        </span>
+                        <span class="label-text-alt" th:text="#{ui.register.passwordHint}">Use at least 12 characters.</span>
+                        <span class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
+                    </label>
+                    <button type="submit" class="btn btn-primary mt-2 min-h-12" th:text="#{ui.register.submit}">Create organization</button>
+                </form>
+                <p class="mt-6 text-center text-sm text-slate-600"><span th:text="#{ui.register.haveAccount}">Already have an account?</span>
+                    <a th:href="@{/login}" class="link link-primary font-semibold" th:text="#{ui.register.signIn}">Sign in</a></p>
+            </div>
+        </div>
+    </section>
+</main>
+</body>
+</html>

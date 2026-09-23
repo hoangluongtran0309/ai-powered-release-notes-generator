@@ -1,0 +1,355 @@
+package com.hoangluongtran0309.releaseflow.support;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import tools.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * A local HTTP server standing in for the GitHub REST API: the pull request access
+ * check, the paginated pull request file list, a pull request's commits, and the
+ * releases automation publishes.
+ */
+public final class GitHubStub implements AutoCloseable {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final Pattern FILES = Pattern.compile("/repos/[^/]+/[^/]+/pulls/\\d+/files");
+    private static final Pattern COMMITS = Pattern.compile("/repos/[^/]+/[^/]+/pulls/\\d+/commits");
+    private static final Pattern PULLS = Pattern.compile("/repos/[^/]+/[^/]+/pulls");
+    private static final Pattern RELEASE_BY_TAG = Pattern.compile("/repos/[^/]+/[^/]+/releases/tags/(.+)");
+    private static final Pattern RELEASES = Pattern.compile("/repos/[^/]+/[^/]+/releases");
+    private static final Pattern PAGE = Pattern.compile("(?:^|&)page=(\\d+)");
+    private static final int PAGE_SIZE = 100;
+
+    private final HttpServer server;
+    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final List<RecordedRequest> requests = new CopyOnWriteArrayList<>();
+    private volatile List<Map<String, Object>> files = List.of();
+    private volatile Failure filesFailure;
+    private volatile Failure accessFailure;
+    private volatile List<Map<String, Object>> commits = List.of();
+    private volatile Failure commitsFailure;
+    private volatile List<Map<String, Object>> pullRequests = List.of();
+    private volatile Failure listFailure;
+    private final AtomicInteger listFailuresLeft = new AtomicInteger();
+    private final Map<String, String> releases = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile Failure releaseLookupFailure;
+    private volatile Failure releaseCreationFailure;
+    private volatile Duration delay = Duration.ZERO;
+
+    private GitHubStub() {
+        try {
+            server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+        server.createContext("/", this::handle);
+        server.setExecutor(executor);
+        server.start();
+    }
+
+    public static GitHubStub start() {
+        return new GitHubStub();
+    }
+
+    public String baseUrl() {
+        return "http://localhost:" + server.getAddress().getPort();
+    }
+
+    /** Every pull request reports these files as modified. */
+    public void respondWithFiles(String... paths) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (String path : paths) {
+            list.add(Map.of("filename", path, "status", "modified"));
+        }
+        files = List.copyOf(list);
+        filesFailure = null;
+    }
+
+    public void respondWithRename(String previousPath, String path) {
+        files = List.of(Map.of("filename", path, "previous_filename", previousPath, "status", "renamed"));
+        filesFailure = null;
+    }
+
+    public void respondWithFileCount(int count) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            list.add(Map.of("filename", "src/main/java/File" + index + ".java", "status", "added"));
+        }
+        files = List.copyOf(list);
+        filesFailure = null;
+    }
+
+    public void failFiles(int status) {
+        filesFailure = new Failure(status, Map.of());
+    }
+
+    public void failFiles(int status, Map<String, String> headers) {
+        filesFailure = new Failure(status, headers);
+    }
+
+    /** The commit messages of every pull request, in order. */
+    public void respondWithCommits(String... messages) {
+        commits = java.util.Arrays.stream(messages)
+                .map(message -> Map.<String, Object>of("sha", "c".repeat(40), "commit", Map.of("message", message)))
+                .toList();
+    }
+
+    public void failCommits(int status) {
+        commitsFailure = new Failure(status, Map.of());
+    }
+
+    public List<RecordedRequest> commitRequests() {
+        return requests.stream().filter(request -> COMMITS.matcher(request.path()).matches()).toList();
+    }
+
+    public void failAccessCheck(int status) {
+        accessFailure = new Failure(status, Map.of());
+    }
+
+    /**
+     * The repository's closed pull requests, served most recently updated first, a page
+     * at a time, to history imports.
+     */
+    public void respondWithPullRequests(List<Map<String, Object>> closed) {
+        pullRequests = closed.stream()
+                .sorted(Comparator.comparing((Map<String, Object> pr) -> Instant.parse(pr.get("updated_at").toString())).reversed())
+                .toList();
+    }
+
+    /** The next {@code times} pull request list requests fail with this status and headers. */
+    public void failPullRequestList(int status, Map<String, String> headers, int times) {
+        listFailure = new Failure(status, headers);
+        listFailuresLeft.set(times);
+    }
+
+    /** A closed pull request, merged when {@code mergedAt} is not null. */
+    public static Map<String, Object> closedPullRequest(int number, Instant mergedAt, Instant updatedAt) {
+        Map<String, Object> pullRequest = new LinkedHashMap<>();
+        pullRequest.put("number", number);
+        pullRequest.put("title", "feat: change " + number);
+        pullRequest.put("body", null);
+        pullRequest.put("merged_at", mergedAt == null ? null : mergedAt.toString());
+        pullRequest.put("updated_at", updatedAt.toString());
+        pullRequest.put("merge_commit_sha", "%040x".formatted(number));
+        pullRequest.put("html_url", "https://github.com/acme/releaseflow/pull/" + number);
+        pullRequest.put("user", Map.of("login", "mai-dev"));
+        pullRequest.put("base", Map.of("ref", "main"));
+        pullRequest.put("labels", List.of());
+        return pullRequest;
+    }
+
+    public List<RecordedRequest> listRequests() {
+        return requests.stream().filter(request -> request.query().contains("sort=updated")).toList();
+    }
+
+    /** A release that already exists for a tag, with the body it carries. */
+    public void publishedRelease(String tag, String body) {
+        releases.put(tag, body);
+    }
+
+    /** The body of the release the stub holds for a tag, or null when it has none. */
+    public String releaseBody(String tag) {
+        return releases.get(tag);
+    }
+
+    public void failReleaseLookup(int status) {
+        releaseLookupFailure = new Failure(status, Map.of());
+    }
+
+    public void failReleaseCreation(int status) {
+        releaseCreationFailure = new Failure(status, Map.of());
+    }
+
+    public List<RecordedRequest> releaseRequests() {
+        return requests.stream().filter(request -> request.path().contains("/releases")).toList();
+    }
+
+    public void delay(Duration delay) {
+        this.delay = delay;
+    }
+
+    public List<RecordedRequest> requests() {
+        return List.copyOf(requests);
+    }
+
+    public List<RecordedRequest> fileRequests() {
+        return requests.stream().filter(request -> FILES.matcher(request.path()).matches()).toList();
+    }
+
+    public void reset() {
+        requests.clear();
+        files = List.of();
+        filesFailure = null;
+        accessFailure = null;
+        releases.clear();
+        releaseLookupFailure = null;
+        releaseCreationFailure = null;
+        commits = List.of();
+        commitsFailure = null;
+        pullRequests = List.of();
+        listFailure = null;
+        listFailuresLeft.set(0);
+        delay = Duration.ZERO;
+    }
+
+    @Override
+    public void close() {
+        server.stop(0);
+        executor.shutdownNow();
+    }
+
+    private void handle(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        String query = exchange.getRequestURI().getRawQuery() == null ? "" : exchange.getRequestURI().getRawQuery();
+        requests.add(new RecordedRequest(
+                exchange.getRequestMethod(),
+                path,
+                query,
+                exchange.getRequestHeaders().getFirst("Authorization"),
+                exchange.getRequestHeaders().getFirst("Accept"),
+                exchange.getRequestHeaders().getFirst("X-GitHub-Api-Version")
+        ));
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+
+        Matcher releaseTag = RELEASE_BY_TAG.matcher(path);
+        if (releaseTag.matches()) {
+            Failure failure = releaseLookupFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            String tag = java.net.URLDecoder.decode(releaseTag.group(1), StandardCharsets.UTF_8);
+            String body = releases.get(tag);
+            if (body == null) {
+                send(exchange, 404, Map.of(), "{\"message\":\"Not Found\"}");
+                return;
+            }
+            send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(release(tag, body)));
+            return;
+        }
+        if (RELEASES.matcher(path).matches() && "POST".equals(exchange.getRequestMethod())) {
+            Failure failure = releaseCreationFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            Map<String, Object> request = OBJECT_MAPPER.readValue(
+                    new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8), Map.class);
+            String tag = String.valueOf(request.get("tag_name"));
+            String body = String.valueOf(request.get("body"));
+            if (releases.putIfAbsent(tag, body) != null) {
+                send(exchange, 422, Map.of(), "{\"message\":\"already_exists\"}");
+                return;
+            }
+            send(exchange, 201, Map.of(), OBJECT_MAPPER.writeValueAsString(release(tag, body)));
+            return;
+        }
+
+        if (COMMITS.matcher(path).matches()) {
+            Failure failure = commitsFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            Matcher matcher = PAGE.matcher(query);
+            int page = matcher.find() ? Integer.parseInt(matcher.group(1)) : 1;
+            List<Map<String, Object>> all = commits;
+            int from = Math.min(all.size(), (page - 1) * PAGE_SIZE);
+            int to = Math.min(all.size(), from + PAGE_SIZE);
+            send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(all.subList(from, to)));
+        } else if (FILES.matcher(path).matches()) {
+            Failure failure = filesFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(page(query)));
+        } else if (PULLS.matcher(path).matches() && query.contains("sort=updated")) {
+            Failure failure = listFailure;
+            if (failure != null && listFailuresLeft.getAndUpdate(left -> Math.max(0, left - 1)) > 0) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"stubbed failure\"}");
+                return;
+            }
+            Matcher matcher = PAGE.matcher(query);
+            int page = matcher.find() ? Integer.parseInt(matcher.group(1)) : 1;
+            List<Map<String, Object>> all = pullRequests;
+            int from = Math.min(all.size(), (page - 1) * PAGE_SIZE);
+            int to = Math.min(all.size(), from + PAGE_SIZE);
+            send(exchange, 200, Map.of(), OBJECT_MAPPER.writeValueAsString(all.subList(from, to)));
+        } else if (PULLS.matcher(path).matches()) {
+            Failure failure = accessFailure;
+            if (failure != null) {
+                send(exchange, failure.status(), failure.headers(), "{\"message\":\"Bad credentials\"}");
+                return;
+            }
+            send(exchange, 200, Map.of(), "[]");
+        } else {
+            send(exchange, 404, Map.of(), "{\"message\":\"Not Found\"}");
+        }
+    }
+
+    private static Map<String, Object> release(String tag, String body) {
+        return Map.of(
+                "tag_name", tag,
+                "name", tag,
+                "body", body,
+                "html_url", "https://github.com/acme/releaseflow/releases/tag/" + tag
+        );
+    }
+
+    private List<Map<String, Object>> page(String query) {
+        Matcher matcher = PAGE.matcher(query);
+        int page = matcher.find() ? Integer.parseInt(matcher.group(1)) : 1;
+        List<Map<String, Object>> all = files;
+        int from = Math.min(all.size(), (page - 1) * PAGE_SIZE);
+        int to = Math.min(all.size(), from + PAGE_SIZE);
+        return all.subList(from, to);
+    }
+
+    private static void send(HttpExchange exchange, int status, Map<String, String> headers, String body)
+            throws IOException {
+        byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        new LinkedHashMap<>(headers).forEach((name, value) -> exchange.getResponseHeaders().add(name, value));
+        exchange.sendResponseHeaders(status, payload.length);
+        exchange.getResponseBody().write(payload);
+        exchange.close();
+    }
+
+    public record RecordedRequest(
+            String method,
+            String path,
+            String query,
+            String authorization,
+            String accept,
+            String apiVersion
+    ) {
+    }
+
+    private record Failure(int status, Map<String, String> headers) {
+    }
+}

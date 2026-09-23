@@ -1,0 +1,67 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:00"
+      timezone: Asia/Ho_Chi_Minh
+    groups:
+      github-actions-minor-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, ci]
+
+  - package-ecosystem: maven
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:15"
+      timezone: Asia/Ho_Chi_Minh
+    groups:
+      maven-minor-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, java]
+
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:30"
+      timezone: Asia/Ho_Chi_Minh
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, javascript]
+
+  - package-ecosystem: docker
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:45"
+      timezone: Asia/Ho_Chi_Minh
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, docker]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: Asia/Ho_Chi_Minh
+    groups:
+      docker-compose-minor-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, docker]

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/public}">
+<head>
+    <title th:text="|${entry.projectName} ${entry.releaseVersion}|">Release</title>
+</head>
+<body>
+<main layout:fragment="content">
+    <nav class="text-sm"><a class="hover:underline" th:href="${changelogUrl}" th:text="#{ui.changelog.allNotes}">← All release notes</a></nav>
+
+    <header class="mt-4 max-w-3xl">
+        <p class="page-eyebrow" th:text="${entry.projectName}">Project</p>
+        <h1 class="page-heading" th:text="${entry.releaseVersion}">1.4.0</h1>
+        <p class="page-subtitle">
+            <time th:datetime="${entry.publishedAt}"
+                  th:text="${publishedOn.format(entry.publishedAt)}">18 Sep 2026</time>
+            <span th:text="#{ui.changelog.writtenForInline(${entry.audienceName})}"> · written for End user</span>
+        </p>
+    </header>
+
+    <!-- The only HTML here is what MarkdownHtml produced: raw HTML in a note is escaped,
+         link targets are sanitized, and images became plain links. -->
+    <article class="release-note-body surface-card mt-8 p-6" th:lang="${entry.language}"
+             th:utext="${entry.html()}"></article>
+</main>
+</body>
+</html>

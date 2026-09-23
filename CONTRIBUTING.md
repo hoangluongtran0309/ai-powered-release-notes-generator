@@ -64,6 +64,33 @@ Before requesting review:
 5. Prefer a squash merge so the resulting integration commit also follows the
    commit convention.
 
-Merges into `main` represent a reviewed release decision. Tags, release
-artifacts, and deployment automation are added only when a real publication
-process exists.
+GitHub Actions enforces the automated part of this gate on every pull request
+to `develop` and `main`: the pull request title must follow the commit
+convention above, and the `CI`, `CodeQL`, `Dependency Review`, `Secret Scan`,
+and `Container` workflows must pass. Keep new actions pinned to a commit SHA
+and new images to a digest.
+
+By contributing, you agree that your contribution is licensed under the
+[Apache License 2.0](LICENSE), the same licence as the rest of the project. There
+is no separate contributor agreement to sign.
+
+Merges into `main` represent a reviewed release decision.
+
+## Releasing
+
+A release is a tag, and nothing else is a release. To cut one:
+
+1. branch `release/<version>` from `develop`;
+2. set the POM version to `<version>` with no `-SNAPSHOT`, and turn the
+   `[Unreleased]` section of `CHANGELOG.md` into `[<version>] - <date>`;
+3. open a pull request into `main` and let the gates run;
+4. merge it, then tag that commit `v<version>` and push the tag;
+5. merge `main` back into `develop` and set the POM to the next `-SNAPSHOT`.
+
+Pushing the tag is what publishes. The `Release` workflow refuses a tag that is
+not an ancestor of `main`, one whose name disagrees with the POM, and any
+`-SNAPSHOT`, so a tag pushed by mistake fails rather than ships. It then runs the
+whole suite again, builds and scans the image, and publishes the JAR, a CycloneDX
+SBOM, `SHA256SUMS`, the licence and the notice, the image on GHCR tagged
+`X.Y.Z`/`X.Y`/`X`/`latest`, and a provenance attestation for both the image and
+the JAR.

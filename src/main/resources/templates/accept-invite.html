@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/auth}">
+<head>
+    <title th:text="#{ui.acceptInvite.title}">Join organization</title>
+</head>
+<body>
+<main layout:fragment="content" class="flex min-h-screen items-center justify-center p-5 sm:p-10">
+    <div class="w-full max-w-md">
+        <a th:href="@{/}" class="mb-8 flex items-center gap-3 text-xl font-bold">
+            <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
+                 width="40" height="40" class="h-10 w-10 shrink-0"> ReleaseFlow
+        </a>
+
+        <div class="auth-card" th:if="${preview == null}">
+            <p class="text-sm font-semibold text-indigo-600" th:text="#{ui.acceptInvite.eyebrow}">Invitation</p>
+            <h1 class="mt-2 text-3xl font-bold tracking-tight" th:text="#{ui.acceptInvite.heading}">Join an organization</h1>
+            <div class="alert alert-error mt-6" role="alert" th:if="${invalid != null}"><span th:text="${invalid}">This invitation link is invalid or has expired.</span></div>
+            <p class="mt-2 text-sm text-slate-600" th:if="${invalid == null}" th:text="#{ui.acceptInvite.opening}">Opening your invitation…</p>
+            <form method="post" th:action="@{/accept-invite/review}" th:object="${tokenRequest}" class="mt-6 flex flex-col gap-4"
+                  th:attr="data-invitation-open=${invalid == null} ? 'true' : null">
+                <label class="form-control"><span class="label-text font-medium" th:text="#{ui.acceptInvite.code}">Invitation code</span>
+                    <input type="text" th:field="*{token}" maxlength="128" autocomplete="off" spellcheck="false"
+                           class="input input-bordered w-full font-mono text-xs" required>
+                </label>
+                <button type="submit" class="btn btn-primary" th:text="#{ui.acceptInvite.continue}">Continue</button>
+            </form>
+        </div>
+
+        <div class="auth-card" th:if="${preview != null}">
+            <p class="text-sm font-semibold text-indigo-600" th:text="#{ui.acceptInvite.eyebrow}">Invitation</p>
+            <h1 class="mt-2 text-3xl font-bold tracking-tight"
+                th:text="#{ui.acceptInvite.joinHeading(${preview.organizationName})}">Join Acme</h1>
+            <p class="mt-2 text-sm text-slate-600">
+                <span th:text="#{ui.acceptInvite.invitedAsBefore}">You were invited as</span>
+                <span class="font-semibold" th:text="${preview.email}">teammate@example.com</span><span
+                        th:text="#{ui.acceptInvite.invitedAsAfter}">. Choose your name and a password.</span>
+            </p>
+            <div class="alert alert-error mt-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">An account already exists.</span></div>
+            <form method="post" th:action="@{/accept-invite}" th:object="${acceptRequest}" class="mt-6 flex flex-col gap-4">
+                <input type="hidden" th:field="*{token}">
+                <label class="form-control"><span class="label-text font-medium" th:text="#{ui.common.displayName}">Your name</span>
+                    <input type="text" th:field="*{displayName}" maxlength="120" autocomplete="name"
+                           class="input input-bordered w-full" th:errorclass="input-error" required autofocus>
+                    <span class="field-error" th:if="${#fields.hasErrors('displayName')}" th:errors="*{displayName}"></span>
+                </label>
+                <label class="form-control" x-data="passwordField()" th:data-label-show="#{ui.common.show}" th:data-label-hide="#{ui.common.hide}"><span class="label-text font-medium" th:text="#{ui.common.password}">Password</span>
+                    <span class="join w-full">
+                        <input :type="visible ? 'text' : 'password'" type="password" th:field="*{password}" maxlength="72"
+                               autocomplete="new-password" class="input input-bordered join-item w-full" th:errorclass="input-error" required>
+                        <button type="button" class="btn btn-outline join-item" @click="toggle" x-text="label">Show</button>
+                    </span>
+                    <span class="label-text-alt mt-1 text-slate-500" th:text="#{ui.acceptInvite.passwordHint}">At least 12 characters.</span>
+                    <span class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
+                </label>
+                <button type="submit" class="btn btn-primary mt-2 min-h-12" th:text="#{ui.acceptInvite.submit}">Join organization</button>
+            </form>
+        </div>
+    </div>
+</main>
+</body>
+</html>

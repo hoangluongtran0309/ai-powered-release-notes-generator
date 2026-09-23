@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/main}">
+<head>
+    <title th:text="#{ui.audiences.title}">Audiences</title>
+</head>
+<body>
+<p layout:fragment="page-title" th:text="#{ui.audiences.title}">Audiences</p>
+<div layout:fragment="content">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow" th:text="#{ui.audiences.eyebrow}">Organization administration</p>
+            <h1 class="page-heading" th:text="#{ui.audiences.title}">Audiences</h1>
+            <p class="page-subtitle" th:text="#{ui.audiences.subtitle}">
+                Every approved release gets one release note per audience and language.
+            </p>
+        </div>
+        <div class="page-actions">
+            <a class="btn btn-primary btn-sm" th:href="@{/audiences/new}"
+               th:classappend="${#lists.size(audiences) >= maxAudiences} ? 'btn-disabled'"
+               th:attr="aria-disabled=${#lists.size(audiences) >= maxAudiences} ? 'true' : null">
+                <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#plus}"></use></svg>
+                <span th:text="#{ui.audiences.new}">New audience</span>
+            </a>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Audience was not found.</span></div>
+    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.saved})}" th:if="${param.saved != null}">Audience saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.reset})}" th:if="${param.reset != null}">Audience reset to its shipped preset.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.deleted})}" th:if="${param.deleted != null}">Audience deleted.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.languagesSaved})}" th:if="${param.languagesSaved != null}">Release note languages saved.</div>
+        <div th:replace="~{fragments/toast :: toast(#{ui.audiences.templateSaved})}" th:if="${param.templateSaved != null}">Language template saved.</div>
+    </div>
+
+    <section class="surface-card mb-6 p-6" id="release-languages">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="max-w-2xl">
+                <h2 class="section-heading" th:text="#{ui.audiences.languagesHeading}">Release note languages</h2>
+                <p class="section-copy">
+                    <span th:text="#{ui.audiences.languagesCopyBefore}">Approving a release writes one note per audience.</span>
+                    <strong th:text="${releaseLanguages.outputLanguage}">en</strong><span
+                            th:text="#{ui.audiences.languagesCopyAfter}">; other languages are translated after approval.</span>
+                </p>
+                <p class="mt-2 text-sm text-amber-700" th:if="${releaseLanguages.translationMissing()}"
+                   th:utext="#{ui.audiences.noTranslationProvider}">
+                    No translation provider is configured, so notes in other languages cannot be translated.
+                </p>
+                <p class="mt-2 text-xs text-slate-500" th:if="${releaseLanguages.updatedAt != null}">
+                    <span th:text="#{ui.audiences.lastChangedBefore}">Last changed by</span>
+                    <span th:text="${releaseLanguages.updatedBy}">Mai</span>
+                    <span th:text="#{ui.audiences.on}">on</span>
+                    <time th:datetime="${releaseLanguages.updatedAt}"
+                          th:text="|${#temporals.format(releaseLanguages.updatedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">15 Sep 2026, 10:02 UTC</time>.
+                </p>
+            </div>
+            <form class="flex flex-col gap-2 sm:flex-row sm:items-start" method="post" th:action="@{/audiences/release-languages}">
+                <label class="form-control">
+                    <span class="sr-only" th:text="#{ui.audiences.languagesHeading}">Release note languages</span>
+                    <input type="text" name="targetLanguages" maxlength="200" required autocomplete="off" spellcheck="false"
+                           list="release-language-options" placeholder="en, vi" th:value="${languagesText}"
+                           class="input input-bordered w-full font-mono sm:w-56" th:classappend="${languagesError != null} ? 'input-error'">
+                    <datalist id="release-language-options">
+                        <option th:each="option : ${releaseLanguages.suggestions}" th:value="${option.tag}" th:text="${option.displayName}">English</option>
+                    </datalist>
+                    <span class="label-text-alt" th:text="#{ui.audiences.languagesHint}">Up to 5 language tags, separated by commas.</span>
+                    <span class="field-error" th:if="${languagesError != null}" th:text="${languagesError}">Choose between one and 5 release note languages.</span>
+                </label>
+                <button type="submit" class="btn btn-outline" th:text="#{ui.audiences.saveLanguages}">Save languages</button>
+            </form>
+        </div>
+    </section>
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+        <nav class="surface-card content-start p-3" th:aria-label="#{ui.audiences.listLabel}" aria-label="Audiences" id="audience-list">
+            <ul class="grid gap-1">
+                <li th:each="audience : ${audiences}">
+                    <a class="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm hover:bg-slate-100"
+                       th:href="@{/audiences/{id}(id=${audience.id})}"
+                       th:classappend="${selected != null and selected.id == audience.id} ? 'bg-indigo-50 font-semibold'"
+                       th:attr="aria-current=${selected != null and selected.id == audience.id} ? 'page' : null">
+                        <span class="min-w-0">
+                            <span class="block truncate" th:text="${audience.displayName}">Operator</span>
+                            <span class="audience-code block truncate font-mono text-xs" th:text="${audience.code}">operator</span>
+                        </span>
+                        <span class="badge badge-ghost badge-sm" th:if="${audience.preset}" th:text="#{ui.audiences.preset}">Preset</span>
+                    </a>
+                </li>
+            </ul>
+            <p class="px-3 pt-3 text-xs text-slate-500"
+               th:text="#{ui.audiences.count(${#lists.size(audiences)},${maxAudiences})}">3 of 20 audiences</p>
+        </nav>
+
+        <div class="grid content-start gap-6">
+            <section class="surface-card p-6" id="audience-editor" x-data="audienceEditor()">
+                <h2 class="section-heading" th:text="${selected != null} ? ${selected.displayName} : #{ui.audiences.newHeading}">Operator</h2>
+                <p class="section-copy" th:if="${selected != null and selected.preset}"
+                   th:text="#{ui.audiences.presetCopy}">A shipped audience. Its code is fixed.</p>
+                <p class="section-copy" th:if="${selected == null}"
+                   th:text="#{ui.audiences.newCopy}">The code identifies the audience to the AI.</p>
+
+                <form class="mt-5 grid gap-4" method="post" th:object="${audienceForm}"
+                      th:action="${selected != null} ? @{/audiences/{id}(id=${selected.id})} : @{/audiences}"
+                      @input="dirty = true" @submit="dirty = false">
+                    <input type="hidden" name="audienceId" th:if="${selected != null}" th:value="${selected.id}">
+                    <label class="form-control" th:if="${selected == null}"><span class="label-text font-medium" th:text="#{ui.audiences.code}">Code</span>
+                        <input type="text" th:field="*{code}" maxlength="64" required pattern="[A-Za-z][A-Za-z0-9_]*"
+                               placeholder="leadership" autocomplete="off"
+                               class="input input-bordered w-full font-mono sm:max-w-xs" th:errorclass="input-error">
+                        <span class="label-text-alt" th:text="#{ui.audiences.codeHint}">Lowercase letters, digits, and underscores.</span>
+                        <span class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></span>
+                    </label>
+                    <p class="text-sm" th:if="${selected != null}">
+                        <span class="font-medium" th:text="#{ui.audiences.code}">Code</span>
+                        <code class="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs" th:text="${selected.code}">operator</code>
+                    </p>
+                    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.audiences.displayName}">Display name</span>
+                        <input type="text" th:field="*{displayName}" maxlength="120" required
+                               class="input input-bordered w-full sm:max-w-md" th:errorclass="input-error">
+                        <span class="field-error" th:if="${#fields.hasErrors('displayName')}" th:errors="*{displayName}"></span>
+                    </label>
+                    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.audiences.intent}">Communication intent</span>
+                        <textarea th:field="*{communicationIntent}" maxlength="1000" rows="3"
+                                  class="textarea textarea-bordered w-full" th:errorclass="textarea-error"></textarea>
+                        <span class="label-text-alt" th:text="#{ui.audiences.intentHint}">How this audience wants to be addressed.</span>
+                        <span class="field-error" th:if="${#fields.hasErrors('communicationIntent')}" th:errors="*{communicationIntent}"></span>
+                    </label>
+                    <div class="form-control">
+                        <label class="label-text font-medium" for="templateBody" th:text="#{ui.audiences.template}">Template</label>
+                        <div class="flex flex-wrap gap-1.5" role="group" th:aria-label="#{ui.audiences.insertVariable}" aria-label="Insert a variable">
+                            <button type="button" class="btn btn-outline btn-xs font-mono" th:each="variable : ${variables}"
+                                    th:attr="data-variable=${variable}" th:text="${'{{' + variable + '}}'}"
+                                    @click="insert($el.dataset.variable)">{{whatChanged}}</button>
+                        </div>
+                        <textarea th:field="*{templateBody}" x-ref="template" rows="12" required spellcheck="false"
+                                  class="textarea textarea-bordered w-full font-mono text-xs" th:errorclass="textarea-error"></textarea>
+                        <span class="label-text-alt" th:text="#{ui.audiences.templateHint}">
+                            Mustache renders one change as Markdown.
+                        </span>
+                        <span class="field-error" th:if="${#fields.hasErrors('templateBody')}" th:errors="*{templateBody}"></span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm"
+                                th:text="${selected != null} ? #{ui.audiences.save} : #{ui.audiences.create}">Save audience</button>
+                        <button type="submit" class="btn btn-outline btn-sm" th:formaction="@{/audiences/preview}" formnovalidate th:text="#{ui.audiences.previewButton}">Preview</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="surface-card p-6" id="language-templates"
+                     th:if="${selected != null and !#maps.isEmpty(selected.templateVariants)}">
+                <h2 class="section-heading" th:text="#{ui.audiences.languageTemplatesHeading}">Language templates</h2>
+                <p class="section-copy" th:text="#{ui.audiences.languageTemplatesCopy}">
+                    Notes in these languages use their own template.
+                </p>
+                <form class="mt-5 grid gap-2" method="post" th:each="variant : ${selected.templateVariants}"
+                      th:if="${#lists.contains(releaseLanguages.targetLanguages, variant.key)}"
+                      th:id="|template-${variant.key}|"
+                      th:action="@{/audiences/{id}/templates/{language}(id=${selected.id},language=${variant.key})}"
+                      th:with="failing=${variantLanguage == variant.key}">
+                    <label class="label-text font-medium" th:for="|template-body-${variant.key}|"
+                           th:text="#{ui.audiences.templateFor(${variant.key})}">Template (vi)</label>
+                    <div class="alert alert-error" role="alert" th:if="${failing}"><span th:text="${variantError}">Template is invalid.</span></div>
+                    <textarea name="templateBody" rows="8" required spellcheck="false" th:id="|template-body-${variant.key}|"
+                              class="textarea textarea-bordered w-full font-mono text-xs"
+                              th:classappend="${failing} ? 'textarea-error'"
+                              th:text="${failing} ? ${variantBody} : ${variant.value}"></textarea>
+                    <div><button type="submit" class="btn btn-outline btn-sm"
+                                 th:text="#{ui.audiences.saveTemplateFor(${variant.key})}">Save vi template</button></div>
+                </form>
+            </section>
+
+            <section class="surface-card p-6" id="audience-preview" th:if="${preview != null}">
+                <h2 class="section-heading" th:text="#{ui.audiences.previewHeading}">Preview</h2>
+                <p class="section-copy" th:text="#{ui.audiences.previewCopy}">One sample change rendered with this template.</p>
+                <div class="release-note-body subtle-panel mt-4" th:utext="${preview.html()}"></div>
+                <details class="mt-3">
+                    <summary class="cursor-pointer text-sm font-semibold text-slate-600" th:text="#{ui.audiences.previewMarkdown}">Markdown</summary>
+                    <pre class="subtle-panel mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-xs" th:text="${preview.markdown()}">- **A safer deployment workflow is now available.**</pre>
+                </details>
+            </section>
+
+            <section class="surface-card p-6" id="audience-actions" th:if="${selected != null}">
+                <h2 class="section-heading" th:text="#{ui.audiences.manageHeading}">Manage audience</h2>
+                <details class="mt-3" th:if="${selected.preset}" id="reset-audience">
+                    <summary class="cursor-pointer font-semibold text-indigo-700" th:text="#{ui.audiences.resetSummary}">Reset to preset</summary>
+                    <p class="mt-2 text-sm text-slate-600" th:text="#{ui.audiences.resetCopy}">
+                        The name, intent, and template return to the shipped version.
+                    </p>
+                    <form class="mt-3" method="post" th:action="@{/audiences/{id}/reset-to-preset(id=${selected.id})}">
+                        <button type="submit" class="btn btn-outline btn-sm" th:text="#{ui.audiences.resetSummary}">Reset to preset</button>
+                    </form>
+                </details>
+                <details class="mt-3" id="delete-audience">
+                    <summary class="cursor-pointer font-semibold text-red-600" th:text="#{ui.audiences.deleteSummary}">Delete audience</summary>
+                    <p class="mt-2 text-sm text-slate-600" th:text="#{ui.audiences.deleteCopy}">
+                        This cannot be undone.
+                    </p>
+                    <form class="mt-3" method="post" th:action="@{/audiences/{id}/delete(id=${selected.id})}">
+                        <button type="submit" class="btn btn-error btn-sm" th:text="#{ui.audiences.delete}">Delete this audience</button>
+                    </form>
+                </details>
+            </section>
+        </div>
+    </div>
+</div>
+</body>
+</html>

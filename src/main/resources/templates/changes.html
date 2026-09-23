@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout/main}">
+<head>
+    <title th:text="#{ui.changes.title}">Change Inbox</title>
+</head>
+<body>
+<p layout:fragment="page-title" th:text="#{ui.changes.title}">Change Inbox</p>
+<div layout:fragment="content" th:with="hasProjects=${!#lists.isEmpty(projects)}">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow" th:text="#{ui.changes.eyebrow}">Merged changes</p>
+            <h1 class="page-heading" th:text="#{ui.changes.title}">Change Inbox</h1>
+            <p class="page-subtitle" th:text="#{ui.changes.subtitle}">Every merged pull and merge request, classified by fixed rules.</p>
+        </div>
+    </header>
+
+    <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
+
+    <section class="empty-state" th:unless="${hasProjects}">
+        <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#inbox}"></use></svg></div>
+        <h2 class="mt-5 text-xl font-bold" th:text="#{ui.changes.noProjects}">No projects have been created yet.</h2>
+        <p class="mx-auto mt-2 max-w-lg text-slate-600" th:text="#{ui.changes.noProjectsCopy}">Create a project and connect a source.</p>
+        <a class="btn btn-primary mt-5" th:href="@{/projects}" th:text="#{ui.changes.openProjects}">Open projects</a>
+    </section>
+
+    <th:block th:if="${hasProjects}">
+        <form class="surface-card grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_auto] lg:items-end"
+              th:action="@{/changes}" method="get" th:aria-label="#{ui.changes.filterLabel}" aria-label="Filter changes">
+            <label class="form-control"><span class="label-text font-medium" th:text="#{ui.changes.project}">Project</span>
+                <select name="project" class="select select-bordered w-full">
+                    <option th:each="project : ${projects}" th:value="${project.id}" th:text="${project.name}"
+                            th:selected="${project.id == selectedProjectId}">Project</option>
+                </select>
+            </label>
+            <label class="form-control"><span class="label-text font-medium" th:text="#{ui.changes.category}">Category</span>
+                <select name="category" class="select select-bordered w-full">
+                    <option value="" th:text="#{ui.changes.allCategories}">All categories</option>
+                    <option th:each="option : ${categories}" th:value="${option.code}"
+                            th:text="${option.active} ? ${option.displayName} : #{ui.changes.categoryArchived(${option.displayName})}"
+                            th:selected="${selectedCategory != null and option.code == #strings.toUpperCase(selectedCategory)}">Feature</option>
+                </select>
+            </label>
+            <label class="form-control"><span class="label-text font-medium" th:text="#{ui.changes.status}">Status</span>
+                <select name="status" class="select select-bordered w-full">
+                    <option value="" th:text="#{ui.changes.allStatuses}">All statuses</option>
+                    <option th:each="option : ${statuses}" th:value="${option.value}" th:text="#{${option.labelKey}}"
+                            th:selected="${option.value == selectedStatus}">Needs review</option>
+                </select>
+            </label>
+            <label class="form-control"><span class="label-text font-medium" th:text="#{ui.changes.context}">Context</span>
+                <select name="context" class="select select-bordered w-full">
+                    <option value="" th:text="#{ui.changes.anyContext}">Any context</option>
+                    <option value="insufficient" th:selected="${selectedContext == 'insufficient'}" th:text="#{ui.changes.needsMoreContext}">Needs more context</option>
+                </select>
+            </label>
+            <button type="submit" class="btn btn-primary" th:text="#{ui.changes.apply}">Apply</button>
+        </form>
+
+        <section class="surface-card mt-6 p-5" id="source-imports" th:aria-label="#{ui.changes.syncLabel}" aria-label="Source sync"
+                 th:unless="${#lists.isEmpty(imports.?[supportsImport or polled])}">
+            <h2 class="section-heading" th:text="#{ui.changes.syncHeading}">Source sync</h2>
+            <p class="section-copy" th:text="#{ui.changes.syncCopy}">
+                Changes reach ReleaseFlow by webhook from the moment a source is connected.
+            </p>
+            <ul class="mt-4 grid gap-3">
+                <li class="subtle-panel flex flex-wrap items-center gap-3 p-3"
+                    th:each="sync : ${imports}" th:if="${sync.polled}"
+                    th:id="|poll-${sync.sourceId}|">
+                    <span class="font-semibold" th:text="${sync.externalProjectKey}">APP</span>
+                    <span class="badge badge-sm badge-ghost" th:text="#{ui.changes.polled}">Polled</span>
+                    <span class="badge badge-sm" th:if="${sync.status != null}" th:switch="${sync.status}">
+                        <span th:case="'PENDING'" th:text="#{ui.changes.sync.PENDING}">Queued</span>
+                        <span th:case="'RUNNING'" th:text="#{ui.changes.sync.RUNNING.poll}">Reading</span>
+                        <span th:case="'RETRY_SCHEDULED'" th:text="#{ui.changes.sync.RETRY_SCHEDULED}">Waiting to retry</span>
+                        <span th:case="'COMPLETED'" th:text="#{ui.changes.sync.COMPLETED.poll}">Up to date</span>
+                        <span th:case="'PARTIAL'" th:text="#{ui.changes.sync.PARTIAL.poll}">Up to date</span>
+                        <span th:case="'FAILED'" th:text="#{ui.changes.sync.FAILED}">Failed</span>
+                    </span>
+                    <span class="text-sm text-slate-600" th:if="${sync.lastSyncAt != null}">
+                        <span th:text="#{ui.changes.lastRead}">last read</span> <time th:datetime="${sync.lastSyncAt}"
+                                        th:text="|${#temporals.format(sync.lastSyncAt, 'd MMM, HH:mm', 'UTC')} UTC|">11 Sep, 09:14 UTC</time>
+                    </span>
+                    <span class="text-sm text-slate-600" th:unless="${sync.lastSyncAt != null}" th:text="#{ui.changes.notReadYet}">not read yet</span>
+                    <span class="text-sm text-slate-500" th:if="${sync.nextPollAt != null}">
+                        <span th:text="#{ui.changes.nextRead}">next read at</span> <time th:datetime="${sync.nextPollAt}"
+                                           th:text="|${#temporals.format(sync.nextPollAt, 'HH:mm', 'UTC')} UTC|">09:19 UTC</time>
+                    </span>
+                    <span class="text-sm text-red-700" th:if="${sync.lastError != null}" th:text="#{ui.changes.error(${sync.lastError})}">Error: access_rejected</span>
+                </li>
+                <li class="subtle-panel flex flex-wrap items-center gap-3 p-3"
+                    th:each="sync : ${imports}" th:if="${sync.supportsImport}"
+                    th:id="|import-${sync.sourceId}|">
+                    <span class="font-semibold" th:text="${sync.externalProjectKey}">owner/repository</span>
+                    <span class="badge badge-sm badge-ghost" th:if="${sync.status == null}" th:text="#{ui.changes.neverImported}">Never imported</span>
+                    <span class="badge badge-sm" th:if="${sync.status != null}" th:switch="${sync.status}">
+                        <span th:case="'PENDING'" th:text="#{ui.changes.sync.PENDING}">Queued</span>
+                        <span th:case="'RUNNING'" th:text="#{ui.changes.sync.RUNNING.import}">Importing</span>
+                        <span th:case="'RETRY_SCHEDULED'" th:text="#{ui.changes.sync.RETRY_SCHEDULED}">Waiting to retry</span>
+                        <span th:case="'COMPLETED'" th:text="#{ui.changes.sync.COMPLETED.import}">Completed</span>
+                        <span th:case="'PARTIAL'" th:text="#{ui.changes.sync.PARTIAL.import}">Stopped at the limit</span>
+                        <span th:case="'FAILED'" th:text="#{ui.changes.sync.FAILED}">Failed</span>
+                    </span>
+                    <span class="text-sm text-slate-600" th:if="${sync.status != null}"
+                          th:text="#{ui.changes.scannedImported(${sync.scannedCount},${sync.importedCount})}">120 scanned, 42 imported</span>
+                    <span class="text-sm text-slate-500" th:if="${sync.nextAttemptAt != null and sync.status == 'RETRY_SCHEDULED'}">
+                        <span th:text="#{ui.changes.nextTry}">next try at</span> <time th:datetime="${sync.nextAttemptAt}"
+                                          th:text="|${#temporals.format(sync.nextAttemptAt, 'HH:mm', 'UTC')} UTC|">10:02 UTC</time>
+                    </span>
+                    <span class="text-sm text-red-700" th:if="${sync.lastError != null}" th:text="#{ui.changes.error(${sync.lastError})}">Error: access_rejected</span>
+                    <span class="grow"></span>
+                    <th:block th:if="${viewer.admin}">
+                        <span class="text-xs text-amber-700" th:unless="${sync.accessTokenConfigured}" th:text="#{ui.changes.tokenNeeded}">Add an access token to import.</span>
+                        <form method="post" th:if="${sync.canResumeImport}"
+                              th:action="@{/projects/{projectId}/sources/{sourceId}/imports/resume(projectId=${selectedProjectId},sourceId=${sync.sourceId})}">
+                            <button type="submit" class="btn btn-outline btn-sm" th:text="#{ui.changes.resume}">Resume</button>
+                        </form>
+                        <form method="post" th:if="${sync.accessTokenConfigured and !sync.inProgress()}"
+                              th:action="@{/projects/{projectId}/sources/{sourceId}/imports(projectId=${selectedProjectId},sourceId=${sync.sourceId})}">
+                            <button type="submit" class="btn btn-primary btn-sm" th:text="#{ui.changes.import90}">Import last 90 days</button>
+                        </form>
+                    </th:block>
+                </li>
+            </ul>
+        </section>
+
+        <p class="mt-6 text-sm text-slate-500" th:if="${pageError == null and !#lists.isEmpty(changes)}"
+           th:text="#{ui.changes.count(${#lists.size(changes)})}">3 changes</p>
+
+        <p class="subtle-panel mt-3 p-3 text-sm text-slate-600"
+           th:if="${!aiEnabled and !#lists.isEmpty(changes.?[aiEligible])}" th:utext="#{ui.changes.aiNotConfigured}">
+            Set RELEASEFLOW_AI_PROVIDER to classify and summarize changes with AI.
+        </p>
+
+        <section class="empty-state mt-6" th:if="${pageError == null and #lists.isEmpty(changes)}">
+            <div class="empty-state-icon"><svg class="icon h-6 w-6" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#empty}"></use></svg></div>
+            <th:block th:if="${filtered}">
+                <h2 class="mt-5 text-xl font-bold" th:text="#{ui.changes.noMatch}">No changes match these filters.</h2>
+                <p class="mx-auto mt-2 max-w-lg text-slate-600" th:text="#{ui.changes.noMatchCopy}">Choose a different category or status.</p>
+            </th:block>
+            <th:block th:unless="${filtered}">
+                <h2 class="mt-5 text-xl font-bold" th:text="#{ui.changes.noChanges}">No merged changes yet.</h2>
+                <p class="mx-auto mt-2 max-w-lg text-slate-600" th:text="#{ui.changes.noChangesCopy}">Finish the webhook setup on the Projects page.</p>
+            </th:block>
+        </section>
+
+        <ol class="mt-3 grid gap-4" th:if="${pageError == null and !#lists.isEmpty(changes)}" th:aria-label="#{ui.changes.listLabel}" aria-label="Changes">
+            <li class="surface-card p-5" th:each="change : ${changes}" th:id="|change-${change.id}|">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <h2 class="font-bold">
+                            <a class="link-hover" th:href="${change.url}" target="_blank" rel="noopener noreferrer">
+                                <span class="text-slate-500" th:text="|#${change.pullRequestNumber}|">#101</span>
+                                <span th:text="${change.title}">feat: add CSV export</span>
+                            </a>
+                        </h2>
+                        <p class="mt-1 text-xs text-slate-500">
+                            <th:block th:if="${change.authorLogin != null}">
+                                <span th:text="${change.authorLogin}">octocat</span>
+                                <span aria-hidden="true">·</span>
+                            </th:block>
+                            <th:block th:if="${change.targetBranch != null}">
+                                <span th:text="#{ui.changes.mergedInto}">merged into</span>
+                                <code th:text="${change.targetBranch}">main</code>
+                                <span aria-hidden="true">·</span>
+                            </th:block>
+                            <time th:datetime="${change.mergedAt}"
+                                  th:text="|${#temporals.format(change.mergedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">10 Sep 2026, 09:14 UTC</time>
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2" th:if="${change.processing()}">
+                        <span class="badge badge-soft badge-info gap-1 font-semibold">
+                            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+                            <span th:text="#{ui.changes.processing}">Processing</span>
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap gap-2" th:unless="${change.processing()}">
+                        <th:block th:switch="${change.categoryGroup.name()}">
+                            <span th:case="'FEATURE'" class="badge badge-soft badge-primary font-semibold" th:text="${change.categoryName}">Feature</span>
+                            <span th:case="'FIX'" class="badge badge-soft badge-info font-semibold" th:text="${change.categoryName}">Fix</span>
+                            <span th:case="'PERFORMANCE'" class="badge badge-soft badge-accent font-semibold" th:text="${change.categoryName}">Performance</span>
+                            <span th:case="'DOCUMENTATION'" class="badge badge-soft badge-secondary font-semibold" th:text="${change.categoryName}">Documentation</span>
+                            <span th:case="'MAINTENANCE'" class="badge badge-soft badge-neutral font-semibold" th:text="${change.categoryName}">Maintenance</span>
+                            <span th:case="*" class="badge badge-ghost font-semibold" th:text="${change.categoryName}">Unknown</span>
+                        </th:block>
+                        <span class="badge badge-soft badge-secondary gap-1 font-semibold" th:if="${change.classificationSource.name() == 'AI'}"
+                              th:title="#{ui.changes.aiCategoryTitle(${change.aiProvider != null ? change.aiProvider.label : 'AI'},${change.aiModel})}">
+                            <svg class="icon h-3.5 w-3.5" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#sparkles}"></use></svg>
+                            <span th:text="#{ui.changes.aiCategory}">AI category</span>
+                        </span>
+                        <span class="badge badge-soft badge-secondary font-semibold" th:if="${change.classificationSource.name() == 'SUGGESTION'}"
+                              th:title="#{ui.changes.suggestedCategoryTitle}"
+                              th:text="#{ui.changes.suggestedCategory}">Suggested category</span>
+                        <span class="badge badge-error font-semibold" th:if="${change.breaking}" th:text="#{ui.changes.breaking}">Breaking</span>
+                        <span class="badge badge-warning font-semibold" th:if="${change.needsReview}" th:text="#{ui.changes.needsReview}">Needs review</span>
+                        <span class="badge badge-success font-semibold" th:if="${change.reviewedAt != null}" th:text="#{ui.changes.reviewed}">Reviewed</span>
+                        <span class="badge badge-soft badge-success font-semibold"
+                              th:if="${!change.needsReview and change.reviewedAt == null}" th:text="#{ui.changes.classified}">Classified</span>
+                        <span class="badge badge-ghost font-semibold" th:if="${change.origin != null and change.origin.name() == 'IMPORT'}"
+                              th:title="#{ui.changes.importedTitle}" th:text="#{ui.changes.imported}">Imported</span>
+                    </div>
+                </div>
+
+                <p class="mt-2 text-xs text-slate-500" th:if="${change.reviewedAt != null}">
+                    <span th:text="${change.classificationSource.name() == 'HUMAN'} ? #{ui.changes.correctedBy} : #{ui.changes.reviewedBy}">Reviewed by</span>
+                    <span class="font-semibold" th:text="${change.reviewerName}">Owner</span>
+                    <span th:text="#{ui.changes.on}">on</span>
+                    <time th:datetime="${change.reviewedAt}"
+                          th:text="|${#temporals.format(change.reviewedAt, 'd MMM yyyy, HH:mm', 'UTC')} UTC|">11 Sep 2026, 09:14 UTC</time>
+                </p>
+
+                <div class="mt-3 flex flex-wrap gap-1.5" th:unless="${#lists.isEmpty(change.labels)}">
+                    <span class="badge badge-outline badge-sm" th:each="label : ${change.labels}" th:text="${label}">enhancement</span>
+                </div>
+
+                <p class="mt-3 text-sm text-slate-600" th:if="${change.processing()}"
+                   th:text="#{ui.changes.processingCopy}">Checking which files this change touched.</p>
+                <th:block th:unless="${change.processing()}">
+                    <p class="mt-3 text-sm text-slate-600">
+                        <span class="font-semibold" th:text="#{ui.changes.why}">Why:</span>
+                        <span th:text="${#strings.listJoin(change.reasons, '; ')}">Title type "feat"</span>
+                    </p>
+                    <div class="mt-2 text-sm text-amber-800" th:unless="${#lists.isEmpty(change.reviewTriggers)}">
+                        <span class="font-semibold" th:text="#{ui.changes.reviewRequired}">Review required:</span>
+                        <ul class="mt-1 list-inside list-disc">
+                            <li th:each="trigger : ${change.reviewTriggers}" th:text="#{${trigger.messageKey()}(${trigger.detail()})}">Sensitive file db/migration/V9.sql</li>
+                        </ul>
+                    </div>
+                    <p class="mt-2 text-sm text-amber-800" th:if="${change.context != null and change.context.insufficient()}"
+                       th:id="|context-${change.id}|">
+                        <span class="badge badge-warning badge-soft font-semibold" th:text="#{ui.changes.needsMoreContext}">Needs more context</span>
+                        <span th:text="#{ui.changes.contextScore(${change.context.score})}">Context score 30 of 100</span>
+                        <span class="text-slate-600" th:unless="${#lists.isEmpty(change.context.reasons)}"
+                              th:text="#{ui.changes.contextReasons(${#strings.listJoin(change.context.reasons, ', ')})}">(DESCRIPTION_MISSING)</span>
+                    </p>
+                    <p class="mt-2 text-xs text-slate-500" th:if="${change.context != null and !change.context.insufficient()}"
+                       th:text="#{ui.changes.contextScore(${change.context.score})}">Context score 90 of 100</p>
+                    <div class="subtle-panel mt-3 text-sm" th:each="duplicate : ${duplicates}"
+                         th:if="${duplicate.changeId == change.id or duplicate.duplicateOfId == change.id}"
+                         th:id="|duplicate-${duplicate.id}-${change.id}|"
+                         th:with="later=${duplicate.changeId == change.id}">
+                        <p>
+                            <span class="font-semibold"
+                                  th:text="${later} ? #{ui.changes.duplicateOf} : #{ui.changes.duplicatedByLater}">Possible duplicate of</span>
+                            <a class="link" th:href="|#change-${later ? duplicate.duplicateOfId : duplicate.changeId}|"
+                               th:text="${later} ? |#${duplicate.duplicateOfPullRequestNumber} ${duplicate.duplicateOfTitle}| : |#${duplicate.changePullRequestNumber} ${duplicate.changeTitle}|">#12 Add export</a>
+                            <span class="badge badge-sm ml-1" th:text="#{ui.changes.similar(${duplicate.percent()})}">91% similar</span>
+                            <span class="badge badge-sm badge-ghost" th:switch="${duplicate.status.name()}">
+                                <th:block th:case="'OPEN'" th:text="#{ui.changes.duplicateOpen}">Open</th:block>
+                                <th:block th:case="'CONFIRMED'" th:text="#{ui.changes.duplicateConfirmed(${duplicate.deciderName})}">Confirmed</th:block>
+                                <th:block th:case="*" th:text="#{ui.changes.duplicateDismissed(${duplicate.deciderName})}">Dismissed</th:block>
+                            </span>
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500"
+                           th:text="#{ui.changes.duplicateEvidence(${duplicate.evidence.title},${duplicate.evidence.content},${duplicate.evidence.paths})}">Title 0.9 · content 0.8 · files 0.5</p>
+                        <p class="mt-1 text-slate-600" th:if="${later and duplicate.duplicateOfWhatChanged != null}"
+                           th:text="#{ui.changes.earlierChange(${duplicate.duplicateOfWhatChanged})}">Earlier change: Adds export.</p>
+                        <p class="mt-1 text-slate-600" th:if="${!later and duplicate.changeWhatChanged != null}"
+                           th:text="#{ui.changes.laterChange(${duplicate.changeWhatChanged})}">Later change: Adds export.</p>
+                        <div class="mt-3 flex flex-wrap gap-2" th:if="${duplicate.open()}">
+                            <form method="post" th:each="decision : ${ {'CONFIRMED', 'DISMISSED'} }"
+                                  th:action="@{/projects/{projectId}/duplicate-candidates/{id}/decision(projectId=${selectedProjectId},id=${duplicate.id})}">
+                                <input type="hidden" name="decision" th:value="${decision}">
+                                <input type="hidden" name="changeId" th:value="${change.id}">
+                                <input type="hidden" name="returnCategory" th:value="${selectedCategory}">
+                                <input type="hidden" name="returnStatus" th:value="${selectedStatus}">
+                                <input type="hidden" name="returnContext" th:value="${selectedContext}">
+                                <button type="submit" class="btn btn-sm"
+                                        th:classappend="${decision == 'CONFIRMED'} ? 'btn-outline' : 'btn-ghost'"
+                                        th:text="${decision == 'CONFIRMED'} ? #{ui.changes.confirmDuplicate} : #{ui.changes.notDuplicate}">Confirm duplicate</button>
+                            </form>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-500" th:if="${duplicate.open()}"
+                           th:text="#{ui.changes.duplicateNote}">A decision records what you found.</p>
+                    </div>
+                    <div class="subtle-panel mt-3 text-sm" th:with="suggestion=${suggestions[change.id]}"
+                         th:if="${suggestions[change.id] != null}" th:id="|suggestion-${change.id}|">
+                        <p>
+                            <span class="font-semibold" th:text="#{ui.changes.proposedCategory}">Proposed category:</span>
+                            <span th:text="${suggestion.proposedName}">Security</span>
+                            <code class="text-xs" th:text="${suggestion.proposedCode}">SECURITY</code>
+                            <span class="text-slate-500" th:text="#{ui.changes.proposedGroup(#{${suggestion.proposedGroup.labelKey}})}">(Fix)</span>
+                            <span class="badge badge-sm ml-1" th:switch="${suggestion.status.name()}">
+                                <th:block th:case="'PENDING_REVIEW'" th:text="#{ui.changes.suggestionPending}">Waiting for an administrator</th:block>
+                                <th:block th:case="'APPROVED'" th:text="#{ui.changes.suggestionApproved}">Approved</th:block>
+                                <th:block th:case="'MAPPED'" th:text="#{ui.changes.suggestionMapped(${suggestion.resolvedCode})}">Mapped</th:block>
+                                <th:block th:case="*" th:text="#{ui.changes.suggestionRejected}">Rejected</th:block>
+                            </span>
+                        </p>
+                        <p class="mt-1 text-slate-600" th:unless="${#strings.isEmpty(suggestion.rationale)}"
+                           th:text="${suggestion.rationale}">No listed category covers security fixes.</p>
+                        <div class="mt-3 flex flex-wrap items-end gap-2" th:if="${suggestion.pending() and viewer != null and viewer.admin}"
+                             th:with="decisionPath=@{/categories/suggestions/{id}/decision(id=${suggestion.id})},
+                                      returnTo=|/changes?project=${selectedProjectId}#change-${change.id}|">
+                            <form method="post" th:action="${decisionPath}">
+                                <input type="hidden" name="decision" value="APPROVED">
+                                <input type="hidden" name="returnTo" th:value="${returnTo}">
+                                <button type="submit" class="btn btn-primary btn-sm" th:text="#{ui.categories.addToCatalog}">Add to catalog</button>
+                            </form>
+                            <form class="flex flex-wrap items-end gap-2" method="post" th:action="${decisionPath}">
+                                <input type="hidden" name="decision" value="MAPPED">
+                                <input type="hidden" name="returnTo" th:value="${returnTo}">
+                                <label class="form-control w-auto"><span class="label-text" th:text="#{ui.categories.useExisting}">Use existing</span>
+                                    <select name="categoryId" class="select select-bordered select-sm" required>
+                                        <option th:each="option : ${categories}" th:if="${option.active and option.code != 'UNKNOWN'}"
+                                                th:value="${option.id}" th:text="${option.displayName}">Fix</option>
+                                    </select>
+                                </label>
+                                <button type="submit" class="btn btn-outline btn-sm" th:text="#{ui.categories.map}">Map</button>
+                            </form>
+                            <form method="post" th:action="${decisionPath}">
+                                <input type="hidden" name="decision" value="REJECTED">
+                                <input type="hidden" name="returnTo" th:value="${returnTo}">
+                                <button type="submit" class="btn btn-ghost btn-sm" th:text="#{ui.categories.reject}">Reject</button>
+                            </form>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-500" th:if="${suggestion.pending() and (viewer == null or !viewer.admin)}"
+                           th:text="#{ui.changes.adminDecides}">An administrator decides whether this category is added.</p>
+                    </div>
+                    <details class="mt-3 text-sm" th:if="${change.neutralSummary != null}" open>
+                        <summary class="cursor-pointer font-medium text-slate-600"
+                                 th:text="#{ui.changes.summaryFor(${change.contentLanguage})}">Summary (en)</summary>
+                        <dl class="subtle-panel mt-2 grid gap-2 p-3" th:lang="${change.contentLanguage}"
+                            th:with="summary=${change.neutralSummary}">
+                            <div><dt class="font-semibold" th:text="#{ui.changes.whatChanged}">What changed</dt><dd class="whitespace-pre-line" th:text="${summary.whatChanged}">Adds CSV export to every table.</dd></div>
+                            <div th:unless="${#strings.isEmpty(summary.whyChanged)}"><dt class="font-semibold" th:text="#{ui.changes.whyChanged}">Why</dt><dd class="whitespace-pre-line" th:text="${summary.whyChanged}">Users asked to download data.</dd></div>
+                            <div th:unless="${#strings.isEmpty(summary.technicalDetail)}"><dt class="font-semibold" th:text="#{ui.changes.technicalDetail}">Technical detail</dt><dd class="whitespace-pre-line" th:text="${summary.technicalDetail}">Streams rows to avoid loading the table in memory.</dd></div>
+                            <div th:unless="${#strings.isEmpty(summary.migrationStep)}"><dt class="font-semibold" th:text="#{ui.changes.migration}">Migration</dt><dd class="whitespace-pre-line" th:text="${summary.migrationStep}">Nothing to do.</dd></div>
+                            <div th:each="narrative : ${change.audienceNarratives}"><dt class="font-semibold" th:text="#{ui.changes.narrativeFor(${narrative.key})}">For operator</dt><dd class="whitespace-pre-line" th:text="${narrative.value}">Watch the export queue after deploying.</dd></div>
+                            <p class="text-xs text-slate-500" th:if="${change.summaryEditorName != null}"
+                               th:text="#{ui.changes.writtenBy(${change.summaryEditorName})}">Written by Mai Tran</p>
+                        </dl>
+                    </details>
+                    <details class="mt-3 text-sm" th:unless="${#lists.isEmpty(change.linkedIssues)}">
+                        <summary class="cursor-pointer font-medium text-slate-600"
+                                 th:text="#{ui.changes.linkedIssues(${#lists.size(change.linkedIssues)})}">Linked issues (1)</summary>
+                        <ul class="mt-2 space-y-2 text-slate-700">
+                            <li th:each="issue : ${change.linkedIssues}">
+                                <a class="link font-mono text-xs" th:href="${issue.url()}" th:text="${issue.key()}"
+                                   rel="noopener noreferrer" target="_blank">APP-7</a>
+                                <span th:text="${issue.title()}">Publish release notes per audience</span>
+                                <span class="badge badge-ghost badge-xs" th:if="${issue.type() != null}" th:text="${issue.type()}">Story</span>
+                                <span class="badge badge-ghost badge-xs" th:if="${issue.status() != null}" th:text="${issue.status()}">Done</span>
+                            </li>
+                        </ul>
+                    </details>
+                    <p class="mt-2 text-xs text-amber-700"
+                       th:if="${change.linkedContextStatus != null and change.linkedContextStatus.incomplete()}"
+                       th:text="${change.linkedContextStatus.name() == 'PARTIAL'}
+                                ? #{ui.changes.linkedPartial}
+                                : #{ui.changes.linkedUnavailable}">Jira did not return every issue this change mentions.</p>
+                    <details class="mt-3 text-sm" th:unless="${#lists.isEmpty(change.changedFiles)}">
+                        <summary class="cursor-pointer font-medium text-slate-600"
+                                 th:text="#{ui.changes.changedFiles(${#lists.size(change.changedFiles)})}">Changed files (3)</summary>
+                        <ul class="mt-2 space-y-1 font-mono text-xs text-slate-700">
+                            <li th:each="file : ${change.changedFiles}">
+                                <span class="badge badge-ghost badge-xs mr-1" th:text="${#strings.toLowerCase(file.kind())}">modified</span>
+                                <span th:if="${file.previousPath() != null}" th:text="|${file.previousPath()} → |">old/path → </span><span th:text="${file.path()}">src/main/App.java</span>
+                            </li>
+                        </ul>
+                    </details>
+                </th:block>
+
+                <div class="alert alert-warning mt-3 py-2 text-sm" role="status"
+                     th:if="${change.aiEligible and change.aiStatus.name() == 'FAILED'}">
+                    <span><span th:text="#{ui.changes.aiFailed}">AI classification failed:</span>
+                          <span th:text="${change.aiFailure}">OpenAI returned HTTP 500.</span></span>
+                </div>
+
+                <form class="mt-3" method="post" th:if="${aiEnabled and change.aiEligible}"
+                      th:action="@{/projects/{projectId}/changes/{changeId}/ai-classification(projectId=${selectedProjectId},changeId=${change.id})}"
+                      x-data="{ busy: false }" @submit="busy = true">
+                    <input type="hidden" name="returnCategory" th:value="${selectedCategory}">
+                    <input type="hidden" name="returnStatus" th:value="${selectedStatus}">
+                    <input type="hidden" name="returnContext" th:value="${selectedContext}">
+                    <button type="submit" class="btn btn-outline btn-sm gap-2" :disabled="busy">
+                        <svg class="icon" aria-hidden="true"><use th:href="@{/svg/ui-icons.svg#sparkles}"></use></svg>
+                        <span x-show="!busy"
+                              th:text="${change.aiStatus.name() == 'FAILED'} ? #{ui.changes.retryWithAi} : #{ui.changes.classifyWithAi}">Classify with AI</span>
+                        <span x-show="busy" x-cloak th:text="#{ui.changes.classifying}">Classifying…</span>
+                    </button>
+                </form>
+
+                <div class="subtle-panel mt-3 p-3" th:if="${change.needsReview and !change.processing()}">
+                    <p class="mb-2 text-sm font-semibold" th:text="#{ui.changes.review}">Review</p>
+                    <form th:replace="~{fragments/change-review-form :: reviewForm(${change})}"></form>
+                </div>
+                <details class="mt-3 text-sm" th:if="${!change.needsReview and !change.processing()}">
+                    <summary class="cursor-pointer font-medium text-slate-600" th:text="#{ui.changes.editClassification}">Edit classification</summary>
+                    <div class="mt-2"><form th:replace="~{fragments/change-review-form :: reviewForm(${change})}"></form></div>
+                </details>
+
+                <details class="mt-3 text-sm" th:if="${change.description != null}">
+                    <summary class="cursor-pointer font-medium text-slate-600" th:text="#{ui.changes.description}">Description</summary>
+                    <p class="mt-2 whitespace-pre-line text-slate-700" th:text="${change.description}">Pull request description.</p>
+                </details>
+            </li>
+        </ol>
+    </th:block>
+</div>
+</body>
+</html>

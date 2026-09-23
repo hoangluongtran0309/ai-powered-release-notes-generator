@@ -1,0 +1,23 @@
+{
+  "name": "releaseflow",
+  "private": true,
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/forms": "0.5.11",
+    "@tailwindcss/postcss": "4.3.3",
+    "cssnano": "8.0.6",
+    "daisyui": "5.7.19",
+    "postcss": "8.5.26",
+    "postcss-cli": "11.0.1",
+    "tailwindcss": "4.3.3"
+  },
+  "scripts": {
+    "build": "postcss src/main/resources/static/css/application.css -o target/classes/static/css/application.css",
+    "build-prod": "NODE_ENV=production npm run build",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install --with-deps chromium",
+    "watch": "npm run build -- --watch"
+  },
+  "type": "module"
+}

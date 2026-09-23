@@ -1,0 +1,497 @@
+package com.hoangluongtran0309.releaseflow.change;
+
+import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestChanges;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import javax.sql.DataSource;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class ChangeDatabaseConstraintIntegrationTest extends PostgreSqlIntegrationTest {
+
+    private static final String VALID_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private DataSource dataSource;
+
+    @BeforeEach
+    @AfterEach
+    void clearDatabase() {
+        jdbcTemplate.update("DELETE FROM change_processing_jobs");
+        jdbcTemplate.update("DELETE FROM changes");
+        jdbcTemplate.update("DELETE FROM integration_sources");
+        jdbcTemplate.update("DELETE FROM projects");
+        jdbcTemplate.update("DELETE FROM app_users");
+        deleteOrganizationSettings();
+        jdbcTemplate.update("DELETE FROM organizations");
+    }
+
+    @Test
+    void recordsOneChangePerPullRequestWithinASource() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        UUID otherProject = insertProject(organization);
+        UUID web = insertSource(organization, project, "web");
+        UUID api = insertSource(organization, project, "api");
+        UUID elsewhere = insertSource(organization, otherProject, "elsewhere");
+        insertChange(organization, project, 1, "First", VALID_SHA);
+        insertChange(organization, project, 1, "Second", VALID_SHA);
+        insertChange(organization, project, 1, "Third", VALID_SHA);
+        String identify = "UPDATE changes SET source_id = ?, source_type = 'GITHUB', external_id = '1' WHERE title = ?";
+
+        jdbcTemplate.update(identify, web, "First");
+        assertThatThrownBy(() -> jdbcTemplate.update(identify, web, "Second"))
+                .as("one change per pull request of a source")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(identify, api, "Second"))
+                .as("two repositories of a Project may both have pull request #1")
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> jdbcTemplate.update(identify, elsewhere, "Third"))
+                .as("a source of another Project")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET source_id = ?, source_type = 'GITHUB' WHERE title = 'Third'", api))
+                .as("a source needs the change's ID in it")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET source_type = 'GITLAB' WHERE title = 'First'"))
+                .as("a change cannot disagree with its source about the type")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET origin = 'IMPORT' WHERE title = 'Third'"))
+                .as("an imported change has no delivery")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(
+                "UPDATE changes SET origin = 'IMPORT', delivery_id = NULL WHERE title = 'Third'"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> jdbcTemplate.update("UPDATE changes SET delivery_id = NULL WHERE title = 'First'"))
+                .as("GitLab does not always identify a delivery, so a webhook change may have none")
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void onlyACodeHostsChangeHasAMergeCommitAndABranch() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        UUID github = insertSource(organization, project, "web");
+        insertChange(organization, project, 1, "Pull request", VALID_SHA);
+        jdbcTemplate.update(
+                "UPDATE changes SET source_id = ?, source_type = 'GITHUB', external_id = '1' WHERE title = ?",
+                github, "Pull request");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET merge_commit_sha = NULL WHERE title = 'Pull request'"))
+                .as("a GitHub change keeps its merge commit")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET target_branch = NULL WHERE title = 'Pull request'"))
+                .as("a GitHub change keeps its branch")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET merge_commit_sha = 'not-a-sha' WHERE title = 'Pull request'"))
+                .as("and it is still a commit SHA")
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        UUID linear = insertLinearSource(organization, project);
+        insertChange(organization, project, 2, "Issue", VALID_SHA);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET source_id = ?, source_type = 'LINEAR', external_id = 'issue-1' WHERE title = ?",
+                linear, "Issue"))
+                .as("an issue may not carry a merge commit")
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(
+                """
+                        UPDATE changes SET source_id = ?, source_type = 'LINEAR', external_id = 'issue-1',
+                            merge_commit_sha = NULL, target_branch = NULL, author_login = NULL
+                        WHERE title = ?
+                        """,
+                linear, "Issue"))
+                .doesNotThrowAnyException();
+    }
+
+    private UUID insertLinearSource(UUID organizationId, UUID projectId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO integration_sources
+                            (id, organization_id, project_id, source_type, external_project_key,
+                             external_workspace_key, webhook_auth_mode, webhook_id, secret_nonce, secret_ciphertext,
+                             created_at)
+                        VALUES (?, ?, ?, 'LINEAR', 'team-1', 'workspace-1', 'LINEAR_HMAC', ?, ?, ?, now())
+                        """,
+                id, organizationId, projectId, UUID.randomUUID(), new byte[12], new byte[17]
+        );
+        return id;
+    }
+
+    private UUID insertSource(UUID organizationId, UUID projectId, String repository) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO integration_sources
+                            (id, organization_id, project_id, source_type, external_project_key, repository_owner,
+                             repository_name, webhook_auth_mode, webhook_id, secret_nonce, secret_ciphertext, created_at)
+                        VALUES (?, ?, ?, 'GITHUB', ?, 'acme', ?, 'GITHUB_HMAC', ?, ?, ?, now())
+                        """,
+                id, organizationId, projectId, "acme/" + repository, repository, UUID.randomUUID(), new byte[12],
+                new byte[17]
+        );
+        return id;
+    }
+
+    @Test
+    void rejectsCrossTenantProjectLinksAndInvalidValues() {
+        UUID firstOrganization = insertOrganization("First");
+        UUID secondOrganization = insertOrganization("Second");
+        UUID firstProject = insertProject(firstOrganization);
+
+        assertThatThrownBy(() -> insertChange(secondOrganization, firstProject, 1, "Title", VALID_SHA))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(firstOrganization, firstProject, 0, "Title", VALID_SHA))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(firstOrganization, firstProject, 1, "   ", VALID_SHA))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(firstOrganization, firstProject, 1, "Title", VALID_SHA.toUpperCase()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(firstOrganization, firstProject, 1, "Title", "abc123"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void requiresReviewForBreakingAndUnknownChanges() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+
+        assertThatThrownBy(() -> insertChange(organization, project, 1, "Title", VALID_SHA, "other", false, true))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 2, "Title", VALID_SHA, "FEATURE", true, false))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 3, "Title", VALID_SHA, "UNKNOWN", false, false))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> insertChange(organization, project, 4, "Title", VALID_SHA, "FEATURE", true, true))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertChange(organization, project, 5, "Title", VALID_SHA, "UNKNOWN", false, true))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void keepsLinkedIssuesToALookupThatGotFarEnoughToReadThem() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        insertChange(organization, project, 1, "Title", VALID_SHA);
+        String issues = "[{\"key\":\"APP-1\",\"title\":\"Export\"}]";
+
+        for (String status : new String[]{"PARTIAL", "UNAVAILABLE", "COLLECTED"}) {
+            assertThatCode(() -> setLinkedContext(status, issues)).doesNotThrowAnyException();
+        }
+        for (String status : new String[]{"NOT_SUPPORTED", "NOT_CONFIGURED", "NOT_FOUND"}) {
+            assertThatCode(() -> setLinkedContext(status, null)).doesNotThrowAnyException();
+            assertThatThrownBy(() -> setLinkedContext(status, issues))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
+        assertThatThrownBy(() -> setLinkedContext("PENDING", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> setLinkedContext("COLLECTED", "{\"key\":\"APP-1\"}"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // A change recorded before V21 has no lookup at all.
+        assertThatCode(() -> setLinkedContext(null, null)).doesNotThrowAnyException();
+    }
+
+    private void setLinkedContext(String status, String issues) {
+        jdbcTemplate.update("UPDATE changes SET linked_context_status = ?, linked_issues = ?::jsonb", status, issues);
+    }
+
+    // Since ADR-0009 an AI result may settle a change, and may accompany a category the rules chose.
+    @Test
+    void keepsAiStateConsistent() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        Instant now = Instant.now();
+
+        assertThatCode(() -> insertChange(organization, project, 1, "Title", VALID_SHA, "FIX", false, true,
+                "AI", "SUCCEEDED", "test-model", null, now)).doesNotThrowAnyException();
+        assertThatCode(() -> insertChange(organization, project, 2, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "RULES", "FAILED", null, "OpenAI returned HTTP 500.", now)).doesNotThrowAnyException();
+
+        assertThatCode(() -> insertChange(organization, project, 3, "Title", VALID_SHA, "FIX", false, false,
+                "AI", "SUCCEEDED", "test-model", null, now)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> insertChange(organization, project, 4, "Title", VALID_SHA, "FIX", false, true,
+                "AI", "SUCCEEDED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> insertChange(organization, project, 5, "Title", VALID_SHA, "FIX", false, true,
+                "RULES", "SUCCEEDED", "test-model", null, now)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> insertChange(organization, project, 6, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "RULES", "FAILED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 7, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "RULES", "NOT_REQUESTED", null, null, now)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 8, "Title", VALID_SHA, "UNKNOWN", false, true,
+                "HUMAN", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void recordsReviewsOnlyForSettledChangesByReviewersOfTheSameTenant() {
+        UUID organization = insertOrganization("First");
+        UUID otherOrganization = insertOrganization("Second");
+        UUID project = insertProject(organization);
+        UUID reviewer = insertUser(organization, "reviewer@example.com");
+        UUID outsider = insertUser(otherOrganization, "outsider@example.com");
+
+        assertThatCode(() -> insertReviewed(organization, project, 1, "FIX", true, false, "RULES", "NOT_REQUESTED", null, reviewer))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertReviewed(organization, project, 2, "FIX", false, false, "AI", "SUCCEEDED", "test-model", reviewer))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> insertReviewed(organization, project, 3, "FIX", false, false, "HUMAN", "SUCCEEDED", "test-model", reviewer))
+                .doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> insertReviewed(organization, project, 4, "FIX", false, false, "RULES", "NOT_REQUESTED", null, outsider))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertReviewed(organization, project, 5, "UNKNOWN", false, false, "HUMAN", "NOT_REQUESTED", null, reviewer))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertReviewed(organization, project, 6, "FIX", false, true, "HUMAN", "NOT_REQUESTED", null, reviewer))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 7, "Title", VALID_SHA, "FIX", false, false,
+                "HUMAN", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertChange(organization, project, 8, "Title", VALID_SHA, "FIX", true, false,
+                "RULES", "NOT_REQUESTED", null, null, null)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void recordsWhoWroteASummaryAndKeepsNarrativesWithTheirSummary() {
+        UUID organization = insertOrganization("First");
+        UUID project = insertProject(organization);
+        UUID editor = insertUser(organization, "editor@example.com");
+        UUID outsider = insertUser(insertOrganization("Second"), "outsider@example.com");
+        UUID change = TestChanges.insert(jdbcTemplate, organization, project, 1, "feat: a", "FEATURE", false, false, null);
+        String summary = "neutral_summary = '{\"whatChanged\":\"x\",\"whyChanged\":\"\",\"technicalDetail\":\"\","
+                + "\"migrationStep\":\"\"}', content_language = 'en'";
+        String editedBy = "summary_editor_name = 'Editor', summary_edited_at = now(), summary_edited_by = ?";
+
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET audience_narratives = '{}' WHERE id = ?", change))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET " + summary + " WHERE id = ?", change))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE changes SET " + editedBy + " WHERE id = ?", editor, change))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", summary_edited_by = ?, summary_edited_at = now() WHERE id = ?",
+                editor, change
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", " + editedBy + " WHERE id = ?", outsider, change
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", audience_narratives = '[]', " + editedBy + " WHERE id = ?", editor, change
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatCode(() -> jdbcTemplate.update(
+                "UPDATE changes SET " + summary + ", audience_narratives = '{\"operator\":\"y\"}', " + editedBy + " WHERE id = ?",
+                editor, change
+        )).doesNotThrowAnyException();
+    }
+
+    @Test
+    void marksChangesRecordedBeforeV4AsUnknownAndNeedingReview() {
+        String schema = "v4_backfill_check";
+        try {
+            migrate(schema, "3");
+            UUID organization = UUID.randomUUID();
+            UUID project = UUID.randomUUID();
+            jdbcTemplate.update("INSERT INTO " + schema + ".organizations (id, name, created_at) VALUES (?, 'Old', now())",
+                    organization);
+            jdbcTemplate.update("INSERT INTO " + schema + ".projects (id, organization_id, name, created_at) VALUES (?, ?, 'Old', now())",
+                    project, organization);
+            jdbcTemplate.update(
+                    "INSERT INTO " + schema + """
+                            .changes (id, organization_id, project_id, pull_request_number, title, author_login,
+                                labels, target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at)
+                            VALUES (?, ?, ?, 1, 'feat: recorded before V4', 'octocat', '{}', 'main', ?, now(),
+                                'https://github.com/acme/releaseflow/pull/1', ?, now())
+                            """,
+                    UUID.randomUUID(), organization, project, VALID_SHA, UUID.randomUUID()
+            );
+
+            migrate(schema, "4");
+
+            assertThat(jdbcTemplate.queryForMap(
+                    "SELECT category, breaking, needs_review, array_to_string(classification_reasons, '|') AS reasons FROM "
+                            + schema + ".changes"
+            )).containsEntry("category", "UNKNOWN")
+                    .containsEntry("breaking", false)
+                    .containsEntry("needs_review", true)
+                    .containsEntry("reasons", "Recorded before rule-based classification");
+        } finally {
+            jdbcTemplate.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+        }
+    }
+
+    private void migrate(String schema, String target) {
+        Flyway.configure()
+                .dataSource(dataSource)
+                .schemas(schema)
+                .locations("classpath:db/migration")
+                .target(target)
+                .load()
+                .migrate();
+    }
+
+    private UUID insertUser(UUID organizationId, String email) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO app_users (id, organization_id, email, password_hash, display_name, role, created_at)
+                        VALUES (?, ?, ?, 'hash', 'Reviewer', 'ADMIN', now())
+                        """,
+                id,
+                organizationId,
+                email
+        );
+        return id;
+    }
+
+    private void insertReviewed(
+            UUID organizationId,
+            UUID projectId,
+            int number,
+            String category,
+            boolean breaking,
+            boolean needsReview,
+            String source,
+            String aiStatus,
+            String aiModel,
+            UUID reviewer
+    ) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO changes
+                            (id, organization_id, project_id, pull_request_number, title, author_login, labels,
+                             target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
+                             category, category_display_name, category_group, breaking, needs_review, classification_reasons,
+                             classification_source, ai_status, ai_provider, ai_model, ai_attempted_at,
+                             reviewed_by, reviewer_name, reviewed_at, processing_status, review_triggers)
+                        VALUES (?, ?, ?, ?, 'Title', 'octocat', '{}', 'main', ?, now(),
+                                'https://github.com/acme/releaseflow/pull/1', ?, now(),
+                                ?, ?, ?, ?, ?, '{"Reviewed"}', ?, ?, ?, ?, ?, ?, 'Reviewer', now(), 'COMPLETED', '[]')
+                        """,
+                UUID.randomUUID(),
+                organizationId,
+                projectId,
+                number,
+                VALID_SHA,
+                UUID.randomUUID(),
+                category,
+                TestChanges.displayName(category),
+                TestChanges.group(category),
+                breaking,
+                needsReview,
+                source,
+                aiStatus,
+                "NOT_REQUESTED".equals(aiStatus) ? null : "openai",
+                aiModel,
+                "NOT_REQUESTED".equals(aiStatus) ? null : Timestamp.from(Instant.now()),
+                reviewer
+        );
+    }
+
+    private UUID insertOrganization(String name) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO organizations (id, name, slug, created_at, output_language) VALUES (?, ?, 'org-' || SUBSTRING(gen_random_uuid()::text, 1, 8), ?, 'en')",
+                id,
+                name,
+                Timestamp.from(Instant.now())
+        );
+        return id;
+    }
+
+    private UUID insertProject(UUID organizationId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO projects (id, organization_id, name, created_at) VALUES (?, ?, ?, ?)",
+                id,
+                organizationId,
+                "Project",
+                Timestamp.from(Instant.now())
+        );
+        return id;
+    }
+
+    private void insertChange(UUID organizationId, UUID projectId, int number, String title, String sha) {
+        insertChange(organizationId, projectId, number, title, sha, "FEATURE", false, false);
+    }
+
+    private void insertChange(
+            UUID organizationId,
+            UUID projectId,
+            int number,
+            String title,
+            String sha,
+            String category,
+            boolean breaking,
+            boolean needsReview
+    ) {
+        insertChange(organizationId, projectId, number, title, sha, category, breaking, needsReview,
+                "RULES", "NOT_REQUESTED", null, null, null);
+    }
+
+    private void insertChange(
+            UUID organizationId,
+            UUID projectId,
+            int number,
+            String title,
+            String sha,
+            String category,
+            boolean breaking,
+            boolean needsReview,
+            String source,
+            String aiStatus,
+            String aiModel,
+            String aiFailure,
+            Instant aiAttemptedAt
+    ) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO changes
+                            (id, organization_id, project_id, pull_request_number, title, author_login, labels,
+                             target_branch, merge_commit_sha, merged_at, url, delivery_id, received_at,
+                             category, category_display_name, category_group, breaking, needs_review, classification_reasons,
+                             classification_source, ai_status, ai_provider, ai_model, ai_failure, ai_attempted_at,
+                             processing_status, review_triggers)
+                        VALUES (?, ?, ?, ?, ?, 'octocat', '{}', 'main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{"Title type \\"feat\\""}',
+                                ?, ?, ?, ?, ?, ?, 'COMPLETED', '[]')
+                        """,
+                UUID.randomUUID(),
+                organizationId,
+                projectId,
+                number,
+                title,
+                sha,
+                Timestamp.from(Instant.now()),
+                "https://github.com/acme/releaseflow/pull/" + number,
+                UUID.randomUUID(),
+                Timestamp.from(Instant.now()),
+                category,
+                TestChanges.displayName(category),
+                TestChanges.group(category),
+                breaking,
+                needsReview,
+                source,
+                aiStatus,
+                "NOT_REQUESTED".equals(aiStatus) ? null : "openai",
+                aiModel,
+                aiFailure,
+                aiAttemptedAt == null ? null : Timestamp.from(aiAttemptedAt)
+        );
+    }
+}

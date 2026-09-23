@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--/* The reviewer confirms explicit values, so a stale page never approves a classification it did not show. */-->
+<form th:fragment="reviewForm(change)" method="post" th:aria-label="#{ui.reviewForm.label}" aria-label="Review classification"
+      class="grid gap-3 sm:grid-cols-[minmax(0,16rem)_auto_auto] sm:items-end"
+      th:action="@{/projects/{projectId}/changes/{changeId}/review(projectId=${selectedProjectId},changeId=${change.id})}">
+    <input type="hidden" name="returnCategory" th:value="${selectedCategory}">
+    <input type="hidden" name="returnStatus" th:value="${selectedStatus}">
+    <input type="hidden" name="returnContext" th:value="${selectedContext}">
+    <label class="form-control"><span class="label-text font-medium" th:text="#{ui.reviewForm.category}">Category</span>
+        <select name="category" class="select select-bordered select-sm w-full" required>
+            <option value="" disabled th:selected="${change.unknownCategory()}" th:text="#{ui.reviewForm.chooseCategory}">Choose a category</option>
+            <option th:each="option : ${reviewCategories}"
+                    th:value="${option.code}" th:text="${option.displayName}"
+                    th:selected="${option.code == change.category}">Feature</option>
+        </select>
+    </label>
+    <label class="label cursor-pointer justify-start gap-2">
+        <input type="checkbox" name="breaking" value="true" class="checkbox checkbox-sm" th:checked="${change.breaking}">
+        <span class="label-text" th:text="#{ui.reviewForm.breaking}">Breaking change</span>
+    </label>
+    <button type="submit" class="btn btn-primary btn-sm" th:text="#{ui.reviewForm.confirm}">Confirm review</button>
+</form>
+</body>
+</html>
