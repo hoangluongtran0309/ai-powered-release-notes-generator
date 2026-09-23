@@ -1,9 +1,23 @@
 # Changelog
 
-All notable changes to ReleaseFlow are documented in this file. No public
-version has been released.
+All notable changes to ReleaseFlow are documented in this file. Each released
+version is a tag; see the [releases][releases] for the artifacts published with
+it.
+
+[releases]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases
 
 ## [Unreleased]
+
+### Changed
+
+- `CONTRIBUTING.md` says which merge a pull request takes: squash into `develop`,
+  a merge commit into `main`. Squashing a release would give `main` a commit that
+  shares no ancestry with `develop`, and the branches would diverge for good.
+
+## [0.1.0] - 2026-09-23
+
+The first published version. Everything below was built as one reviewed vertical
+slice at a time, and all of it is in this release.
 
 ### Added
 
@@ -749,3 +763,5 @@ version has been released.
 - GitHub conflicts appear inside the submitted Project card; an unknown
   Project is reported at the top of the page.
 - Project creation times display as a readable UTC date.
+
+[0.1.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.0

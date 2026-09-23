@@ -13,7 +13,7 @@
 
     <groupId>com.hoangluongtran0309</groupId>
     <artifactId>releaseflow</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
     <name>ReleaseFlow</name>
     <description>Human-reviewed release notes, built one vertical slice at a time.</description>
     <url>https://github.com/hoangluongtran0309/ai-powered-release-notes-generator</url>

@@ -1404,8 +1404,8 @@ PATH="$PWD/node:$PATH" ./node/npm run watch
 
 The application calls the GitHub API only to check an access token and to list
 the changed files of a merged pull request; it does not import history or
-validate repositories when they are connected. No image or release artifact is
-published.
+validate repositories when they are connected. Nothing is published from a local
+build: artifacts come from the `Release` workflow, and only from a tag.
 
 ## Continuous integration
 
