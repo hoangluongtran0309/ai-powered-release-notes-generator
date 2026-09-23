@@ -49,7 +49,7 @@ also in place. Every page, form message, and error explanation is written in
 English or Vietnamese, chosen per person, and a Playwright suite drives the whole
 application in a browser at two sizes and both themes, failing on any
 accessibility violation Axe can see.
-The decisions behind all of it are ADR-0001 through ADR-0029. Read `README.md`,
+The decisions behind all of it are ADR-0001 through ADR-0030. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -225,6 +225,9 @@ behavior.
   runs it had not finished.
 - GitHub Actions stay pinned to commit SHAs, images to digests, and downloaded
   CI tools to SHA-256 checksums. Compose secrets never get default values.
+- A tag is the release and the only input to it. Publishing refuses a tag that
+  is not an ancestor of `main`, one whose name disagrees with the POM, or any
+  `-SNAPSHOT`, so a mistaken tag fails rather than ships.
 - The management port is not a product endpoint. It binds to loopback unless a
   deployment moves it onto a private network, it is never published, and it
   serves only health without component details and the Prometheus scrape; the

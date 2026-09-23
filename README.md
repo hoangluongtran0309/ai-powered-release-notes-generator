@@ -1432,6 +1432,37 @@ gitleaks git . --redact
 See [ADR-0007](docs/adr/0007-ci-and-container-supply-chain.md) and
 [ADR-0026](docs/adr/0026-deployment-observability.md).
 
+## Published artifacts
+
+ReleaseFlow's own releases, as opposed to the ones it writes notes for.
+
+A release is a tag. Pushing `v<version>` runs the `Release` workflow, which
+refuses a tag that is not an ancestor of `main`, one whose name disagrees with
+the POM, or any `-SNAPSHOT` — so a mistaken tag fails rather than ships. It then
+runs the whole suite again, builds and scans the image, and publishes:
+
+- `releaseflow-<version>.jar`, the executable JAR;
+- `releaseflow-<version>-sbom.cdx.json`, a CycloneDX SBOM of the image, which
+  lists the Java dependencies and the base image's packages together;
+- `SHA256SUMS`, `LICENSE` and `NOTICE`;
+- the image on GHCR, tagged `<version>`, `<major>.<minor>`, `<major>` and
+  `latest`;
+- a provenance attestation for the image and the JAR.
+
+Check what you downloaded:
+
+```bash
+sha256sum --check SHA256SUMS
+gh attestation verify releaseflow-<version>.jar \
+    --repo hoangluongtran0309/ai-powered-release-notes-generator
+```
+
+Pin a deployment to the digest rather than to a moving tag:
+
+```bash
+docker pull ghcr.io/hoangluongtran0309/releaseflow@sha256:<digest>
+```
+
 ## Contributing
 
 Development uses `main` as the releasable branch, `develop` as the integration

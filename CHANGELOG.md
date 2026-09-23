@@ -578,6 +578,15 @@ version has been released.
 - A note in `CONTRIBUTING.md` that a contribution is licensed under the same Apache-2.0,
   with no separate agreement to sign.
 
+- A `Release` workflow (ADR-0030). A `v<version>` tag is the release and its only input.
+  Three guards run before anything is built: the tagged commit must be an ancestor of
+  `main`, the POM version must equal the tag without its `v`, and a `-SNAPSHOT` is refused
+  — so a tag pushed by mistake fails rather than ships.
+- Published with every release: the executable JAR, a CycloneDX SBOM of the image,
+  `SHA256SUMS`, `LICENSE` and `NOTICE`, the image on GHCR tagged `X.Y.Z`, `X.Y`, `X` and
+  `latest`, and a provenance attestation for both the image and the JAR. The release notes
+  name the image digest, which is the only tag that cannot move.
+
 ### Changed
 
 - `ReviewTrigger.describe()` becomes `messageKey()`: a trigger now answers with a bundle

@@ -1,0 +1,223 @@
+# Publishes one tagged version: the executable JAR, an SBOM and checksums beside it, the
+# container image on GHCR, and a GitHub release that points at all of them.
+#
+# The tag is the trigger and the only input. Everything the workflow publishes is built
+# from the tagged commit, and the guards below refuse a tag that does not describe a
+# reviewed release: one that is not on main, or whose name disagrees with the POM.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The existing tag to publish, such as v0.1.0
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "21"
+  NODE_VERSION: "22.22.3"
+  REGISTRY: ghcr.io
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, scan, and publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write        # create the GitHub release
+      packages: write        # push the image to GHCR
+      id-token: write        # sign the provenance attestation
+      attestations: write    # record it
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # main is fetched as well, so the ancestry guard below has something to check.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse a tag that is not a reviewed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          version="${tag#v}"
+          echo "Releasing ${tag} (version ${version})"
+
+          # A tag anywhere but main would publish something nobody merged.
+          git fetch --no-tags --force origin "+main:refs/remotes/origin/main"
+          if ! git merge-base --is-ancestor "HEAD" "origin/main"; then
+            echo "::error::${tag} is not an ancestor of main; only a merged commit is released."
+            exit 1
+          fi
+
+          # A POM that disagrees with the tag would publish a version nobody named.
+          pom_version="$(./mvnw -B -q --no-transfer-progress \
+              help:evaluate -Dexpression=project.version -DforceStdout)"
+          if [ "${pom_version}" != "${version}" ]; then
+            echo "::error::the tag says ${version} and the POM says ${pom_version}."
+            exit 1
+          fi
+
+          # A SNAPSHOT is by definition not a release.
+          case "${pom_version}" in
+            *-SNAPSHOT) echo "::error::${pom_version} is a snapshot." ; exit 1 ;;
+          esac
+
+          {
+            echo "RELEASE_TAG=${tag}"
+            echo "RELEASE_VERSION=${version}"
+          } >> "${GITHUB_ENV}"
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # The tests ran on the pull request that merged this commit. They run again here
+      # because a release is the one build nobody gets to redo.
+      - name: Verify
+        run: ./mvnw -B --no-transfer-progress clean verify -Prelease
+
+      - name: Build the image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --tag "releaseflow:${RELEASE_VERSION}" .
+
+      - name: Install Trivy with checksum verification
+        run: ./scripts/ci/install-trivy.sh "${RUNNER_TEMP}/bin"
+
+      - name: Scan the image, and stop on a fixable high or critical finding
+        run: |
+          "${RUNNER_TEMP}/bin/trivy" image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --no-progress \
+            "releaseflow:${RELEASE_VERSION}"
+
+      # One SBOM, of the image, because that is what the JAR is actually shipped inside:
+      # it lists the Java dependencies and the base image's own packages together.
+      - name: Write the SBOM and the checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "target/releaseflow.jar" "dist/releaseflow-${RELEASE_VERSION}.jar"
+          "${RUNNER_TEMP}/bin/trivy" image \
+            --format cyclonedx \
+            --no-progress \
+            --output "dist/releaseflow-${RELEASE_VERSION}-sbom.cdx.json" \
+            "releaseflow:${RELEASE_VERSION}"
+          cp LICENSE NOTICE dist/
+          # Named rather than globbed, so the checksum file can never end up listing
+          # itself or missing something a glob expanded before it existed.
+          ( cd dist && sha256sum \
+              "releaseflow-${RELEASE_VERSION}.jar" \
+              "releaseflow-${RELEASE_VERSION}-sbom.cdx.json" \
+              LICENSE NOTICE > SHA256SUMS )
+          cat dist/SHA256SUMS
+
+      - name: Sign in to GHCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${GITHUB_TOKEN}" \
+            | docker login "${REGISTRY}" --username "${GITHUB_ACTOR}" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # X.Y.Z, X.Y, X and latest, so a deployment can pin as tightly as it wants to.
+      - name: Push the image
+        id: push
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="${REGISTRY}/${GITHUB_REPOSITORY_OWNER,,}/releaseflow"
+          major="${RELEASE_VERSION%%.*}"
+          minor="${RELEASE_VERSION%.*}"
+          for tag in "${RELEASE_VERSION}" "${minor}" "${major}" latest; do
+            docker tag "releaseflow:${RELEASE_VERSION}" "${repository}:${tag}"
+            docker push "${repository}:${tag}"
+          done
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' \
+              "${repository}:${RELEASE_VERSION}" | cut -d@ -f2)"
+          if [ -z "${digest}" ]; then
+            echo "::error::the registry returned no digest, so there is nothing to attest."
+            exit 1
+          fi
+          echo "repository=${repository}" >> "${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest that this workflow built that image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.push.outputs.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest that this workflow built those files
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/releaseflow-*.jar
+
+      - name: Create the GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          {
+            echo "## Container image"
+            echo
+            echo '```'
+            echo "docker pull ${REPOSITORY}@${DIGEST}"
+            echo '```'
+            echo
+            echo "Also tagged \`${RELEASE_VERSION}\`, \`${RELEASE_VERSION%.*}\`, \`${RELEASE_VERSION%%.*}\` and \`latest\`."
+            echo
+            echo "## Verifying what you downloaded"
+            echo
+            echo '```'
+            echo "sha256sum --check SHA256SUMS"
+            echo "gh attestation verify releaseflow-${RELEASE_VERSION}.jar --repo ${GITHUB_REPOSITORY}"
+            echo '```'
+            echo
+            echo "## What changed"
+            echo
+            echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${RELEASE_TAG}/CHANGELOG.md)."
+          } > "${notes}"
+
+          gh release create "${RELEASE_TAG}" \
+            --title "ReleaseFlow ${RELEASE_VERSION}" \
+            --notes-file "${notes}" \
+            --verify-tag \
+            dist/releaseflow-"${RELEASE_VERSION}".jar \
+            dist/releaseflow-"${RELEASE_VERSION}"-sbom.cdx.json \
+            dist/SHA256SUMS \
+            dist/LICENSE \
+            dist/NOTICE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ steps.push.outputs.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}

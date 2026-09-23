@@ -391,9 +391,16 @@
   security policy for reporting a weakness privately; and decision **D1 settled** — one
   Maven module, with the open-core/enterprise split abandoned rather than deferred.
 
+- **Release automation** ([ADR-0030](adr/0030-release-automation.md), no migration): a
+  `Release` workflow triggered by a `v<version>` tag, which refuses a tag that is not an
+  ancestor of `main`, one whose name disagrees with the POM, or any `-SNAPSHOT`; then runs
+  the whole suite again, builds and scans the image, and publishes the JAR, a CycloneDX
+  SBOM of the image, `SHA256SUMS`, the licence and the notice, the image on GHCR tagged
+  `X.Y.Z`/`X.Y`/`X`/`latest`, and a provenance attestation for the image and the JAR.
+
 ## In progress
 
-- Nothing. The licence and project metadata slice is complete and awaiting review.
+- Nothing. The release automation slice is complete and awaiting review.
 
 ## Planned
 
@@ -425,7 +432,7 @@ deliberately deferred list below, one reviewed slice at a time.
   Entra-authenticated Teams flows; Zendesk API tokens in place of OAuth.
 - Client-rendered pages, JavaScript bundling, JavaScript unit tests (what is left
   in `app.js` only means anything in a page, which the browser suite drives),
-  image publication, and release automation.
+  and publishing to any registry other than this repository's own on GHCR.
 - Alerting, durable metric storage, a retention policy beyond the demo's seven
   days, and access control for the demo dashboards; per-Organization analytics,
   which need a product feature with an authorization story rather than a metric
