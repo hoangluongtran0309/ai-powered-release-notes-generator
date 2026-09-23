@@ -8,7 +8,11 @@ it.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- `CONTRIBUTING.md` says which merge a pull request takes: squash into `develop`,
+  a merge commit into `main`. Squashing a release would give `main` a commit that
+  shares no ancestry with `develop`, and the branches would diverge for good.
 
 ## [0.1.0] - 2026-09-23
 
