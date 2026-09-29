@@ -18,7 +18,7 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Category was not found.</span></div>
-    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+    <div class="toast-region" th:if="${param.saved != null or param.archived != null or param.restored != null or param.decided != null}" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
         <th:block th:if="${param.saved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.categories.saved})}">Category saved.</div></th:block>
         <th:block th:if="${param.archived != null}"><div th:replace="~{fragments/toast :: toast(#{ui.categories.archived})}">Category archived.</div></th:block>
         <th:block th:if="${param.restored != null}"><div th:replace="~{fragments/toast :: toast(#{ui.categories.restored})}">Category restored.</div></th:block>

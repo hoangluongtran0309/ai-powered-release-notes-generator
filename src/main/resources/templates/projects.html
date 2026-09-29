@@ -19,7 +19,7 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
-    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+    <div class="toast-region" th:if="${param.tokenSaved != null or param.languageSaved != null or param.changelogSaved != null}" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
         <th:block th:if="${param.tokenSaved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.projects.tokenSaved})}">Access token saved.</div></th:block>
         <th:block th:if="${param.languageSaved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.projects.languageSaved})}">Output language saved.</div></th:block>
         <th:block th:if="${param.changelogSaved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.projects.changelogSaved})}">Changelog address saved.</div></th:block>

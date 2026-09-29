@@ -26,7 +26,7 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Audience was not found.</span></div>
-    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+    <div class="toast-region" th:if="${param.saved != null or param.reset != null or param.deleted != null or param.languagesSaved != null or param.templateSaved != null}" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
         <th:block th:if="${param.saved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.audiences.saved})}">Audience saved.</div></th:block>
         <th:block th:if="${param.reset != null}"><div th:replace="~{fragments/toast :: toast(#{ui.audiences.reset})}">Audience reset to its shipped preset.</div></th:block>
         <th:block th:if="${param.deleted != null}"><div th:replace="~{fragments/toast :: toast(#{ui.audiences.deleted})}">Audience deleted.</div></th:block>

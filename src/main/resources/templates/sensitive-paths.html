@@ -21,7 +21,7 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
-    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+    <div class="toast-region" th:if="${param.saved != null}" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
         <th:block th:if="${param.saved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.sensitivePaths.saved})}">Patterns saved.</div></th:block>
     </div>
 

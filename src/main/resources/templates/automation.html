@@ -18,7 +18,7 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Rule was not found.</span></div>
-    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+    <div class="toast-region" th:if="${param.saved != null or param.enabled != null or param.disabled != null or param.archived != null or param.executed != null or param.retried != null or param.cancelled != null}" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
         <th:block th:if="${param.saved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.saved})}">Rule saved.</div></th:block>
         <th:block th:if="${param.enabled != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.enabled})}">Rule enabled.</div></th:block>
         <th:block th:if="${param.disabled != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.disabled})}">Rule disabled.</div></th:block>
