@@ -122,9 +122,10 @@ The changelog is anonymous, needs no session, and has an RSS feed at
 | --- | --- |
 | ![The release note email in Mailpit](images/tour/16-email.jpg) | ![The operator note filed as a Notion page](images/tour/17-notion.jpg) |
 
-The contributor note reached Slack through an incoming webhook:
+The contributor note reaches Slack through an incoming webhook, rewritten into Slack's
+own mrkdwn. The picture shows a later, one-change release, 1.4.1:
 
-![The contributor note posted to a Slack channel](images/tour/22-slack.jpg)
+![A release note posted to a Slack channel, with bold headings, bullets, and a link](images/tour/22-slack.jpg)
 
 ## 9. Language, theme, and screen size
 
