@@ -8,6 +8,13 @@ it.
 
 ## [Unreleased]
 
+### Fixed
+
+- The Projects, Sensitive paths, Audiences, Categories, and Automation pages no
+  longer show every success toast on a plain visit. `th:replace` runs before `th:if`
+  on the same element, so the condition was never read; each toast now sits inside
+  its own conditional block.
+
 ### Changed
 
 - `CONTRIBUTING.md` says which merge a pull request takes: squash into `develop`,

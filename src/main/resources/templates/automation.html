@@ -18,14 +18,14 @@
     </header>
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Rule was not found.</span></div>
-    <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
-        <div th:replace="~{fragments/toast :: toast(#{ui.automation.saved})}" th:if="${param.saved != null}">Rule saved.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.automation.enabled})}" th:if="${param.enabled != null}">Rule enabled.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.automation.disabled})}" th:if="${param.disabled != null}">Rule disabled.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.automation.archived})}" th:if="${param.archived != null}">Rule archived.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.automation.executed})}" th:if="${param.executed != null}">Run queued.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.automation.retried})}" th:if="${param.retried != null}">The failed action will run again.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.automation.cancelled})}" th:if="${param.cancelled != null}">Run cancelled.</div>
+    <div class="toast-region" th:if="${param.saved != null or param.enabled != null or param.disabled != null or param.archived != null or param.executed != null or param.retried != null or param.cancelled != null}" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
+        <th:block th:if="${param.saved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.saved})}">Rule saved.</div></th:block>
+        <th:block th:if="${param.enabled != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.enabled})}">Rule enabled.</div></th:block>
+        <th:block th:if="${param.disabled != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.disabled})}">Rule disabled.</div></th:block>
+        <th:block th:if="${param.archived != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.archived})}">Rule archived.</div></th:block>
+        <th:block th:if="${param.executed != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.executed})}">Run queued.</div></th:block>
+        <th:block th:if="${param.retried != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.retried})}">The failed action will run again.</div></th:block>
+        <th:block th:if="${param.cancelled != null}"><div th:replace="~{fragments/toast :: toast(#{ui.automation.cancelled})}">Run cancelled.</div></th:block>
     </div>
 
     <section class="surface-card p-6" id="automation-rules">

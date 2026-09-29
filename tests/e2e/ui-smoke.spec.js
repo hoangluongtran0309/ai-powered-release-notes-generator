@@ -25,6 +25,8 @@ test.describe('workspace pages', () => {
     for (const [name, path] of pages) {
       await page.goto(path);
       await expect(page.locator('main#page-content')).toBeVisible();
+      // A toast answers something just done; a page opened plainly has nothing to say.
+      await expect(page.locator('.toast-item'), `toasts on ${name}`).toHaveCount(0);
       await expectNoAccessibilityViolations(page, name);
     }
   });
