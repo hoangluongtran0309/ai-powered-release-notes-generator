@@ -15,6 +15,8 @@ it.
 
 ### Fixed
 
+- `jackson-databind` 3.1.6 and 2.21.6 replace the 3.1.5 and 2.21.5 Spring Boot 4.1.1
+  manages, which carry CVE-2026-68497. The overrides go once the parent catches up.
 - The Projects, Sensitive paths, Audiences, Categories, and Automation pages no
   longer show every success toast on a plain visit. `th:replace` runs before `th:if`
   on the same element, so the condition was never read; each toast now sits inside
