@@ -8,6 +8,11 @@ it.
 
 ## [Unreleased]
 
+### Added
+
+- `docs/tour.md`, a screenshot tour of one release from an empty workspace to
+  delivered notes, taken from the demo stack, and a link to it from `README.md`.
+
 ### Fixed
 
 - The Projects, Sensitive paths, Audiences, Categories, and Automation pages no
