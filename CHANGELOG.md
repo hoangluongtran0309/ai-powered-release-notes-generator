@@ -14,6 +14,9 @@ it.
   longer show every success toast on a plain visit. `th:replace` runs before `th:if`
   on the same element, so the condition was never read; each toast now sits inside
   its own conditional block.
+- The selected audience or language tab above a release note shows its name again.
+  `@tailwindcss/forms` fills a checked radio with the colour DaisyUI draws the tab's
+  label in, so the label vanished into its own background in both themes.
 
 ### Changed
 
