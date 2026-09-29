@@ -5,6 +5,11 @@ changes into human-reviewed, immutable release notes. Development proceeds one
 complete vertical slice at a time, and this repository documents only behavior
 that is currently implemented.
 
+![Reviewing each change of a release, approving it, and publishing it](docs/images/tour/release-review-publish.gif)
+
+[The tour](docs/tour.md) follows one release from an empty workspace to a note in an
+inbox, a Slack channel, a Notion page, and a public changelog, one screenshot per step.
+
 ## Current capability
 
 The application currently provides:
