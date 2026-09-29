@@ -122,6 +122,10 @@ The changelog is anonymous, needs no session, and has an RSS feed at
 | --- | --- |
 | ![The release note email in Mailpit](images/tour/16-email.jpg) | ![The operator note filed as a Notion page](images/tour/17-notion.jpg) |
 
+The contributor note reached Slack through an incoming webhook:
+
+![The contributor note posted to a Slack channel](images/tour/22-slack.jpg)
+
 ## 9. Language, theme, and screen size
 
 The interface language is chosen per person and never changes what ReleaseFlow writes:
