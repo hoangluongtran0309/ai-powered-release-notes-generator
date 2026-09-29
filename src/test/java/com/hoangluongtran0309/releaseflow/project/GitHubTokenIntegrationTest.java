@@ -226,6 +226,8 @@ class GitHubTokenIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(get("/projects").param("tokenSaved", "").session(owner.session()))
                 .andExpect(content().string(containsString("Access token saved")))
                 .andExpect(content().string(containsString("Configured")));
+        mockMvc.perform(get("/projects").session(owner.session()))
+                .andExpect(content().string(not(containsString("Access token saved"))));
 
         GITHUB.failAccessCheck(403);
         mockMvc.perform(post("/projects/{projectId}/sources/{sourceId}/token", owner.projectId(), owner.sourceId())

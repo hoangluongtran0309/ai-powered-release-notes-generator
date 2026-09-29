@@ -20,9 +20,9 @@
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Project was not found.</span></div>
     <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
-        <div th:replace="~{fragments/toast :: toast(#{ui.projects.tokenSaved})}" th:if="${param.tokenSaved}">Access token saved.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.projects.languageSaved})}" th:if="${param.languageSaved}">Output language saved.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.projects.changelogSaved})}" th:if="${param.changelogSaved}">Changelog address saved.</div>
+        <th:block th:if="${param.tokenSaved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.projects.tokenSaved})}">Access token saved.</div></th:block>
+        <th:block th:if="${param.languageSaved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.projects.languageSaved})}">Output language saved.</div></th:block>
+        <th:block th:if="${param.changelogSaved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.projects.changelogSaved})}">Changelog address saved.</div></th:block>
     </div>
 
     <ol class="grid gap-3 md:grid-cols-3" th:aria-label="#{ui.projects.setupProgress}" aria-label="Setup progress">

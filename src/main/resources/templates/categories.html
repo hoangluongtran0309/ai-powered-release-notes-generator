@@ -19,10 +19,10 @@
 
     <div class="alert alert-error mb-6" role="alert" th:if="${pageError != null}"><span th:text="${pageError}">Category was not found.</span></div>
     <div class="toast-region" th:aria-label="#{ui.common.notifications}" aria-label="Notifications">
-        <div th:replace="~{fragments/toast :: toast(#{ui.categories.saved})}" th:if="${param.saved != null}">Category saved.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.categories.archived})}" th:if="${param.archived != null}">Category archived.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.categories.restored})}" th:if="${param.restored != null}">Category restored.</div>
-        <div th:replace="~{fragments/toast :: toast(#{ui.categories.decided})}" th:if="${param.decided != null}">Suggestion decided.</div>
+        <th:block th:if="${param.saved != null}"><div th:replace="~{fragments/toast :: toast(#{ui.categories.saved})}">Category saved.</div></th:block>
+        <th:block th:if="${param.archived != null}"><div th:replace="~{fragments/toast :: toast(#{ui.categories.archived})}">Category archived.</div></th:block>
+        <th:block th:if="${param.restored != null}"><div th:replace="~{fragments/toast :: toast(#{ui.categories.restored})}">Category restored.</div></th:block>
+        <th:block th:if="${param.decided != null}"><div th:replace="~{fragments/toast :: toast(#{ui.categories.decided})}">Suggestion decided.</div></th:block>
     </div>
 
     <section class="surface-card p-6" id="category-suggestions" th:with="pending=${suggestions.?[pending()]}">
