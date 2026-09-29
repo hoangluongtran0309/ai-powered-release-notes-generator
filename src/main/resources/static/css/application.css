@@ -188,6 +188,9 @@
     /* @tailwindcss/forms paints every radio input; DaisyUI radio tabs draw their own label. */
     .tabs > input.tab { background-image: none; color: inherit; box-shadow: none; }
     .tabs > input.tab:not(:checked) { background-color: transparent; border-color: transparent; }
+    /* A checked radio is filled with currentColor, the colour of the label DaisyUI draws on
+       it; only lifted tabs give the checked one a surface of their own. */
+    .tabs-border > input.tab:checked { background-color: transparent; }
 
     .btn:not(.btn-xs) { min-height: 2.75rem; }
     .btn-sm { min-height: 2.75rem; height: 2.75rem; }
