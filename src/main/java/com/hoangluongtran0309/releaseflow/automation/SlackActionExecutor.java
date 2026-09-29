@@ -65,7 +65,7 @@ class SlackActionExecutor implements RuleActionExecutor {
         } catch (AutomationActionInvalidException exception) {
             return ActionResult.failed(WEBHOOK_INVALID);
         }
-        String text = "*Release " + command.releaseVersion() + "*\n" + command.noteContent();
+        String text = slackMessage(command.releaseVersion(), command.noteContent());
         if (text.length() > MAX_MESSAGE_LENGTH) {
             return ActionResult.failed(MESSAGE_TOO_LONG);
         }
@@ -81,6 +81,19 @@ class SlackActionExecutor implements RuleActionExecutor {
             log.warn("Could not reach Slack with the note of release {}.", command.releaseId());
             return ActionResult.unknown(ActionResult.OUTCOME_UNKNOWN);
         }
+    }
+
+    /**
+     * The note in Slack's mrkdwn. A note that opens with a heading already names the
+     * release; any other is given the version as its title.
+     */
+    static String slackMessage(String releaseVersion, String noteContent) {
+        String body = SlackMrkdwn.render(noteContent);
+        if (SlackMrkdwn.startsWithHeading(noteContent)) {
+            return body;
+        }
+        String title = "*Release " + SlackMrkdwn.escape(releaseVersion) + "*";
+        return body.isEmpty() ? title : title + "\n\n" + body;
     }
 
     private static void requireNoTransaction() {

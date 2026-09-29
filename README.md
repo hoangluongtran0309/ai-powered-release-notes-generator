@@ -1216,7 +1216,7 @@ Eight kinds of action exist:
 | Action | What it needs | What it does |
 | --- | --- | --- |
 | GitHub Release | The project's own GitHub source and its access token | Publishes the note as the release of the version's tag, marking the body so a repeat knows its own work |
-| Slack | An incoming webhook URL, which is the action's secret | Posts the note to the channel, up to 39,000 characters |
+| Slack | An incoming webhook URL, which is the action's secret | Posts the note to the channel in Slack's own mrkdwn, up to 39,000 characters |
 | Email | `RELEASEFLOW_AUTOMATION_EMAIL_FROM` and an SMTP server | Sends the note to between 1 and 100 addresses |
 | Public changelog | Nothing | Publishes the note on your own changelog page and RSS feed |
 | Notion | The parent page's id and an integration token | Files the note as a child page titled `Release <version>`, up to 450,000 bytes |

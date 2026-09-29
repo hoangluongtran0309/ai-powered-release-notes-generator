@@ -15,6 +15,11 @@ it.
 
 ### Fixed
 
+- A Slack action posts the note in Slack's mrkdwn instead of raw Markdown, which
+  Slack showed as literal `##`, `**`, and `[#104](…)`. Headings and strong text become
+  bold, links become Slack links, lists become bullets, and the note's own `&`, `<`,
+  and `>` are escaped so it can never mention anyone. A note that opens with a heading
+  is no longer titled twice.
 - `jackson-databind` 3.1.6 and 2.21.6 replace the 3.1.5 and 2.21.5 Spring Boot 4.1.1
   manages, which carry CVE-2026-68497. The overrides go once the parent catches up.
 - The Projects, Sensitive paths, Audiences, Categories, and Automation pages no
