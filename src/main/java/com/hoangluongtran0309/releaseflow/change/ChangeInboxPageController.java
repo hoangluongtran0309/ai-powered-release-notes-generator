@@ -1,6 +1,8 @@
 package com.hoangluongtran0309.releaseflow.change;
 
 import com.hoangluongtran0309.releaseflow.account.ReleaseFlowPrincipal;
+import com.hoangluongtran0309.releaseflow.audience.AudienceService;
+import com.hoangluongtran0309.releaseflow.audience.AudienceView;
 import com.hoangluongtran0309.releaseflow.category.CategoryService;
 import com.hoangluongtran0309.releaseflow.category.CategorySuggestionService;
 import com.hoangluongtran0309.releaseflow.overview.OverviewService;
@@ -29,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Controller
 public class ChangeInboxPageController {
@@ -44,6 +47,7 @@ public class ChangeInboxPageController {
     private final UiMessages messages;
     private final SelectedProject selectedProject;
     private final OverviewService overviewService;
+    private final AudienceService audienceService;
 
 
 
@@ -58,7 +62,8 @@ public class ChangeInboxPageController {
             SourceImportService importService,
             UiMessages messages,
             SelectedProject selectedProject,
-            OverviewService overviewService
+            OverviewService overviewService,
+            AudienceService audienceService
     ) {
         this.projectService = projectService;
         this.inboxService = inboxService;
@@ -71,6 +76,7 @@ public class ChangeInboxPageController {
         this.messages = messages;
         this.selectedProject = selectedProject;
         this.overviewService = overviewService;
+        this.audienceService = audienceService;
     }
 
     /** Queues an import of a repository's last 90 days, then returns to the Inbox. */
@@ -224,7 +230,7 @@ public class ChangeInboxPageController {
     ) {
         if (bindingResult.hasErrors()) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
-            model.addAttribute("pageError", "Confirm or dismiss the possible duplicate.");
+            model.addAttribute("pageError", messages.get("ui.changes.duplicateUndecided"));
             return renderInbox(principal, projectId, returnCategory, returnStatus, returnContext, model, response);
         }
         try {
@@ -269,6 +275,9 @@ public class ChangeInboxPageController {
         model.addAttribute("projects", projects);
         // The filter offers every category, archived ones included; a review only active ones.
         model.addAttribute("categories", categoryService.list(principal.organizationId()));
+        // A narrative is keyed by its audience's code; people know the audience by its name.
+        model.addAttribute("audienceNames", audienceService.list(principal.organizationId()).stream()
+                .collect(Collectors.toMap(AudienceView::code, AudienceView::displayName)));
         model.addAttribute("reviewCategories", categoryService.active(principal.organizationId()).stream()
                 .filter(value -> !value.isUnknown())
                 .toList());

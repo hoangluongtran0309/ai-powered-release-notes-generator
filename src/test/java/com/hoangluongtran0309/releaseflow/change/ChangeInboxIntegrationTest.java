@@ -4,11 +4,13 @@ import com.hoangluongtran0309.releaseflow.account.RegistrationRequest;
 import com.hoangluongtran0309.releaseflow.account.RegistrationResult;
 import com.hoangluongtran0309.releaseflow.account.RegistrationService;
 import com.hoangluongtran0309.releaseflow.support.PostgreSqlIntegrationTest;
+import com.hoangluongtran0309.releaseflow.support.TestChanges;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
@@ -193,6 +195,35 @@ class ChangeInboxIntegrationTest extends PostgreSqlIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(model().attributeExists("pageError"))
                 .andExpect(content().string(containsString("Category must be a category code")));
+    }
+
+    @Test
+    void namesTheAudienceANarrativeIsWrittenFor() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com");
+        UUID projectId = createProject(owner.session(), "Checkout");
+        UUID change = TestChanges.insert(jdbcTemplate, owner.organizationId(), projectId, 1,
+                "Round coupons after tax", "FIX", false, false, null);
+        TestChanges.summarize(jdbcTemplate, change, "Coupons round after tax.",
+                "{\"end_user\":\"Totals no longer come up a cent short.\"}");
+
+        mockMvc.perform(get("/changes").session(owner.session()).param("project", projectId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("For End user")))
+                .andExpect(content().string(not(containsString("For end_user"))));
+    }
+
+    @Test
+    void anUndecidedDuplicateIsExplainedInTheReadersLanguage() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com");
+        UUID projectId = createProject(owner.session(), "Checkout");
+
+        mockMvc.perform(post("/projects/{projectId}/duplicate-candidates/{candidateId}/decision",
+                        projectId, UUID.randomUUID())
+                        .session(owner.session()).with(csrf())
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "vi")
+                        .param("changeId", UUID.randomUUID().toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(model().attribute("pageError", "Hãy xác nhận hoặc bỏ qua khả năng trùng lặp này."));
     }
 
     @Test

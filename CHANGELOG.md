@@ -15,6 +15,10 @@ it.
 
 ### Fixed
 
+- The Change Inbox names the audience an AI narrative is written for, as "For End user",
+  instead of its code, "For end_user". A narrative whose audience has since gone keeps
+  the code it was recorded under. Submitting a duplicate decision without choosing one
+  now explains itself in the reader's language instead of always in English.
 - A form sent after its session ended no longer lands on a 403 page saying the page
   belongs to an administrator or another Organization. The browser goes to sign in with
   a notice that nothing was saved. A form that is only out of date, because the person

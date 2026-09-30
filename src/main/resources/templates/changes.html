@@ -326,7 +326,7 @@
                             <div th:unless="${#strings.isEmpty(summary.whyChanged)}"><dt class="font-semibold" th:text="#{ui.changes.whyChanged}">Why</dt><dd class="whitespace-pre-line" th:text="${summary.whyChanged}">Users asked to download data.</dd></div>
                             <div th:unless="${#strings.isEmpty(summary.technicalDetail)}"><dt class="font-semibold" th:text="#{ui.changes.technicalDetail}">Technical detail</dt><dd class="whitespace-pre-line" th:text="${summary.technicalDetail}">Streams rows to avoid loading the table in memory.</dd></div>
                             <div th:unless="${#strings.isEmpty(summary.migrationStep)}"><dt class="font-semibold" th:text="#{ui.changes.migration}">Migration</dt><dd class="whitespace-pre-line" th:text="${summary.migrationStep}">Nothing to do.</dd></div>
-                            <div th:each="narrative : ${change.audienceNarratives}"><dt class="font-semibold" th:text="#{ui.changes.narrativeFor(${narrative.key})}">For operator</dt><dd class="whitespace-pre-line" th:text="${narrative.value}">Watch the export queue after deploying.</dd></div>
+                            <div th:each="narrative : ${change.audienceNarratives}"><dt class="font-semibold" th:text="#{ui.changes.narrativeFor(${audienceNames[narrative.key] ?: narrative.key})}">For operator</dt><dd class="whitespace-pre-line" th:text="${narrative.value}">Watch the export queue after deploying.</dd></div>
                             <p class="text-xs text-slate-500" th:if="${change.summaryEditorName != null}"
                                th:text="#{ui.changes.writtenBy(${change.summaryEditorName})}">Written by Mai Tran</p>
                         </dl>
