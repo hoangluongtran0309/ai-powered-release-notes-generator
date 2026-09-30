@@ -15,6 +15,9 @@ it.
 
 ### Fixed
 
+- A Slack action whose webhook answers with a redirect is recorded as `FAILED`
+  (`slack_rejected`) instead of delivered. The redirect was never followed, so nothing
+  was posted.
 - A Slack action posts the note in Slack's mrkdwn instead of raw Markdown, which
   Slack showed as literal `##`, `**`, and `[#104](…)`. Headings and strong text become
   bold, links become Slack links, lists become bullets, and the note's own `&`, `<`,

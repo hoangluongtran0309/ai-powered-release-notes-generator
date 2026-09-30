@@ -30,6 +30,7 @@ public final class SlackStub implements AutoCloseable {
     private final List<String> messages = new CopyOnWriteArrayList<>();
     private volatile int status = 200;
     private volatile Duration delay = Duration.ZERO;
+    private volatile String redirectTo;
 
     private SlackStub() {
         try {
@@ -62,10 +63,15 @@ public final class SlackStub implements AutoCloseable {
         this.delay = delay;
     }
 
+    public void redirectTo(String location) {
+        redirectTo = location;
+    }
+
     public void reset() {
         messages.clear();
         status = 200;
         delay = Duration.ZERO;
+        redirectTo = null;
     }
 
     @Override
@@ -80,6 +86,12 @@ public final class SlackStub implements AutoCloseable {
             Thread.sleep(delay);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            return;
+        }
+        if (redirectTo != null) {
+            exchange.getResponseHeaders().add("Location", redirectTo);
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
             return;
         }
         int answer = status;

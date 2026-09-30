@@ -139,6 +139,27 @@ class AutomationActionIntegrationTest extends AutomationIntegrationTestBase {
     }
 
     @Test
+    void refusesToFollowARedirectAwayFromSlack() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+        UUID ruleId = createdRuleId(createRule(owner, slackRule("Announce", "MANUAL", projectId, endUser, "en"))
+                .andExpect(status().isCreated()));
+        enable(owner, ruleId).andExpect(status().isOk());
+        // The webhook URL is a credential; following this would hand it to another origin.
+        SLACK.redirectTo("http://127.0.0.1:9/collect");
+
+        UUID runId = run(owner, ruleId, publishedRelease(owner, projectId, "1.4.0"));
+        work();
+
+        // A 302 nobody follows posted nothing, so it is not a delivery.
+        assertThat(SLACK.messages()).isEmpty();
+        mockMvc.perform(get("/api/automation/runs/{runId}", runId).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("slack_rejected"));
+    }
+
+    @Test
     void sendsTheNoteToTheAddressesAnEmailActionNames() throws Exception {
         Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
         UUID projectId = createProject(owner);
