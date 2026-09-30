@@ -1110,7 +1110,8 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   `<!-- releaseflow-action:{id} -->` so a repeat knows its own work from somebody else's.
   A Slack action posts through an incoming webhook whose origin the deployment allows,
   checked again before every delivery, up to 39,000 characters; a redirect is never
-  followed and fails the action as `slack_rejected`. The note is rewritten
+  followed and fails the action as `slack_rejected`, as does any 4xx, while a 5xx may
+  have posted before failing to answer and is recorded as unknown. The note is rewritten
   from Markdown into Slack's mrkdwn — headings and strong text as `*bold*`, links as
   `<url|text>` for http, https, and mailto only, lists as bullets — and every `&`, `<`,
   and `>` of its own text is escaped, so no title can mention a person or `<!channel>`.

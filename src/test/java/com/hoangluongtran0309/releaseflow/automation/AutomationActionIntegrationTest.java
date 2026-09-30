@@ -131,12 +131,20 @@ class AutomationActionIntegrationTest extends AutomationIntegrationTestBase {
         mockMvc.perform(get("/api/automation/runs/{runId}", delivered).session(owner.session()))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"));
 
-        SLACK.respondWith(500);
+        SLACK.respondWith(400);
         UUID refused = run(owner, ruleId, publishedRelease(owner, projectId, "1.5.0"));
         work();
         mockMvc.perform(get("/api/automation/runs/{runId}", refused).session(owner.session()))
                 .andExpect(jsonPath("$.status").value("FAILED"))
                 .andExpect(jsonPath("$.actions[0].errorCode").value("slack_rejected"));
+
+        // Slack may have posted the message before it failed to answer.
+        SLACK.respondWith(503);
+        UUID unconfirmed = run(owner, ruleId, publishedRelease(owner, projectId, "1.6.0"));
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", unconfirmed).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("UNKNOWN"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("execution_outcome_unknown"));
     }
 
     @Test

@@ -84,8 +84,13 @@ class SlackActionExecutor implements RuleActionExecutor {
                     response.getStatusCode().value(), command.releaseId());
             return ActionResult.failed(REJECTED);
         } catch (RestClientResponseException exception) {
-            log.warn("Slack refused the note of release {} with HTTP {}.",
-                    command.releaseId(), exception.getStatusCode().value());
+            int status = exception.getStatusCode().value();
+            if (exception.getStatusCode().is5xxServerError()) {
+                // Slack may have posted the message before it failed to answer.
+                log.warn("Slack answered HTTP {} for the note of release {}.", status, command.releaseId());
+                return ActionResult.unknown(ActionResult.OUTCOME_UNKNOWN);
+            }
+            log.warn("Slack refused the note of release {} with HTTP {}.", command.releaseId(), status);
             return ActionResult.failed(REJECTED);
         } catch (RestClientException exception) {
             // Slack may have posted the message before the connection failed.
