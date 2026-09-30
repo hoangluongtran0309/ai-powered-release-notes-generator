@@ -753,8 +753,10 @@ still looked up against your Organization, so a cookie naming somebody else's is
 ignored.
 
 A mistyped address answers a browser with a page rather than raw JSON, and one
-your role does not reach says so without showing any of it. A REST client, and
-anything under `/api`, keeps the `application/problem+json` it had.
+your role does not reach says so without showing any of it. A form sent after its
+session ended returns you to sign in, and one older than your latest sign-in is called
+out of date; neither saved anything. A REST client, and anything under `/api`, keeps
+the `application/problem+json` it had.
 
 ## Interface language
 

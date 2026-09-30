@@ -2,7 +2,7 @@
 // at 360 px in the light theme and at 1440 px in the dark one, so a rule that only
 // breaks in one of them still fails the build.
 import { test, expect } from '@playwright/test';
-import { createProject, expectNoAccessibilityViolations, registerAndSignIn } from './support.js';
+import { createProject, expectNoAccessibilityViolations, registerAndSignIn, signIn, unique } from './support.js';
 
 test.describe('workspace pages', () => {
   test('open, stay usable, and break no accessibility rule', async ({ page }) => {
@@ -49,5 +49,37 @@ test.describe('workspace pages', () => {
     await expect(page.getByRole('link', { name: /back to the workspace|về không gian làm việc/i })).toBeVisible();
     await expect(page.locator('body')).not.toContainText('Exception');
     await expectNoAccessibilityViolations(page, 'not found');
+  });
+
+  test('a form sent after its session ended asks to sign in again', async ({ page, context }) => {
+    await registerAndSignIn(page);
+    await page.goto('/projects');
+    await page.getByPlaceholder(/project name|tên project/i).fill(unique('Checkout'));
+
+    await context.clearCookies();
+    await page.getByRole('button', { name: /create project|tạo project/i }).click();
+
+    await expect(page).toHaveURL(/\/login\?expired$/);
+    await expect(page.getByRole('status')).toContainText(/session ended|phiên làm việc đã hết/i);
+    await expect(page.locator('body')).not.toContainText(/another Organization|Organization khác/);
+    await expectNoAccessibilityViolations(page, 'sign in after an expired session');
+  });
+
+  test('a form older than the sign-in beside it is called out of date', async ({ page, context }) => {
+    const owner = await registerAndSignIn(page);
+    await page.goto('/projects');
+    await page.getByPlaceholder(/project name|tên project/i).fill(unique('Checkout'));
+
+    // Signing in again in another tab starts a new session and a new form token.
+    const other = await context.newPage();
+    await signIn(other, owner.email, owner.password);
+    await other.close();
+    const response = page.waitForResponse((answer) => answer.request().method() === 'POST');
+    await page.getByRole('button', { name: /create project|tạo project/i }).click();
+
+    expect((await response).status()).toBe(403);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/out of date|đã cũ/i);
+    await expect(page.locator('body')).not.toContainText(/another Organization|Organization khác/);
+    await expectNoAccessibilityViolations(page, 'out-of-date form');
   });
 });

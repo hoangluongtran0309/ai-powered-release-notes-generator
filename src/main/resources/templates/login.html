@@ -29,6 +29,7 @@
                 <h2 class="mt-2 text-3xl font-bold tracking-tight" th:text="#{ui.login.cardHeading}">Sign in to your workspace</h2>
                 <p class="mt-2 text-sm text-slate-600" th:text="#{ui.login.cardBody}">Manage projects and their repositories.</p>
                 <div th:if="${param.error}" class="alert alert-error mt-6" role="alert"><span th:text="#{ui.login.badCredentials}">The email or password is incorrect.</span></div>
+                <div th:if="${param.expired}" class="alert alert-warning mt-6" role="status"><span th:text="#{ui.login.expired}">Your session ended, so nothing was saved.</span></div>
                 <div th:if="${param.logout}" class="alert alert-success mt-6" role="status"><span th:text="#{ui.login.signedOut}">You have signed out.</span></div>
                 <div th:if="${param.registered}" class="alert alert-success mt-6" role="status"><span th:text="#{ui.login.registered}">Your organization is ready.</span></div>
                 <div th:if="${param.invited}" class="alert alert-success mt-6" role="status"><span th:text="#{ui.login.invited}">Your account is ready.</span></div>

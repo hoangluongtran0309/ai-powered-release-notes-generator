@@ -18,7 +18,8 @@ import org.springframework.web.context.request.ServletWebRequest;
  * security chain, which both run first.
  *
  * <p>Only three statuses have wording of their own; anything else is shown as a fault,
- * because a page that guessed would be telling somebody something it does not know.
+ * because a page that guessed would be telling somebody something it does not know. A
+ * refusal the security chain explained, such as a stale form, keeps its own wording.
  */
 @Controller
 class HtmlErrorController implements ErrorController {
@@ -35,7 +36,9 @@ class HtmlErrorController implements ErrorController {
         model.addAttribute("status", status.value());
         model.addAttribute("statusKey", switch (status) {
             case NOT_FOUND -> "notFound";
-            case FORBIDDEN -> "forbidden";
+            case FORBIDDEN -> ApiAccessDeniedHandler.FORM_EXPIRED.equals(request.getAttribute(ApiAccessDeniedHandler.ERROR_REASON))
+                    ? ApiAccessDeniedHandler.FORM_EXPIRED
+                    : "forbidden";
             default -> "fault";
         });
         // The path is what the person typed or followed; never the exception behind it.

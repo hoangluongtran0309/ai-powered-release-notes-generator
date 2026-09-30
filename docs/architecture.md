@@ -1219,6 +1219,13 @@ produces. `HtmlErrorController` renders what the container's error dispatch forw
 a refusal from the security chain, or a fault. Three statuses have wording of their own;
 anything else is shown as a fault, and the exception behind it never reaches the page.
 
+A form whose CSRF token no longer matches is not a refusal of the person. When the
+session behind it has ended, `ApiAccessDeniedHandler` sends the browser to
+`/login?expired`, which says nothing was saved; when the person is still signed in
+(another tab signed in again), the 403 page says the form is out of date instead of
+that the page belongs to somebody else. Either way the request never reached a
+controller. CSRF protection itself is unchanged, and `/api` keeps `access_denied`.
+
 ## User interface
 
 Pages are server-rendered Thymeleaf templates composed with the Layout Dialect:
