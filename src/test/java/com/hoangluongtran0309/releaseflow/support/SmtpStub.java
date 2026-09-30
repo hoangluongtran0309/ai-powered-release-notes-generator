@@ -1,6 +1,14 @@
 package com.hoangluongtran0309.releaseflow.support;
 
+import jakarta.mail.BodyPart;
+import jakarta.mail.MessagingException;
+import jakarta.mail.Multipart;
+import jakarta.mail.Part;
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
+
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -11,6 +19,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -102,7 +111,8 @@ public final class SmtpStub implements AutoCloseable {
                     reply(out, "354 End with a dot");
                     String body;
                     while ((body = in.readLine()) != null && !".".equals(body)) {
-                        data.append(body).append('\n');
+                        // SMTP doubles a leading dot; the message itself has one.
+                        data.append(body.startsWith("..") ? body.substring(1) : body).append('\n');
                     }
                     messages.add(new Message(List.copyOf(recipients), data.toString()));
                     reply(out, "250 Queued");
@@ -125,5 +135,33 @@ public final class SmtpStub implements AutoCloseable {
 
     /** One message the stub accepted. */
     public record Message(List<String> recipients, String body) {
+
+        /** The decoded text of the first part of this type, or null when there is none. */
+        public String part(String contentType) {
+            try {
+                MimeMessage message = new MimeMessage(Session.getInstance(new Properties()),
+                        new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)));
+                return find(message, contentType);
+            } catch (MessagingException | IOException exception) {
+                throw new IllegalStateException("The stub accepted a message it cannot read.", exception);
+            }
+        }
+
+        private static String find(Part part, String contentType) throws MessagingException, IOException {
+            if (part.isMimeType(contentType)) {
+                return (String) part.getContent();
+            }
+            if (part.isMimeType("multipart/*")) {
+                Multipart multipart = (Multipart) part.getContent();
+                for (int index = 0; index < multipart.getCount(); index++) {
+                    BodyPart child = multipart.getBodyPart(index);
+                    String found = find(child, contentType);
+                    if (found != null) {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        }
     }
 }

@@ -1115,7 +1115,10 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   `<url|text>` for http, https, and mailto only, lists as bullets — and every `&`, `<`,
   and `>` of its own text is escaped, so no title can mention a person or `<!channel>`.
   An email action sends
-  through the deployment's SMTP server to between 1 and 100 addresses. A Notion action
+  through the deployment's SMTP server to between 1 and 100 addresses, as
+  multipart/alternative: the note's Markdown for plain-text readers, and the HTML the
+  Confluence and Zendesk actions receive, with raw HTML escaped and images turned into
+  links so opening the mail loads nothing. A Notion action
   files the note as a child page under a page id the action names, against the API
   version the deployment pins; Notion's own address is deployment configuration, so no
   request chooses it. A Confluence action creates a page in a Cloud space, authenticated

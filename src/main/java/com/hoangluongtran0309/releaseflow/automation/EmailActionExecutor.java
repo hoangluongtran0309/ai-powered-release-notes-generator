@@ -1,15 +1,19 @@
 package com.hoangluongtran0309.releaseflow.automation;
 
+import com.hoangluongtran0309.releaseflow.audience.MarkdownHtml;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.MailSendException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.util.HtmlUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -17,7 +21,9 @@ import java.util.Map;
 /**
  * Sends the release note to a fixed list of addresses over the deployment's own SMTP
  * server. An Action has no mail credentials of its own, so a Rule that needs one can
- * only be enabled once the deployment is configured to send at all.
+ * only be enabled once the deployment is configured to send at all. The message carries
+ * the note twice: as its Markdown for plain-text readers, and as the same safe HTML
+ * Confluence and Zendesk receive for everyone else.
  */
 @Component
 class EmailActionExecutor implements RuleActionExecutor {
@@ -74,13 +80,21 @@ class EmailActionExecutor implements RuleActionExecutor {
         } catch (AutomationActionInvalidException exception) {
             return ActionResult.failed(RECIPIENTS_INVALID);
         }
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(from);
-        message.setTo(recipients.toArray(String[]::new));
-        message.setSubject("Release " + command.releaseVersion());
-        message.setText(command.noteContent());
+        JavaMailSender sender = mailSender.getObject();
+        MimeMessage message = sender.createMimeMessage();
         try {
-            mailSender.getObject().send(message);
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(recipients.toArray(String[]::new));
+            helper.setSubject("Release " + command.releaseVersion());
+            helper.setText(command.noteContent(), emailHtml(command.language(), command.noteContent()));
+        } catch (MessagingException exception) {
+            // Nothing has left ReleaseFlow yet, so no recipient can have the note.
+            log.warn("Could not compose the email for the note of release {}.", command.releaseId());
+            return ActionResult.failed(REJECTED);
+        }
+        try {
+            sender.send(message);
             return ActionResult.succeeded(null);
         } catch (MailSendException exception) {
             // SMTP may have accepted the message for some or all of the recipients.
@@ -90,6 +104,14 @@ class EmailActionExecutor implements RuleActionExecutor {
             log.warn("SMTP refused the note of release {}.", command.releaseId());
             return ActionResult.failed(REJECTED);
         }
+    }
+
+    /** The note as a whole HTML document, rendered by the renderer that escapes raw HTML. */
+    static String emailHtml(String language, String noteContent) {
+        return "<!doctype html><html lang=\"" + HtmlUtils.htmlEscape(language == null ? "" : language)
+                + "\"><head><meta charset=\"utf-8\"></head><body>"
+                + MarkdownHtml.render(noteContent)
+                + "</body></html>";
     }
 
     private boolean configured() {
