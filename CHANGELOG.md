@@ -8,6 +8,11 @@ it.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-30
+
+Fixes found while running one whole release on the demo stack, and a dependency
+update for CVE-2026-68497. Nothing new to configure and no migration.
+
 ### Added
 
 - `docs/tour.md`, a screenshot tour of one release from an empty workspace to
@@ -810,4 +815,5 @@ slice at a time, and all of it is in this release.
   Project is reported at the top of the page.
 - Project creation times display as a readable UTC date.
 
+[0.1.1]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.0
