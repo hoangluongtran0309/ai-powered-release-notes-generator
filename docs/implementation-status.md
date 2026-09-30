@@ -371,7 +371,9 @@
   - a Project switcher in the header, with the last Project remembered in an `HttpOnly`
     cookie that carries no authority: a URL that names one wins, and one naming another
     Organization's Project is ignored rather than refused;
-  - error pages for a mistyped address, a page a role does not reach, and a fault, with
+  - error pages for a mistyped address, a page a role does not reach, a form that is out
+    of date, and a fault, and a return to sign-in for a form sent after its session ended,
+    with
     `UnknownAddressAdvice` answering a browser with a page and everybody else with the
     Problem Details they had;
   - a toast dismissed by hand rather than on a timer, as WCAG 2.2.1 asks;

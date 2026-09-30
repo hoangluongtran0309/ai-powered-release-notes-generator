@@ -15,6 +15,11 @@ it.
 
 ### Fixed
 
+- A form sent after its session ended no longer lands on a 403 page saying the page
+  belongs to an administrator or another Organization. The browser goes to sign in with
+  a notice that nothing was saved. A form that is only out of date, because the person
+  signed in again in another tab, gets a 403 page that says so. CSRF protection is
+  unchanged, and `/api` still answers `access_denied`.
 - An email action sends the note as HTML as well as its Markdown, so mail clients
   show headings, bold text, and links instead of literal `##`, `**`, and `[#104](…)`.
   The HTML comes from the same renderer as Confluence and Zendesk: raw HTML is escaped
