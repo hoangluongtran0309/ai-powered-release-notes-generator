@@ -15,6 +15,10 @@ it.
 
 ### Fixed
 
+- A Slack webhook that answers 5xx is recorded as `UNKNOWN` instead of `FAILED`,
+  because Slack may have posted the message before failing to answer. The run then
+  waits for a person to confirm a duplicate before it is retried, as Microsoft Teams
+  already does. A 4xx is still `FAILED` (`slack_rejected`).
 - The sidebar's Vietnamese tagline no longer wraps the brand onto three lines and
   spills over the top edge of the page. The tagline is shorter, and the brand row now
   grows downwards if a longer translation ever wraps. A browser test checks the row in
