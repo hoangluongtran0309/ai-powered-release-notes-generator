@@ -61,8 +61,13 @@ Before requesting review:
    changes.
 4. Update `README.md`, `CHANGELOG.md`, `docs/architecture.md`, and
    `docs/implementation-status.md` when behavior changes.
-5. Prefer a squash merge so the resulting integration commit also follows the
-   commit convention.
+5. Squash a pull request into `develop`, so each slice lands as one commit that
+   follows the commit convention. **Merge a `release/*` or `hotfix/*` pull
+   request into `main` with a merge commit instead**: squashing or rebasing it
+   would give `main` a commit that shares no ancestry with `develop`, and the
+   two branches would diverge for good — the back-merge in step 5 of the release
+   flow would conflict, and the tag would point at a commit `develop` has never
+   seen.
 
 GitHub Actions enforces the automated part of this gate on every pull request
 to `develop` and `main`: the pull request title must follow the commit

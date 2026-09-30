@@ -2,6 +2,7 @@ package com.hoangluongtran0309.releaseflow.automation;
 
 import com.hoangluongtran0309.releaseflow.support.ConfluenceStub;
 import com.hoangluongtran0309.releaseflow.support.NotionStub;
+import com.hoangluongtran0309.releaseflow.support.SmtpStub;
 import com.hoangluongtran0309.releaseflow.support.TeamsStub;
 import com.hoangluongtran0309.releaseflow.support.ZendeskStub;
 import com.jayway.jsonpath.JsonPath;
@@ -130,10 +131,39 @@ class AutomationActionIntegrationTest extends AutomationIntegrationTestBase {
         mockMvc.perform(get("/api/automation/runs/{runId}", delivered).session(owner.session()))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"));
 
-        SLACK.respondWith(500);
+        SLACK.respondWith(400);
         UUID refused = run(owner, ruleId, publishedRelease(owner, projectId, "1.5.0"));
         work();
         mockMvc.perform(get("/api/automation/runs/{runId}", refused).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("slack_rejected"));
+
+        // Slack may have posted the message before it failed to answer.
+        SLACK.respondWith(503);
+        UUID unconfirmed = run(owner, ruleId, publishedRelease(owner, projectId, "1.6.0"));
+        work();
+        mockMvc.perform(get("/api/automation/runs/{runId}", unconfirmed).session(owner.session()))
+                .andExpect(jsonPath("$.status").value("UNKNOWN"))
+                .andExpect(jsonPath("$.actions[0].errorCode").value("execution_outcome_unknown"));
+    }
+
+    @Test
+    void refusesToFollowARedirectAwayFromSlack() throws Exception {
+        Owner owner = registerAndLogin("owner@example.com", "Mai Tran");
+        UUID projectId = createProject(owner);
+        UUID endUser = audienceId(owner, "end_user");
+        UUID ruleId = createdRuleId(createRule(owner, slackRule("Announce", "MANUAL", projectId, endUser, "en"))
+                .andExpect(status().isCreated()));
+        enable(owner, ruleId).andExpect(status().isOk());
+        // The webhook URL is a credential; following this would hand it to another origin.
+        SLACK.redirectTo("http://127.0.0.1:9/collect");
+
+        UUID runId = run(owner, ruleId, publishedRelease(owner, projectId, "1.4.0"));
+        work();
+
+        // A 302 nobody follows posted nothing, so it is not a delivery.
+        assertThat(SLACK.messages()).isEmpty();
+        mockMvc.perform(get("/api/automation/runs/{runId}", runId).session(owner.session()))
                 .andExpect(jsonPath("$.status").value("FAILED"))
                 .andExpect(jsonPath("$.actions[0].errorCode").value("slack_rejected"));
     }
@@ -158,7 +188,13 @@ class AutomationActionIntegrationTest extends AutomationIntegrationTestBase {
         assertThat(SMTP.messages()).hasSize(1);
         assertThat(SMTP.messages().getFirst().recipients())
                 .containsExactly("ops@example.com", "support@example.com");
-        assertThat(SMTP.messages().getFirst().body()).contains("Release 1.4.0");
+        SmtpStub.Message message = SMTP.messages().getFirst();
+        assertThat(message.part("text/plain")).contains("Release 1.4.0");
+        // Mail clients render the HTML part, so no reader sees the note's Markdown markers.
+        assertThat(message.part("text/html"))
+                .startsWith("<!doctype html><html lang=\"en\">")
+                .contains("<strong>")
+                .doesNotContain("**");
     }
 
     @Test

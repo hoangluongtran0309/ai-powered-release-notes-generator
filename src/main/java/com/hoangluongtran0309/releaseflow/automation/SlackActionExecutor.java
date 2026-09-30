@@ -3,6 +3,7 @@ package com.hoangluongtran0309.releaseflow.automation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -65,22 +66,50 @@ class SlackActionExecutor implements RuleActionExecutor {
         } catch (AutomationActionInvalidException exception) {
             return ActionResult.failed(WEBHOOK_INVALID);
         }
-        String text = "*Release " + command.releaseVersion() + "*\n" + command.noteContent();
+        String text = slackMessage(command.releaseVersion(), command.noteContent());
         if (text.length() > MAX_MESSAGE_LENGTH) {
             return ActionResult.failed(MESSAGE_TOO_LONG);
         }
         try {
-            restClient.post().uri(webhook).body(Map.of("text", text)).retrieve().toBodilessEntity();
-            return ActionResult.succeeded(null);
+            ResponseEntity<Void> response = restClient.post()
+                    .uri(webhook)
+                    .body(Map.of("text", text))
+                    .retrieve()
+                    .toBodilessEntity();
+            if (response.getStatusCode().is2xxSuccessful()) {
+                return ActionResult.succeeded(null);
+            }
+            // A redirect is not followed, so the message went nowhere.
+            log.warn("Slack answered HTTP {} for the note of release {}.",
+                    response.getStatusCode().value(), command.releaseId());
+            return ActionResult.failed(REJECTED);
         } catch (RestClientResponseException exception) {
-            log.warn("Slack refused the note of release {} with HTTP {}.",
-                    command.releaseId(), exception.getStatusCode().value());
+            int status = exception.getStatusCode().value();
+            if (exception.getStatusCode().is5xxServerError()) {
+                // Slack may have posted the message before it failed to answer.
+                log.warn("Slack answered HTTP {} for the note of release {}.", status, command.releaseId());
+                return ActionResult.unknown(ActionResult.OUTCOME_UNKNOWN);
+            }
+            log.warn("Slack refused the note of release {} with HTTP {}.", command.releaseId(), status);
             return ActionResult.failed(REJECTED);
         } catch (RestClientException exception) {
             // Slack may have posted the message before the connection failed.
             log.warn("Could not reach Slack with the note of release {}.", command.releaseId());
             return ActionResult.unknown(ActionResult.OUTCOME_UNKNOWN);
         }
+    }
+
+    /**
+     * The note in Slack's mrkdwn. A note that opens with a heading already names the
+     * release; any other is given the version as its title.
+     */
+    static String slackMessage(String releaseVersion, String noteContent) {
+        String body = SlackMrkdwn.render(noteContent);
+        if (SlackMrkdwn.startsWithHeading(noteContent)) {
+            return body;
+        }
+        String title = "*Release " + SlackMrkdwn.escape(releaseVersion) + "*";
+        return body.isEmpty() ? title : title + "\n\n" + body;
     }
 
     private static void requireNoTransaction() {

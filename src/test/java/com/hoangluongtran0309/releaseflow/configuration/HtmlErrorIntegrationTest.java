@@ -21,6 +21,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -102,6 +104,54 @@ class HtmlErrorIntegrationTest extends PostgreSqlIntegrationTest {
         mockMvc.perform(get("/automation").session(member).accept(MediaType.TEXT_HTML))
                 .andExpect(status().isForbidden())
                 .andExpect(content().string(Matchers.not(Matchers.containsString("Run history"))));
+    }
+
+    @Test
+    void aFormThatOutlivedItsSessionSendsTheBrowserToSignIn() throws Exception {
+        MockHttpSession session = registerAndLogin();
+        session.invalidate();
+
+        // The form still carries the token of the session that ended.
+        mockMvc.perform(post("/projects").with(csrf().useInvalidToken())
+                        .accept(MediaType.TEXT_HTML)
+                        .param("name", "Checkout"))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/login?expired"));
+        org.assertj.core.api.Assertions.assertThat(
+                jdbcTemplate.queryForObject("SELECT count(*) FROM projects", Integer.class)).isZero();
+    }
+
+    @Test
+    void aStaleFormFromSomebodyStillSignedInIsCalledStaleNotSomebodyElses() throws Exception {
+        MockHttpSession session = registerAndLogin();
+
+        mockMvc.perform(post("/projects").session(session).with(csrf().useInvalidToken())
+                        .accept(MediaType.TEXT_HTML)
+                        .param("name", "Checkout"))
+                .andExpect(status().isForbidden())
+                .andExpect(request().attribute(ApiAccessDeniedHandler.ERROR_REASON, ApiAccessDeniedHandler.FORM_EXPIRED));
+    }
+
+    @Test
+    void aRoleRefusalIsNotMistakenForAStaleForm() throws Exception {
+        MockHttpSession session = registerAndLogin();
+        MockHttpSession member = inviteAndJoinAsMember(session);
+
+        mockMvc.perform(get("/automation").session(member).accept(MediaType.TEXT_HTML))
+                .andExpect(status().isForbidden())
+                .andExpect(request().attribute(ApiAccessDeniedHandler.ERROR_REASON, Matchers.nullValue()));
+    }
+
+    @Test
+    void anApiCallWithoutAValidTokenStillGetsProblemDetails() throws Exception {
+        MockHttpSession session = registerAndLogin();
+        session.invalidate();
+
+        mockMvc.perform(post("/api/projects").with(csrf().useInvalidToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Checkout\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("access_denied"));
     }
 
     private MockHttpSession registerAndLogin() throws Exception {

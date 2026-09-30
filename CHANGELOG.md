@@ -8,7 +8,62 @@ it.
 
 ## [Unreleased]
 
-Nothing yet.
+## [0.1.1] - 2026-09-30
+
+Fixes found while running one whole release on the demo stack, and a dependency
+update for CVE-2026-68497. Nothing new to configure and no migration.
+
+### Added
+
+- `docs/tour.md`, a screenshot tour of one release from an empty workspace to
+  delivered notes, taken from the demo stack, and a link to it from `README.md`.
+
+### Fixed
+
+- A Slack webhook that answers 5xx is recorded as `UNKNOWN` instead of `FAILED`,
+  because Slack may have posted the message before failing to answer. The run then
+  waits for a person to confirm a duplicate before it is retried, as Microsoft Teams
+  already does. A 4xx is still `FAILED` (`slack_rejected`).
+- The sidebar's Vietnamese tagline no longer wraps the brand onto three lines and
+  spills over the top edge of the page. The tagline is shorter, and the brand row now
+  grows downwards if a longer translation ever wraps. A browser test checks the row in
+  every shipped language.
+- The Change Inbox names the audience an AI narrative is written for, as "For End user",
+  instead of its code, "For end_user". A narrative whose audience has since gone keeps
+  the code it was recorded under. Submitting a duplicate decision without choosing one
+  now explains itself in the reader's language instead of always in English.
+- A form sent after its session ended no longer lands on a 403 page saying the page
+  belongs to an administrator or another Organization. The browser goes to sign in with
+  a notice that nothing was saved. A form that is only out of date, because the person
+  signed in again in another tab, gets a 403 page that says so. CSRF protection is
+  unchanged, and `/api` still answers `access_denied`.
+- An email action sends the note as HTML as well as its Markdown, so mail clients
+  show headings, bold text, and links instead of literal `##`, `**`, and `[#104](…)`.
+  The HTML comes from the same renderer as Confluence and Zendesk: raw HTML is escaped
+  and images become links, so opening the mail loads nothing.
+- A Slack action whose webhook answers with a redirect is recorded as `FAILED`
+  (`slack_rejected`) instead of delivered. The redirect was never followed, so nothing
+  was posted.
+- A Slack action posts the note in Slack's mrkdwn instead of raw Markdown, which
+  Slack showed as literal `##`, `**`, and `[#104](…)`. Headings and strong text become
+  bold, links become Slack links, lists become bullets, and the note's own `&`, `<`,
+  and `>` are escaped so it can never mention anyone. A note that opens with a heading
+  is no longer titled twice.
+- `jackson-databind` 3.1.6 and 2.21.6 replace the 3.1.5 and 2.21.5 Spring Boot 4.1.1
+  manages, which carry CVE-2026-68497. The overrides go once the parent catches up.
+- The Projects, Sensitive paths, Audiences, Categories, and Automation pages no
+  longer show every success toast on a plain visit. `th:replace` runs before `th:if`
+  on the same element, so the condition was never read; each toast now sits inside
+  its own conditional block.
+- The selected audience or language tab above a release note shows its name again.
+  `@tailwindcss/forms` fills a checked radio with the colour DaisyUI draws the tab's
+  label in, so the label vanished into its own background in both themes.
+
+### Changed
+
+- `CONTRIBUTING.md` says which merge a pull request takes: squash into `develop`,
+  a merge commit into `main`. Squashing a release would give `main` a commit that
+  shares no ancestry with `develop`, and the branches would diverge for good.
 
 ## [0.1.0] - 2026-09-23
 
@@ -760,4 +815,5 @@ slice at a time, and all of it is in this release.
   Project is reported at the top of the page.
 - Project creation times display as a readable UTC date.
 
+[0.1.1]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.0

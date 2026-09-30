@@ -113,6 +113,8 @@ class AutomationWorkerIntegrationTest extends AutomationIntegrationTestBase {
         assertThat(worker.processOne()).isTrue();
         assertThat(SLACK.messages()).hasSize(1);
         assertThat(SLACK.messages().getFirst()).startsWith("*Release 1.4.0*");
+        // Slack reads its own mrkdwn, not the note's Markdown.
+        assertThat(SLACK.messages().getFirst()).doesNotContain("# ", "**", "](");
         mockMvc.perform(get("/api/automation/runs").session(owner.session()))
                 .andExpect(jsonPath("$.items[0].status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.items[0].triggerType").value("RELEASE_PUBLISHED"))

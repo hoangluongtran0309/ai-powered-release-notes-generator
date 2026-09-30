@@ -324,7 +324,7 @@ class ChangeAiProcessingIntegrationTest extends PostgreSqlIntegrationTest {
                 Map.entry("operator", "Watch the export queue.")
         );
         mockMvc.perform(get("/changes").param("project", repository.projectId().toString()).session(repository.session()))
-                .andExpect(content().string(containsString("For leadership")))
+                .andExpect(content().string(containsString("For Leadership")))
                 .andExpect(content().string(containsString("Customers asked for exports most.")));
     }
 

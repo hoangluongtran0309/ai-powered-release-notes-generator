@@ -1109,8 +1109,17 @@ deliveries can be made. See [ADR-0020](adr/0020-automation-rules-and-runs.md).
   the note as the release of the version's tag, and marks the body with
   `<!-- releaseflow-action:{id} -->` so a repeat knows its own work from somebody else's.
   A Slack action posts through an incoming webhook whose origin the deployment allows,
-  checked again before every delivery, up to 39,000 characters. An email action sends
-  through the deployment's SMTP server to between 1 and 100 addresses. A Notion action
+  checked again before every delivery, up to 39,000 characters; a redirect is never
+  followed and fails the action as `slack_rejected`, as does any 4xx, while a 5xx may
+  have posted before failing to answer and is recorded as unknown. The note is rewritten
+  from Markdown into Slack's mrkdwn — headings and strong text as `*bold*`, links as
+  `<url|text>` for http, https, and mailto only, lists as bullets — and every `&`, `<`,
+  and `>` of its own text is escaped, so no title can mention a person or `<!channel>`.
+  An email action sends
+  through the deployment's SMTP server to between 1 and 100 addresses, as
+  multipart/alternative: the note's Markdown for plain-text readers, and the HTML the
+  Confluence and Zendesk actions receive, with raw HTML escaped and images turned into
+  links so opening the mail loads nothing. A Notion action
   files the note as a child page under a page id the action names, against the API
   version the deployment pins; Notion's own address is deployment configuration, so no
   request chooses it. A Confluence action creates a page in a Cloud space, authenticated
@@ -1210,6 +1219,13 @@ anything under `/api` keeps the Problem Details that `spring.mvc.problemdetails.
 produces. `HtmlErrorController` renders what the container's error dispatch forwards —
 a refusal from the security chain, or a fault. Three statuses have wording of their own;
 anything else is shown as a fault, and the exception behind it never reaches the page.
+
+A form whose CSRF token no longer matches is not a refusal of the person. When the
+session behind it has ended, `ApiAccessDeniedHandler` sends the browser to
+`/login?expired`, which says nothing was saved; when the person is still signed in
+(another tab signed in again), the 403 page says the form is out of date instead of
+that the page belongs to somebody else. Either way the request never reached a
+controller. CSRF protection itself is unchanged, and `/api` keeps `access_denied`.
 
 ## User interface
 

@@ -5,6 +5,11 @@ changes into human-reviewed, immutable release notes. Development proceeds one
 complete vertical slice at a time, and this repository documents only behavior
 that is currently implemented.
 
+![Reviewing each change of a release, approving it, and publishing it](docs/images/tour/release-review-publish.gif)
+
+[The tour](docs/tour.md) follows one release from an empty workspace to a note in an
+inbox, a Slack channel, a Notion page, and a public changelog, one screenshot per step.
+
 ## Current capability
 
 The application currently provides:
@@ -748,8 +753,10 @@ still looked up against your Organization, so a cookie naming somebody else's is
 ignored.
 
 A mistyped address answers a browser with a page rather than raw JSON, and one
-your role does not reach says so without showing any of it. A REST client, and
-anything under `/api`, keeps the `application/problem+json` it had.
+your role does not reach says so without showing any of it. A form sent after its
+session ended returns you to sign in, and one older than your latest sign-in is called
+out of date; neither saved anything. A REST client, and anything under `/api`, keeps
+the `application/problem+json` it had.
 
 ## Interface language
 
@@ -1211,7 +1218,7 @@ Eight kinds of action exist:
 | Action | What it needs | What it does |
 | --- | --- | --- |
 | GitHub Release | The project's own GitHub source and its access token | Publishes the note as the release of the version's tag, marking the body so a repeat knows its own work |
-| Slack | An incoming webhook URL, which is the action's secret | Posts the note to the channel, up to 39,000 characters |
+| Slack | An incoming webhook URL, which is the action's secret | Posts the note to the channel in Slack's own mrkdwn, up to 39,000 characters |
 | Email | `RELEASEFLOW_AUTOMATION_EMAIL_FROM` and an SMTP server | Sends the note to between 1 and 100 addresses |
 | Public changelog | Nothing | Publishes the note on your own changelog page and RSS feed |
 | Notion | The parent page's id and an integration token | Files the note as a child page titled `Release <version>`, up to 450,000 bytes |
