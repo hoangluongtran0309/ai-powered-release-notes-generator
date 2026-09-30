@@ -102,10 +102,10 @@
     <div class="drawer-side z-40">
         <label for="app-drawer" class="drawer-overlay" aria-hidden="true"></label>
         <aside id="app-sidebar" class="app-sidebar flex min-h-full w-72 flex-col border-r">
-            <a th:href="@{/}" class="app-sidebar-divider flex h-16 items-center gap-3 border-b px-6">
+            <a th:href="@{/}" class="app-sidebar-divider flex min-h-16 items-center gap-3 border-b px-6 py-2">
                 <img th:src="@{/svg/releaseflow-mark.svg}" src="/svg/releaseflow-mark.svg" alt="" aria-hidden="true"
                      width="36" height="36" class="h-9 w-9 shrink-0">
-                <span><strong class="block tracking-tight">ReleaseFlow</strong><small class="app-sidebar-muted" th:text="#{ui.layout.tagline}">Release notes workspace</small></span>
+                <span class="min-w-0"><strong class="block tracking-tight">ReleaseFlow</strong><small class="app-sidebar-muted block leading-tight" th:text="#{ui.layout.tagline}">Release notes workspace</small></span>
             </a>
             <nav class="flex-1 space-y-1 p-4" th:aria-label="#{ui.layout.primaryNavigation}" aria-label="Primary">
                 <p class="app-sidebar-muted px-3 pb-2 pt-3 text-xs font-semibold uppercase tracking-widest"

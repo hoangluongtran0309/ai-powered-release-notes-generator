@@ -15,6 +15,10 @@ it.
 
 ### Fixed
 
+- The sidebar's Vietnamese tagline no longer wraps the brand onto three lines and
+  spills over the top edge of the page. The tagline is shorter, and the brand row now
+  grows downwards if a longer translation ever wraps. A browser test checks the row in
+  every shipped language.
 - The Change Inbox names the audience an AI narrative is written for, as "For End user",
   instead of its code, "For end_user". A narrative whose audience has since gone keeps
   the code it was recorded under. Submitting a duplicate decision without choosing one
