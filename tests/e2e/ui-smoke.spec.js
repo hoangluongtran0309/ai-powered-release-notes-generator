@@ -82,4 +82,28 @@ test.describe('workspace pages', () => {
     await expect(page.locator('body')).not.toContainText(/another Organization|Organization khác/);
     await expectNoAccessibilityViolations(page, 'out-of-date form');
   });
+
+  test('the sidebar brand fits its row in every shipped language', async ({ page, context, baseURL }) => {
+    await registerAndSignIn(page);
+    for (const language of ['en', 'vi']) {
+      await context.addCookies([{ name: 'releaseflow_lang', value: language, url: baseURL }]);
+      await page.goto('/');
+      const menu = page.locator('label[for="app-drawer"].icon-button');
+      if (await menu.isVisible()) {
+        await menu.click();
+      }
+      const brand = page.locator('#app-sidebar > a').first();
+      await expect(brand).toBeVisible();
+
+      // A tagline that wraps must grow the row downwards, never spill over its top edge.
+      const fit = await brand.evaluate((row) => {
+        const box = row.getBoundingClientRect();
+        const text = row.querySelector('span').getBoundingClientRect();
+        return { rowTop: box.top, rowBottom: box.bottom, textTop: text.top, textBottom: text.bottom };
+      });
+      expect(fit.textTop, `${language} tagline top`).toBeGreaterThanOrEqual(fit.rowTop);
+      expect(fit.textBottom, `${language} tagline bottom`).toBeLessThanOrEqual(fit.rowBottom);
+      expect(fit.rowBottom - fit.rowTop, `${language} brand row height`).toBeLessThanOrEqual(64);
+    }
+  });
 });
