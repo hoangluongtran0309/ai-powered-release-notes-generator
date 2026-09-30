@@ -15,6 +15,10 @@ it.
 
 ### Fixed
 
+- An email action sends the note as HTML as well as its Markdown, so mail clients
+  show headings, bold text, and links instead of literal `##`, `**`, and `[#104](…)`.
+  The HTML comes from the same renderer as Confluence and Zendesk: raw HTML is escaped
+  and images become links, so opening the mail loads nothing.
 - A Slack action whose webhook answers with a redirect is recorded as `FAILED`
   (`slack_rejected`) instead of delivered. The redirect was never followed, so nothing
   was posted.

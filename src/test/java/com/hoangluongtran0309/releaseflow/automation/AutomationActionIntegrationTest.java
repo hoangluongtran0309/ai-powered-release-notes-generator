@@ -2,6 +2,7 @@ package com.hoangluongtran0309.releaseflow.automation;
 
 import com.hoangluongtran0309.releaseflow.support.ConfluenceStub;
 import com.hoangluongtran0309.releaseflow.support.NotionStub;
+import com.hoangluongtran0309.releaseflow.support.SmtpStub;
 import com.hoangluongtran0309.releaseflow.support.TeamsStub;
 import com.hoangluongtran0309.releaseflow.support.ZendeskStub;
 import com.jayway.jsonpath.JsonPath;
@@ -179,7 +180,13 @@ class AutomationActionIntegrationTest extends AutomationIntegrationTestBase {
         assertThat(SMTP.messages()).hasSize(1);
         assertThat(SMTP.messages().getFirst().recipients())
                 .containsExactly("ops@example.com", "support@example.com");
-        assertThat(SMTP.messages().getFirst().body()).contains("Release 1.4.0");
+        SmtpStub.Message message = SMTP.messages().getFirst();
+        assertThat(message.part("text/plain")).contains("Release 1.4.0");
+        // Mail clients render the HTML part, so no reader sees the note's Markdown markers.
+        assertThat(message.part("text/html"))
+                .startsWith("<!doctype html><html lang=\"en\">")
+                .contains("<strong>")
+                .doesNotContain("**");
     }
 
     @Test
