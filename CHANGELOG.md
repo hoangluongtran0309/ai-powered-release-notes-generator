@@ -8,6 +8,12 @@ it.
 
 ## [Unreleased]
 
+### Fixed
+
+- `jackson-core` and `jackson-databind` 3.1.7 and 2.21.7 replace 3.1.6 and 2.21.6, which
+  carry four high-severity denial-of-service CVEs: CVE-2026-89407, CVE-2026-89425,
+  CVE-2026-91776, and CVE-2026-91777. The overrides go once the parent catches up.
+
 ## [0.1.1] - 2026-09-30
 
 Fixes found while running one whole release on the demo stack, and a dependency
