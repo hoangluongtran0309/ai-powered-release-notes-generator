@@ -1,0 +1,91 @@
+# ReleaseFlow quickstart: the published image and PostgreSQL, and nothing else.
+#
+# Every release after 0.1.1 attaches this file beside quickstart.sh. Download both into an
+# empty directory and run `bash quickstart.sh`; it writes the .env this file reads and
+# starts the stack.
+#
+# The Release workflow fills in the application image, pinned to the digest it pushed. The
+# copy in the repository leaves it unset, so it refuses to start rather than run something
+# unpinned.
+#
+# For one machine, not production: the application listens on loopback only, and TLS,
+# backups, and secret storage are a real deployment's own to bring.
+
+name: releaseflow-quickstart
+
+services:
+  app:
+    image: ${RELEASEFLOW_IMAGE:?use the compose.yaml attached to a release}
+    # The published image is amd64 only. Apple silicon runs it under emulation.
+    platform: linux/amd64
+    environment:
+      RELEASEFLOW_DB_URL: jdbc:postgresql://db:5432/releaseflow
+      RELEASEFLOW_DB_USERNAME: releaseflow
+      RELEASEFLOW_DB_PASSWORD: ${RELEASEFLOW_DB_PASSWORD:?set RELEASEFLOW_DB_PASSWORD in .env, or run quickstart.sh}
+      RELEASEFLOW_CREDENTIAL_MASTER_KEY: ${RELEASEFLOW_CREDENTIAL_MASTER_KEY:?set RELEASEFLOW_CREDENTIAL_MASTER_KEY in .env, or run quickstart.sh}
+      RELEASEFLOW_SESSION_COOKIE_SECURE: ${RELEASEFLOW_SESSION_COOKIE_SECURE:-false}
+      # Optional AI classification; leave the provider empty to use the rules only.
+      RELEASEFLOW_AI_PROVIDER: ${RELEASEFLOW_AI_PROVIDER:-}
+      RELEASEFLOW_OPENAI_API_KEY: ${RELEASEFLOW_OPENAI_API_KEY:-}
+      RELEASEFLOW_OPENAI_MODEL: ${RELEASEFLOW_OPENAI_MODEL:-}
+      RELEASEFLOW_ANTHROPIC_API_KEY: ${RELEASEFLOW_ANTHROPIC_API_KEY:-}
+      RELEASEFLOW_ANTHROPIC_MODEL: ${RELEASEFLOW_ANTHROPIC_MODEL:-}
+      RELEASEFLOW_DEEPSEEK_API_KEY: ${RELEASEFLOW_DEEPSEEK_API_KEY:-}
+      RELEASEFLOW_DEEPSEEK_MODEL: ${RELEASEFLOW_DEEPSEEK_MODEL:-}
+      # Optional translation of release notes; disabled unless set to deepl.
+      RELEASEFLOW_TRANSLATION_PROVIDER: ${RELEASEFLOW_TRANSLATION_PROVIDER:-disabled}
+      RELEASEFLOW_DEEPL_API_KEY: ${RELEASEFLOW_DEEPL_API_KEY:-}
+      RELEASEFLOW_DEEPL_BASE_URL: ${RELEASEFLOW_DEEPL_BASE_URL:-}
+      # Optional email automation; an email action cannot be enabled without both.
+      RELEASEFLOW_SMTP_HOST: ${RELEASEFLOW_SMTP_HOST:-}
+      RELEASEFLOW_SMTP_PORT: ${RELEASEFLOW_SMTP_PORT:-587}
+      RELEASEFLOW_SMTP_USERNAME: ${RELEASEFLOW_SMTP_USERNAME:-}
+      RELEASEFLOW_SMTP_PASSWORD: ${RELEASEFLOW_SMTP_PASSWORD:-}
+      RELEASEFLOW_SMTP_AUTH: ${RELEASEFLOW_SMTP_AUTH:-false}
+      RELEASEFLOW_SMTP_STARTTLS: ${RELEASEFLOW_SMTP_STARTTLS:-false}
+      RELEASEFLOW_AUTOMATION_EMAIL_FROM: ${RELEASEFLOW_AUTOMATION_EMAIL_FROM:-}
+      # Public changelog links are built from this, never from a request's Host header.
+      RELEASEFLOW_PUBLIC_BASE_URL: ${RELEASEFLOW_PUBLIC_BASE_URL:-http://localhost:8080}
+      # Empty serves changelogs by path only; a domain here needs wildcard DNS and TLS.
+      RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN: ${RELEASEFLOW_PUBLIC_CHANGELOG_BASE_DOMAIN:-}
+      # The same variables as docker-compose.demo.yml, which CI checks, less the management
+      # address: nothing here scrapes the management port, so it stays on loopback.
+      # RELEASEFLOW_SENSITIVE_PATHS and the other optional settings are deliberately not
+      # forwarded: Compose turns an unset variable into an empty string, which would
+      # replace the default in application.properties (an empty sensitive-path list stops
+      # the application).
+    ports:
+      - "127.0.0.1:${RELEASEFLOW_HTTP_PORT:-8080}:8080"
+    # The image's own check, asked more often so a fast machine is ready sooner, and given
+    # longer to start so an emulated one is not marked unhealthy before it has finished.
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "http://127.0.0.1:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 180s
+      retries: 6
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: releaseflow
+      POSTGRES_USER: releaseflow
+      POSTGRES_PASSWORD: ${RELEASEFLOW_DB_PASSWORD:?set RELEASEFLOW_DB_PASSWORD in .env, or run quickstart.sh}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # No published port: only the application reaches the database.
+
+volumes:
+  postgres-data:
+    # A fixed name, so quickstart.sh can tell a database whose .env has gone missing.
+    name: releaseflow-quickstart-postgres-data

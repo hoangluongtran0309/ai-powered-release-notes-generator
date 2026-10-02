@@ -1,5 +1,6 @@
 # Publishes one tagged version: the executable JAR, an SBOM and checksums beside it, the
-# container image on GHCR, and a GitHub release that points at all of them.
+# container image on GHCR, a quickstart bundle pinned to that image's digest, and a GitHub
+# release that points at all of them.
 #
 # The tag is the trigger and the only input. Everything the workflow publishes is built
 # from the tagged commit, and the guards below refuse a tag that does not describe a
@@ -119,7 +120,7 @@ jobs:
 
       # One SBOM, of the image, because that is what the JAR is actually shipped inside:
       # it lists the Java dependencies and the base image's own packages together.
-      - name: Write the SBOM and the checksums
+      - name: Write the SBOM
         shell: bash
         run: |
           set -euo pipefail
@@ -131,13 +132,6 @@ jobs:
             --output "dist/releaseflow-${RELEASE_VERSION}-sbom.cdx.json" \
             "releaseflow:${RELEASE_VERSION}"
           cp LICENSE NOTICE dist/
-          # Named rather than globbed, so the checksum file can never end up listing
-          # itself or missing something a glob expanded before it existed.
-          ( cd dist && sha256sum \
-              "releaseflow-${RELEASE_VERSION}.jar" \
-              "releaseflow-${RELEASE_VERSION}-sbom.cdx.json" \
-              LICENSE NOTICE > SHA256SUMS )
-          cat dist/SHA256SUMS
 
       - name: Sign in to GHCR
         shell: bash
@@ -170,6 +164,27 @@ jobs:
           echo "repository=${repository}" >> "${GITHUB_OUTPUT}"
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
 
+      # The quickstart bundle can only name the image once the registry has given it a
+      # digest, so it is packaged here, by the same script the Container workflow tests.
+      - name: Package the quickstart bundle with the pushed image
+        run: ./scripts/ci/package-quickstart.sh "${REPOSITORY}:${RELEASE_VERSION}@${DIGEST}" dist
+        env:
+          REPOSITORY: ${{ steps.push.outputs.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+
+      - name: Write the checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Named rather than globbed, so the checksum file can never end up listing
+          # itself or missing something a glob expanded before it existed.
+          ( cd dist && sha256sum \
+              "releaseflow-${RELEASE_VERSION}.jar" \
+              "releaseflow-${RELEASE_VERSION}-sbom.cdx.json" \
+              compose.yaml quickstart.sh \
+              LICENSE NOTICE > SHA256SUMS )
+          cat dist/SHA256SUMS
+
       - name: Attest that this workflow built that image
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -180,7 +195,10 @@ jobs:
       - name: Attest that this workflow built those files
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dist/releaseflow-*.jar
+          subject-path: |
+            dist/releaseflow-*.jar
+            dist/compose.yaml
+            dist/quickstart.sh
 
       - name: Create the GitHub release
         shell: bash
@@ -196,11 +214,25 @@ jobs:
             echo
             echo "Also tagged \`${RELEASE_VERSION}\`, \`${RELEASE_VERSION%.*}\`, \`${RELEASE_VERSION%%.*}\` and \`latest\`."
             echo
+            echo "## Quickstart"
+            echo
+            echo "This version and PostgreSQL on one machine, with Docker and Compose v2 on Linux or"
+            echo "macOS (on Windows, inside WSL 2). The first run writes \`.env\` with new secrets; keep it."
+            echo
+            echo '```'
+            echo "mkdir releaseflow && cd releaseflow"
+            echo "base=https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+            echo "curl -fsSL --remote-name-all \"\$base/compose.yaml\" \"\$base/quickstart.sh\" \"\$base/SHA256SUMS\""
+            echo "sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS"
+            echo "bash quickstart.sh"
+            echo '```'
+            echo
             echo "## Verifying what you downloaded"
             echo
             echo '```'
             echo "sha256sum --check SHA256SUMS"
             echo "gh attestation verify releaseflow-${RELEASE_VERSION}.jar --repo ${GITHUB_REPOSITORY}"
+            echo "gh attestation verify quickstart.sh --repo ${GITHUB_REPOSITORY}"
             echo '```'
             echo
             echo "## What changed"
@@ -214,6 +246,8 @@ jobs:
             --verify-tag \
             dist/releaseflow-"${RELEASE_VERSION}".jar \
             dist/releaseflow-"${RELEASE_VERSION}"-sbom.cdx.json \
+            dist/compose.yaml \
+            dist/quickstart.sh \
             dist/SHA256SUMS \
             dist/LICENSE \
             dist/NOTICE
