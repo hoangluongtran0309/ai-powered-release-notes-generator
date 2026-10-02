@@ -412,7 +412,7 @@
 
 ## In progress
 
-- Nothing. The quickstart bundle is complete and awaiting review.
+- Nothing.
 
 ## Planned
 
