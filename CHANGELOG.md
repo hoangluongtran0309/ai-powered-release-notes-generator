@@ -8,6 +8,12 @@ it.
 
 ## [Unreleased]
 
+### Fixed
+
+- In `.env.example`, the comment that explains `RELEASEFLOW_PUBLIC_BASE_URL` sits beside it
+  again. The Grafana administrator's settings had come between them, so the comment read
+  as if it described Grafana.
+
 ## [0.2.0] - 2026-10-03
 
 A quickstart bundle on every release, and a dependency update for four Jackson CVEs.
