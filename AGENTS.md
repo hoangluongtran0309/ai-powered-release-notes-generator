@@ -44,12 +44,12 @@ an IANA time zone, the approach of a planned release, or another system's signed
 call, a public changelog of immutable entries with an RSS feed that anybody may read,
 REST/UI paths, and Testcontainers tests. A private management port with four
 finite-cardinality metrics, a non-root container image, a Docker Compose demo
-stack with Prometheus and Grafana, and GitHub Actions security and test gates are
-also in place. Every page, form message, and error explanation is written in
+stack with Prometheus and Grafana, a quickstart bundle every release attaches, and
+GitHub Actions security and test gates are also in place. Every page, form message, and error explanation is written in
 English or Vietnamese, chosen per person, and a Playwright suite drives the whole
 application in a browser at two sizes and both themes, failing on any
 accessibility violation Axe can see.
-The decisions behind all of it are ADR-0001 through ADR-0030. Read `README.md`,
+The decisions behind all of it are ADR-0001 through ADR-0031. Read `README.md`,
 `docs/architecture.md`, and `docs/implementation-status.md` before changing
 behavior.
 
@@ -225,6 +225,11 @@ behavior.
   runs it had not finished.
 - GitHub Actions stay pinned to commit SHAs, images to digests, and downloaded
   CI tools to SHA-256 checksums. Compose secrets never get default values.
+- The quickstart reads its configuration only from the `.env` beside it. It never
+  overwrites one, never prints a secret it wrote, and refuses to start against a
+  database volume whose `.env` is gone. It installs nothing, asks for no privilege,
+  and runs with bash 3.2. Its `compose.yaml` names the image only by the digest a
+  release pushed, and forwards the same variables as the demo stack.
 - A tag is the release and the only input to it. Publishing refuses a tag that
   is not an ancestor of `main`, one whose name disagrees with the POM, or any
   `-SNAPSHOT`, so a mistaken tag fails rather than ships.

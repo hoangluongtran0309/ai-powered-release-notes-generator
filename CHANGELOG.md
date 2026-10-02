@@ -8,6 +8,32 @@ it.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
+A quickstart bundle on every release, and a dependency update for four Jackson CVEs.
+Nothing new to configure and no migration.
+
+### Added
+
+- A quickstart bundle on every release: `compose.yaml`, which runs the released image,
+  pinned to its digest, with PostgreSQL on loopback, and `quickstart.sh`, which checks for
+  Docker, writes `.env` with new secrets on the first run, and starts the stack. Trying a
+  release no longer means cloning the repository, generating secrets by hand, or building
+  the image. The script never overwrites `.env`, never prints a secret, ignores
+  `RELEASEFLOW_*` and `COMPOSE_*` variables from the shell, and refuses to start a database
+  whose `.env` is gone, because new secrets could not open it. It runs with bash 3.2 on
+  Linux and macOS, and on Windows inside WSL 2. Both files are listed in `SHA256SUMS` and
+  covered by the provenance attestation. See ADR-0031.
+- CI lints the shell scripts with a checksum-verified ShellCheck, runs the quickstart under
+  bash 3.2, and runs the bundle against the image each pull request builds. It also fails
+  when the quickstart and the demo stack stop forwarding the same variables.
+
+### Fixed
+
+- `jackson-core` and `jackson-databind` 3.1.7 and 2.21.7 replace 3.1.6 and 2.21.6, which
+  carry four high-severity denial-of-service CVEs: CVE-2026-89407, CVE-2026-89425,
+  CVE-2026-91776, and CVE-2026-91777. The overrides go once the parent catches up.
+
 ## [0.1.1] - 2026-09-30
 
 Fixes found while running one whole release on the demo stack, and a dependency
@@ -815,5 +841,6 @@ slice at a time, and all of it is in this release.
   Project is reported at the top of the page.
 - Project creation times display as a readable UTC date.
 
+[0.2.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.2.0
 [0.1.1]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.0

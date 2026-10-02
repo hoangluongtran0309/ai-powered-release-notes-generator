@@ -400,9 +400,19 @@
   SBOM of the image, `SHA256SUMS`, the licence and the notice, the image on GHCR tagged
   `X.Y.Z`/`X.Y`/`X`/`latest`, and a provenance attestation for the image and the JAR.
 
+- **Quickstart bundle** ([ADR-0031](adr/0031-quickstart-bundle.md), no migration): every
+  release from the one after 0.1.1 attaches `compose.yaml`, the released image pinned to
+  its digest with PostgreSQL on loopback, and `quickstart.sh`, which checks for Docker,
+  writes `.env` with new secrets on the first run and never overwrites it, ignores
+  `RELEASEFLOW_*` and `COMPOSE_*` from the shell, refuses a database whose `.env` is gone,
+  and waits for the application to be healthy. Both are in `SHA256SUMS` and the provenance
+  attestation. CI lints the scripts with a pinned ShellCheck, runs the quickstart under
+  bash 3.2, runs the bundle against the image each pull request builds, and checks the
+  quickstart and the demo stack forward the same variables.
+
 ## In progress
 
-- Nothing. The release automation slice is complete and awaiting review.
+- Nothing.
 
 ## Planned
 
@@ -435,6 +445,9 @@ deliberately deferred list below, one reviewed slice at a time.
 - Client-rendered pages, JavaScript bundling, JavaScript unit tests (what is left
   in `app.js` only means anything in a page, which the browser suite drives),
   and publishing to any registry other than this repository's own on GHCR.
+- A multi-architecture image (the published one is amd64 only, so Apple silicon runs the
+  quickstart under emulation), a PowerShell quickstart, interactive quickstart setup, and
+  quickstart TLS, backups, or upgrades that skip downloading the new bundle.
 - Alerting, durable metric storage, a retention policy beyond the demo's seven
   days, and access control for the demo dashboards; per-Organization analytics,
   which need a product feature with an authorization story rather than a metric
