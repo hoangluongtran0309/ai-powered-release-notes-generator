@@ -42,6 +42,24 @@ jobs:
         run: |
           docker compose -f "${COMPOSE_FILE}" config --quiet
           jq empty observability/grafana/dashboards/releaseflow-operations.json
+          RELEASEFLOW_IMAGE="${IMAGE_NAME}" docker compose -f quickstart/compose.yaml config --quiet
+      # The quickstart forwards the demo's variables less the management address, which
+      # only Prometheus needs, so a variable added to one and not the other fails here.
+      - name: Check the quickstart forwards the demo stack's variables
+        shell: bash
+        run: |
+          app_variables() {
+            docker compose -f "$1" config --format json | jq -r '.services.app.environment | keys[]'
+          }
+          # Read into variables rather than compared through process substitution, whose
+          # failure would leave two empty lists that agree.
+          demo="$(app_variables "${COMPOSE_FILE}" | grep -vx RELEASEFLOW_MANAGEMENT_ADDRESS)"
+          quickstart="$(RELEASEFLOW_IMAGE="${IMAGE_NAME}" app_variables quickstart/compose.yaml)"
+          if [[ -z "${quickstart}" ]]; then
+            echo "No application variables were read from quickstart/compose.yaml." >&2
+            exit 1
+          fi
+          diff <(printf '%s\n' "${demo}") <(printf '%s\n' "${quickstart}")
       - name: Build image
         run: docker build --tag "${IMAGE_NAME}" .
       - name: Install Trivy with checksum verification
@@ -120,6 +138,14 @@ jobs:
             --user "admin:$(grep RELEASEFLOW_GRAFANA_PASSWORD "${COMPOSE_ENV_FILES}" | cut -d= -f2-)" \
             'http://127.0.0.1:3000/api/search?query=ReleaseFlow%20Operations' \
             | jq -e 'map(.uid) | index("releaseflow-operations")'
+      # The same script the Release workflow packages with, given the image built above.
+      - name: Package the quickstart bundle with this image
+        run: ./scripts/ci/package-quickstart.sh "${IMAGE_NAME}" "${RUNNER_TEMP}/quickstart"
+      # Beside the demo stack, on port 18080 and its own project, volume, and network. This
+      # job sets COMPOSE_FILE and COMPOSE_ENV_FILES for the demo, which the quickstart must
+      # ignore, so this step proves that too.
+      - name: Smoke test the quickstart bundle
+        run: ./scripts/ci/test-quickstart.sh "${RUNNER_TEMP}/quickstart"
       - name: Capture Compose logs
         if: always()
         run: |

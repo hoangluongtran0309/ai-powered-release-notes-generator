@@ -13,6 +13,7 @@ node_modules/
 docs/
 scripts/
 observability/
+quickstart/
 *.md
 docker-compose*.yml
 Dockerfile

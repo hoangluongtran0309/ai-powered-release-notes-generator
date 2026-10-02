@@ -52,6 +52,27 @@ jobs:
         run: |
           "${RUNNER_TEMP}/bin/actionlint"
 
+  # The quickstart runs on people's own machines, macOS included, where nothing of ours
+  # watches it. Linux behaviour against a real Docker is the Container workflow's to prove.
+  shell:
+    name: Shell scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install ShellCheck with checksum verification
+        run: ./scripts/ci/install-shellcheck.sh "${RUNNER_TEMP}/bin"
+      - name: Lint the quickstart and the CI scripts
+        run: |
+          "${RUNNER_TEMP}/bin/shellcheck" quickstart/quickstart.sh scripts/ci/*.sh
+      - name: Run the quickstart under bash 3.2, the version macOS ships
+        run: |
+          ./scripts/ci/package-quickstart.sh releaseflow:bash32-check "${RUNNER_TEMP}/quickstart"
+          ./scripts/ci/test-quickstart-bash32.sh "${RUNNER_TEMP}/quickstart"
+
   frontend:
     name: Frontend dependency audit
     runs-on: ubuntu-24.04

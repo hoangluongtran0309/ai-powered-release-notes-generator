@@ -1322,14 +1322,29 @@ PostgreSQL 17, Prometheus, and Grafana, publishes the application, Prometheus,
 and Grafana on host loopback only, and requires the database password, the
 credential master key, and Grafana's administrator password to be supplied.
 
+The quickstart bundle runs a released image without the repository. The template
+`quickstart/compose.yaml` holds the application and PostgreSQL only, on loopback,
+with the image left unset; `scripts/ci/package-quickstart.sh` writes in an image
+reference and checks the result stands on its own. The `Release` workflow packages
+it with the digest it pushed, after the push and before the checksums, and attaches
+`compose.yaml` and `quickstart.sh` to the release. `quickstart.sh` takes its
+configuration only from the `.env` beside it: it writes one with fresh secrets on the
+first run, never overwrites it, clears inherited `RELEASEFLOW_*` and `COMPOSE_*`
+variables, passes Compose its project, file, and env file explicitly, and refuses a
+database volume whose `.env` is gone. See
+[ADR-0031](adr/0031-quickstart-bundle.md).
+
 GitHub Actions workflows in `.github/workflows` gate pushes and pull requests
 to `develop` and `main`: tests and audits (`ci.yml`), CodeQL, dependency
 review, a full-history Gitleaks scan, and a container workflow that builds the
 image, scans it with Trivy, and smoke tests the Compose stack. Actions are
 pinned to commit SHAs, images to digests, and downloaded tools to SHA-256
 checksums. The container workflow also proves the management port is not
-published and that all four metric families are being scraped. See
-[ADR-0007](adr/0007-ci-and-container-supply-chain.md).
+published and that all four metric families are being scraped, then runs the
+quickstart bundle against the image it built: a taken port, a first run, a second
+run with a hostile shell, and a database whose `.env` is gone. CI lints the shell
+scripts with ShellCheck and runs the quickstart under bash 3.2 with stand-ins for
+Docker. See [ADR-0007](adr/0007-ci-and-container-supply-chain.md).
 
 ## Observability
 

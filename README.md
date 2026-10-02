@@ -94,6 +94,62 @@ The application currently provides:
 Every slice in the current plan is implemented. What is deliberately left out
 is listed in the [implementation status](docs/implementation-status.md).
 
+## Quickstart
+
+The quickest way to try a released version: the published image and PostgreSQL on one
+machine, with nothing to build and no repository to clone. **Releases after 0.1.1 carry
+it; 0.1.0 and 0.1.1 do not.**
+
+You need Docker Engine or Docker Desktop with Compose v2, on Linux or macOS. On
+Windows, run it inside WSL 2. The image is amd64 only, so Apple silicon runs it under
+emulation; turn on Docker Desktop's Rosetta setting if it starts slowly.
+
+```bash
+mkdir releaseflow && cd releaseflow
+base=https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/latest/download
+curl -fsSL --remote-name-all "$base/compose.yaml" "$base/quickstart.sh" "$base/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
+bash quickstart.sh
+```
+
+Then open `http://localhost:8080/register` to create the first administrator. To use
+another port, choose it on the first run: `RELEASEFLOW_HTTP_PORT=9090 bash quickstart.sh`.
+
+What the script does:
+
+- checks for Docker, Compose v2, and a reachable daemon, and stops with the fix if one is
+  missing; it installs nothing, asks for no privilege, and asks no questions;
+- on the first run, writes `.env` beside it with a new database password and credential
+  master key, readable only by you, and prints neither;
+- starts the application and PostgreSQL and waits until the application is healthy. The
+  application listens on `127.0.0.1` only, and the database is not published at all.
+
+**Keep `.env`.** The database was created with its password, and its key encrypts every
+stored webhook secret and access token. A later run keeps `.env` as it is, and ignores any
+`RELEASEFLOW_*` or `COMPOSE_*` variable in your shell, so `.env` is the only configuration.
+If the database exists but `.env` is gone, the script refuses to start rather than create
+secrets that cannot open it: put the old file back, or delete the data with
+`docker volume rm releaseflow-quickstart-postgres-data`.
+
+To turn on AI classification, uncomment `RELEASEFLOW_AI_PROVIDER` and the chosen provider's
+key and model in `.env`, then run `bash quickstart.sh` again. Translation and email use the
+same variables as the demo stack, listed in [`.env.example`](.env.example) and under
+[Run](#run). In the same directory:
+
+```bash
+docker compose ps                # what is running
+docker compose logs -f app       # the application's log
+docker compose down              # stop; the data stays
+docker compose down --volumes    # stop and delete the database for good
+```
+
+To upgrade, download the newer release's `compose.yaml`, `quickstart.sh`, and
+`SHA256SUMS` into the same directory, keep `.env`, check them, and run the script again.
+The database is migrated forward; do not go back to an older `compose.yaml` afterwards.
+
+The bundle is for one machine, not production: TLS, backups, and secret storage are a
+real deployment's own to bring. See [ADR-0031](docs/adr/0031-quickstart-bundle.md).
+
 ## Requirements
 
 - JDK 21
@@ -206,9 +262,10 @@ unknown source returns `404 source_not_found`, and one already connected returns
 
 ## Run with Docker Compose
 
-`docker-compose.demo.yml` builds the application image and runs it with
-PostgreSQL 17, Prometheus, and Grafana for local evaluation; it is not a
-production deployment.
+`docker-compose.demo.yml` builds the application image from this checkout and runs
+it with PostgreSQL 17, Prometheus, and Grafana for local evaluation; it is not a
+production deployment. To try a released version without building it, use the
+[Quickstart](#quickstart) instead.
 
 ```bash
 cp .env.example .env
@@ -1421,11 +1478,11 @@ and `main`:
 
 | Workflow | Checks |
 | --- | --- |
-| `CI` | Conventional pull request title, actionlint, `npm audit --audit-level=high`, `./mvnw clean verify` |
+| `CI` | Conventional pull request title, actionlint, ShellCheck and a bash 3.2 run of the quickstart, `npm audit --audit-level=high`, `./mvnw clean verify` |
 | `CodeQL` | Java and JavaScript analysis (also weekly) |
 | `Dependency Review` | Fails pull requests that add high or critical vulnerabilities |
 | `Secret Scan` | Gitleaks over the complete Git history (also weekly) |
-| `Container` | Image build, Trivy high/critical scan, Compose smoke test, and the management port proven private |
+| `Container` | Image build, Trivy high/critical scan, Compose smoke test, the management port proven private, and the quickstart bundle run against the image |
 
 Actions are pinned to commit SHAs and images to digests; Dependabot proposes
 weekly updates to `develop`. The pinned tools in `scripts/ci/` verify their
@@ -1451,10 +1508,13 @@ runs the whole suite again, builds and scans the image, and publishes:
 - `releaseflow-<version>.jar`, the executable JAR;
 - `releaseflow-<version>-sbom.cdx.json`, a CycloneDX SBOM of the image, which
   lists the Java dependencies and the base image's packages together;
+- `compose.yaml` and `quickstart.sh`, the [Quickstart](#quickstart) bundle, with
+  the image pinned to the digest this release pushed (from the first release
+  after 0.1.1);
 - `SHA256SUMS`, `LICENSE` and `NOTICE`;
 - the image on GHCR, tagged `<version>`, `<major>.<minor>`, `<major>` and
   `latest`;
-- a provenance attestation for the image and the JAR.
+- a provenance attestation for the image, the JAR, and the quickstart bundle.
 
 Check what you downloaded:
 

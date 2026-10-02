@@ -96,6 +96,7 @@ Pushing the tag is what publishes. The `Release` workflow refuses a tag that is
 not an ancestor of `main`, one whose name disagrees with the POM, and any
 `-SNAPSHOT`, so a tag pushed by mistake fails rather than ships. It then runs the
 whole suite again, builds and scans the image, and publishes the JAR, a CycloneDX
-SBOM, `SHA256SUMS`, the licence and the notice, the image on GHCR tagged
-`X.Y.Z`/`X.Y`/`X`/`latest`, and a provenance attestation for both the image and
-the JAR.
+SBOM, the quickstart bundle (`compose.yaml` pinned to the pushed digest, and
+`quickstart.sh`), `SHA256SUMS`, the licence and the notice, the image on GHCR
+tagged `X.Y.Z`/`X.Y`/`X`/`latest`, and a provenance attestation for the image, the
+JAR, and the quickstart bundle.
