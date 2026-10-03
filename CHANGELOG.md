@@ -8,6 +8,17 @@ it.
 
 ## [Unreleased]
 
+### Changed
+
+- The README opens with what ReleaseFlow is for, how a release goes through it, and how
+  it compares with changelog generators, and links Discussions and good first issues.
+  The full list of capabilities moved to `docs/capabilities.md`.
+
+### Added
+
+- Issue forms for bugs and feature requests, a pull request template, and a code of
+  conduct.
+
 ### Fixed
 
 - `postcss-cli` 12.0.0 replaces 11.0.1. The older version pulls in `braces` through

@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a source, a destination, or a change to how ReleaseFlow works.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How you picture ReleaseFlow solving it.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do now instead
+      description: A workaround or another tool you use for this, if any.
