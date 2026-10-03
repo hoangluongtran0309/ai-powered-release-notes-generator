@@ -9,7 +9,7 @@
     "cssnano": "8.0.6",
     "daisyui": "5.7.19",
     "postcss": "8.5.26",
-    "postcss-cli": "11.0.1",
+    "postcss-cli": "12.0.0",
     "tailwindcss": "4.3.3"
   },
   "scripts": {
