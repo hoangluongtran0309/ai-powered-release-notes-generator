@@ -8,6 +8,33 @@ it.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-03
+
+A README that opens with what ReleaseFlow is for, contribution templates, and a
+dependency update for a `braces` advisory in the CSS build. Nothing new to configure and
+no migration.
+
+### Changed
+
+- The README opens with what ReleaseFlow is for, how a release goes through it, and how
+  it compares with changelog generators, and links Discussions and good first issues.
+  The full list of capabilities moved to `docs/capabilities.md`.
+
+### Added
+
+- Issue forms for bugs and feature requests, a pull request template, and a code of
+  conduct.
+
+### Fixed
+
+- `postcss-cli` 12.0.0 replaces 11.0.1. The older version pulls in `braces` through
+  `chokidar` 3, which carries a high-severity denial-of-service advisory
+  (GHSA-vfj7-8cjw-p6xm) and failed the frontend dependency audit. The build-time CSS is
+  byte-for-byte the same.
+- In `.env.example`, the comment that explains `RELEASEFLOW_PUBLIC_BASE_URL` sits beside it
+  again. The Grafana administrator's settings had come between them, so the comment read
+  as if it described Grafana.
+
 ## [0.2.0] - 2026-10-03
 
 A quickstart bundle on every release, and a dependency update for four Jackson CVEs.
@@ -841,6 +868,7 @@ slice at a time, and all of it is in this release.
   Project is reported at the top of the page.
 - Project creation times display as a readable UTC date.
 
+[0.2.1]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.2.1
 [0.2.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.2.0
 [0.1.1]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.0
