@@ -10,6 +10,10 @@ it.
 
 ### Fixed
 
+- `postcss-cli` 12.0.0 replaces 11.0.1. The older version pulls in `braces` through
+  `chokidar` 3, which carries a high-severity denial-of-service advisory
+  (GHSA-vfj7-8cjw-p6xm) and failed the frontend dependency audit. The build-time CSS is
+  byte-for-byte the same.
 - In `.env.example`, the comment that explains `RELEASEFLOW_PUBLIC_BASE_URL` sits beside it
   again. The Grafana administrator's settings had come between them, so the comment read
   as if it described Grafana.
