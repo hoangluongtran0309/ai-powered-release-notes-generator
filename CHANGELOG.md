@@ -8,6 +8,12 @@ it.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-03
+
+A README that opens with what ReleaseFlow is for, contribution templates, and a
+dependency update for a `braces` advisory in the CSS build. Nothing new to configure and
+no migration.
+
 ### Changed
 
 - The README opens with what ReleaseFlow is for, how a release goes through it, and how
@@ -862,6 +868,7 @@ slice at a time, and all of it is in this release.
   Project is reported at the top of the page.
 - Project creation times display as a readable UTC date.
 
+[0.2.1]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.2.1
 [0.2.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.2.0
 [0.1.1]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hoangluongtran0309/ai-powered-release-notes-generator/releases/tag/v0.1.0
